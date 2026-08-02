@@ -7,7 +7,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AdminUsers } from "@/components/crm/AdminUsers";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { getSuperUser } from "@/lib/crm/access";
 import { listUsers } from "@/lib/crm/admin";
 
@@ -28,12 +28,11 @@ export default async function AdminPage() {
 
   return (
     <>
-      <CrmNav
+      <RecordHeader
         eyebrow="Administration"
         title="Users"
         intro="Everyone who can sign in, and what to do about it."
         breadcrumb={[{ href: "/crm", label: "CRM" }]}
-        isSuperUser
       />
       <section className="section pt-12">
         <div className="container-x">

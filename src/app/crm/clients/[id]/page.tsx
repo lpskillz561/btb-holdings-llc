@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ClientCard } from "@/components/crm/ClientCard";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { getClientDetail } from "@/lib/crm/clients";
 import { CrmError } from "@/lib/crm/db";
@@ -60,7 +60,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
 
   return (
     <>
-      <CrmNav
+      <RecordHeader
         eyebrow="Client"
         title={detail.client.name}
         intro={summary}

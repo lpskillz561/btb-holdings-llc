@@ -7,7 +7,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { Badge, Detail, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { CrmError, queryOne } from "@/lib/crm/db";
@@ -57,8 +57,7 @@ export default async function ParkPage({ params }: { params: Promise<{ id: strin
 
   return (
     <>
-      <CrmNav
-        current="/crm/land"
+      <RecordHeader
         eyebrow="Our land"
         title={park.name}
         breadcrumb={[{ href: "/crm/land", label: "Our land" }]}

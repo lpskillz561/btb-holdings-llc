@@ -12,7 +12,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { Badge, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { fmtAcres, fmtMoney, fmtMoneyShort, fmtNum } from "@/lib/crm/format";
@@ -53,8 +53,7 @@ export default async function LandSearchPage({
   if (!availability.ready || availability.rows === 0) {
     return (
       <>
-        <CrmNav
-          current="/crm/land"
+        <RecordHeader
           eyebrow="Our land"
           title="Land search"
           breadcrumb={[{ href: "/crm/land", label: "Our land" }]}
@@ -92,8 +91,7 @@ export default async function LandSearchPage({
 
   return (
     <>
-      <CrmNav
-        current="/crm/land"
+      <RecordHeader
         eyebrow="Our land"
         title="Land search"
         breadcrumb={[{ href: "/crm/land", label: "Our land" }]}

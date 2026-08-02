@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
@@ -37,8 +37,7 @@ export default async function HoldingsPage() {
 
   return (
     <>
-      <CrmNav
-        current="/crm/holdings"
+      <RecordHeader
         eyebrow="Portfolio"
         title="Holdings"
         intro="All land and every tiny home across every client, and which of them are actually in service."

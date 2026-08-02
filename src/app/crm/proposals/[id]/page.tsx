@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { ProposalView } from "@/components/crm/ProposalView";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { getClient } from "@/lib/crm/clients";
@@ -28,7 +28,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
 
   return (
     <>
-      <CrmNav
+      <RecordHeader
         eyebrow="Proposal"
         title={proposal.title}
         intro={`${client.name} · ${fmtMoney(proposal.total_investment_cents)} investment · ${fmtMoney(proposal.year_one_deduction_cents)} first-year deduction`}

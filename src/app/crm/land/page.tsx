@@ -9,7 +9,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { Badge, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { fmtAcres, fmtDate, fmtMoney, fmtMoneyShort, fmtNum, fmtPct } from "@/lib/crm/format";
@@ -46,8 +46,7 @@ export default async function LandPage() {
 
   return (
     <>
-      <CrmNav
-        current="/crm/land"
+      <RecordHeader
         eyebrow="Portfolio"
         title="Our land"
         intro="The parks BTB owns, the pads on them, and how much of that capacity is earning."

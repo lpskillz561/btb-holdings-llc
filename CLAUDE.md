@@ -231,8 +231,13 @@ touches the database, so the first real request still pays for the whole of
   covers plain `BIGINT` columns.
 - **Newer OpenAI models reject any non-default `temperature`** with a 400 that
   takes the whole request with it. Never send one.
-- **`next/link` hides slow renders.** Any new `force-dynamic` route that can be
-  slow needs a `loading.tsx` — see `app/crm/loading.tsx`.
+- **`next/link` hides slow renders**, because `preventDefault()` suppresses the
+  browser's own loading indicator. The CRM answers that with
+  `components/crm/NavProgress.tsx` and deliberately has **no `loading.tsx`**.
+  Adding one back would undo it: a loading file is a Suspense fallback, so it
+  throws the page you are reading away the moment you click, and on a slow
+  dynamic render that *is* the blank screen. With no boundary the router keeps
+  the current page up until the next one is ready.
 - **EC2 rejects non-ASCII in security group descriptions.** An em dash in a
   CloudFormation `GroupDescription` rolled the whole stack back.
 - **`AUTH_SECRET` is frozen into the Edge middleware at build time.** It must be

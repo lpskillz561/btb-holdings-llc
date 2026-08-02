@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { ClientsBoard } from "@/components/crm/ClientsBoard";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, StatTile } from "@/components/crm/ui";
-import { getCrmPageUser, isSuperUser } from "@/lib/crm/access";
+import { getCrmPageUser } from "@/lib/crm/access";
 import { listAvailablePads } from "@/lib/crm/portfolio";
 import { getCrmSummary, listClients } from "@/lib/crm/clients";
 import { fmtAgo, fmtMoneyShort, fmtNum } from "@/lib/crm/format";
@@ -38,9 +38,7 @@ export default async function CrmPage() {
 
   return (
     <>
-      <CrmNav
-        current="/crm"
-        isSuperUser={isSuperUser(user)}
+      <RecordHeader
         eyebrow="Tiny home programme"
         title="Client CRM"
         intro="Every prospect, what they're solving for, what we've proposed, and what they own."

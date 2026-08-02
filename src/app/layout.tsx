@@ -34,8 +34,9 @@ export const metadata: Metadata = {
 
 /**
  * Deliberately bare: no marketing header or footer. This app is an internal
- * tool, and its only chrome is the CRM's own section nav (components/crm/CrmNav)
- * plus the sign-in pages, which carry their own wordmark.
+ * tool, and its only chrome is the CRM's own section nav
+ * (components/crm/CrmChrome, mounted once by app/crm/layout.tsx) plus the
+ * sign-in pages, which carry their own wordmark.
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -6,7 +6,7 @@
 
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { LandProspects, type ProspectRow } from "@/components/crm/LandProspects";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { listLandProspects } from "@/lib/crm/portfolio";
@@ -26,8 +26,7 @@ export default async function ProspectsPage() {
 
   return (
     <>
-      <CrmNav
-        current="/crm/land"
+      <RecordHeader
         eyebrow="Our land"
         title="Saved listings"
         breadcrumb={[{ href: "/crm/land", label: "Our land" }]}

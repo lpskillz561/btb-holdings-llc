@@ -145,9 +145,82 @@ body {
   .crm-enter {
     animation: crm-fade-in 160ms ease-out both;
   }
+
+  /* The same settle for the body of every CRM screen, without asking thirteen
+     pages to opt in. A CSS animation replays when the element is inserted, and
+     a section change unmounts the old <section> and mounts a new one — so this
+     fires on arrival and on nothing else. router.refresh() reconciles the same
+     element in place and is correctly left alone.
+
+     Scoped to .sf-page, so the marketing site and the print documents — which
+     are laid out in plain divs anyway — are untouched. */
+  .sf-page .section {
+    animation: crm-fade-in 180ms ease-out both;
+  }
+
+  /* The clicked tab, while its page is still on the server. useLinkStatus turns
+     this on the moment the link is pressed, which is the only feedback in the
+     whole navigation that does not have to wait for a round trip. It slides, so
+     it never reads as the solid underline that means "you are here". */
+  .crm-tab-pending {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      theme("colors.sf.500") 50%,
+      transparent 100%
+    );
+    background-repeat: no-repeat;
+    background-size: 60% 100%;
+    animation: crm-tab-slide 900ms ease-in-out infinite;
+  }
+
+  /* The navigation bar, pinned to the top of the window. See NavProgress.tsx
+     for why the CRM has this instead of a loading.tsx skeleton. */
+  .nav-progress {
+    @apply pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5;
+  }
+  .nav-progress__bar {
+    height: 100%;
+    width: 100%;
+    transform-origin: left center;
+    background-image: linear-gradient(
+      90deg,
+      theme("colors.sf.500") 0%,
+      theme("colors.sf.400") 100%
+    );
+    /* Creeps towards the end and never reaches it. There is no progress to
+       report — a dynamic render is one round trip with no milestones — and a
+       percentage that stalls at 90% is worse than one that never claimed to
+       know. The easing does the reassuring: fast at first, then patient. */
+    animation: nav-progress-creep 20s cubic-bezier(0.12, 0.85, 0.25, 1) forwards;
+  }
+  .nav-progress--done .nav-progress__bar {
+    animation: none;
+    transform: scaleX(1);
+    opacity: 0;
+    transition:
+      transform 140ms ease-out,
+      opacity 200ms ease-out 140ms;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .crm-enter {
+    .crm-enter,
+    .sf-page .section {
       animation: none;
+    }
+    /* Still say something is happening — just hold it still. */
+    .crm-tab-pending {
+      animation: none;
+      background-image: none;
+      @apply bg-sf-200;
+    }
+    .nav-progress__bar {
+      animation: none;
+      transform: scaleX(1);
+      opacity: 0.5;
+    }
+    .nav-progress--done .nav-progress__bar {
+      transition: none;
     }
   }
 
@@ -173,6 +246,34 @@ body {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* An indeterminate sweep across a 2px underline. Indeterminate on purpose: the
+   server render has no progress to report, and a fake percentage that stalls at
+   90% is worse than one that never claims to know. */
+@keyframes crm-tab-slide {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: 100% 0;
+  }
+}
+
+/* Most of the distance in the first second, the rest never. */
+@keyframes nav-progress-creep {
+  0% {
+    transform: scaleX(0.03);
+  }
+  12% {
+    transform: scaleX(0.42);
+  }
+  40% {
+    transform: scaleX(0.72);
+  }
+  100% {
+    transform: scaleX(0.94);
   }
 }
 

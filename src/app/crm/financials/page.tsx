@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CrmNav } from "@/components/crm/CrmNav";
+import { RecordHeader } from "@/components/crm/RecordHeader";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
@@ -35,8 +35,7 @@ export default async function FinancialsPage() {
 
   return (
     <>
-      <CrmNav
-        current="/crm/financials"
+      <RecordHeader
         eyebrow="Money"
         title="Financials"
         intro="Cash in and out across the programme, and which accounts are carrying it."
