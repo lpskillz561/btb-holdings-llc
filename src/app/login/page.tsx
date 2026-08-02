@@ -57,7 +57,7 @@ export default async function LoginPage({
 
         <div className="rounded-2xl border border-white/10 bg-white p-8 shadow-lift sm:p-10">
           <p className="eyebrow">Secure access</p>
-          <h1 className="mt-3 text-2xl font-medium text-navy-900">
+          <h1 className="mt-3 font-serif text-2xl font-medium text-navy-900">
             Client sign in
           </h1>
           <p className="mt-2 text-sm text-navy-900/60">

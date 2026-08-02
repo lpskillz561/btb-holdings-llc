@@ -24,7 +24,13 @@ export function statusTone(status: string): Tone {
     case "in_service":
     case "acquired":
     case "paid":
+    // A pad earning money and a park full of them are the same good news.
+    case "occupied":
+    case "operating":
       return "green";
+    // Ready but empty: capacity that exists and isn't working yet.
+    case "available":
+      return "navy";
     case "contracted":
     case "proposal_sent":
     case "sent":
@@ -33,6 +39,9 @@ export function statusTone(status: string): Tone {
     case "installed":
     case "delivered":
     case "invoiced":
+    case "reserved":
+    case "developing":
+    case "building":
       return "gold";
     case "lost":
     case "declined":

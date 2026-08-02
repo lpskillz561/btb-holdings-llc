@@ -50,3 +50,53 @@ export async function getCrmPageUser(): Promise<SessionPayload | null> {
 export async function hasCrmAccess(session: SessionPayload | null): Promise<boolean> {
   return session !== null && isAllowed(session);
 }
+
+/* -------------------------------------------------------------------------- */
+/* Superusers — user administration                                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Who may administer accounts.
+ *
+ * This gate FAILS CLOSED, which is the opposite of `allowList()` above and is
+ * deliberate. CRM access opening up to every signed-in user when `CRM_ADMINS`
+ * is unset is a defensible default for reading the book of business. Applying
+ * the same default to a screen that deletes accounts and resets passwords would
+ * mean that forgetting one environment variable hands account control to
+ * everyone who can register.
+ *
+ * `CRM_SUPERUSERS` if set; otherwise `CRM_ADMINS`; otherwise **nobody**.
+ */
+function superUserList(): string[] {
+  const raw = process.env.CRM_SUPERUSERS?.trim() || process.env.CRM_ADMINS?.trim() || "";
+  return raw
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+export function isSuperUser(session: SessionPayload | null): boolean {
+  if (!session) return false;
+  const list = superUserList();
+  // Empty list denies everyone, including whoever is reading this.
+  if (list.length === 0) return false;
+  return list.includes(session.sub.trim().toLowerCase());
+}
+
+/** Session for an admin page. Null when the visitor may not administer users. */
+export async function getSuperUser(): Promise<SessionPayload | null> {
+  const session = await getCrmPageUser();
+  return isSuperUser(session) ? session : null;
+}
+
+/** Session for an admin API route. Throws 401/403 rather than returning null. */
+export async function requireSuperUser(req: NextRequest): Promise<SessionPayload> {
+  const session = await requireCrmApiUser(req);
+  if (!isSuperUser(session)) {
+    throw new CrmError(
+      "This account may not administer users. Add it to CRM_SUPERUSERS.",
+      403,
+    );
+  }
+  return session;
+}

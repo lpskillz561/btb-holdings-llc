@@ -56,9 +56,49 @@ const inlineComponents: Components = {
   p: ({ children }) => <>{children}</>,
 };
 
-export function Markdown({ children, inline = false }: { children: string; inline?: boolean }) {
+// Long-form documents — contracts, and anything else a counterparty reads on
+// paper. The default components flatten h1/h2/h3 to one weight, which suits the
+// short AI panels they were written for and actively misleads on a legal
+// document: a reader scanning for "V. Mandatory Arbitration" needs the section
+// headings to be findable, and the document's own title should not look like
+// one of its clauses.
+const documentComponents: Components = {
+  ...components,
+  h1: ({ children }) => (
+    <h1 className="mb-5 mt-0 font-serif text-2xl font-medium text-navy-900">{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 className="mb-2 mt-7 border-b border-paper-200 pb-1 font-serif text-lg font-medium text-navy-900">
+      {children}
+    </h2>
+  ),
+  h3: ({ children }) => (
+    <h3 className="mb-1 mt-5 text-sm font-semibold uppercase tracking-wide text-navy-900">
+      {children}
+    </h3>
+  ),
+  // Numbered clauses run long and nest sub-paragraphs; give them room to breathe
+  // rather than the tight spacing a chat answer wants.
+  ol: ({ children }) => <ol className="my-3 list-decimal space-y-3 pl-6">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+};
+
+export function Markdown({
+  children,
+  inline = false,
+  variant = "default",
+}: {
+  children: string;
+  inline?: boolean;
+  variant?: "default" | "document";
+}) {
+  const chosen = inline
+    ? inlineComponents
+    : variant === "document"
+      ? documentComponents
+      : components;
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={inline ? inlineComponents : components}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={chosen}>
       {children}
     </ReactMarkdown>
   );

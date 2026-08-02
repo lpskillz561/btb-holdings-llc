@@ -13,16 +13,19 @@ import type { ClientListRow } from "@/lib/crm/clients";
 import { fmtAgo, fmtMoney } from "@/lib/crm/format";
 import { CLIENT_STATUSES, LABELS, type ClientStatus } from "@/lib/crm/types";
 import { apiGet, qs } from "./api";
-import { ClientForm, type StateOption } from "./ClientForm";
+import { ClientForm, type AvailablePad, type StateOption } from "./ClientForm";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, Dialog, EmptyState, ErrorNote, Table, Td, useDialog } from "./ui";
 
 export function ClientsBoard({
   initial,
   states,
+  pads = [],
 }: {
   initial: ClientListRow[];
   states: StateOption[];
+  /** Unoccupied pads, so a new client can be sited when they are taken on. */
+  pads?: AvailablePad[];
 }) {
   const [rows, setRows] = useState(initial);
   const [search, setSearch] = useState("");
@@ -80,7 +83,7 @@ export function ClientsBoard({
           ))}
         </select>
         <div className="flex-1" />
-        <button type="button" className="btn-gold" onClick={openDialog}>
+        <button type="button" className="sf-btn-brand" onClick={openDialog}>
           Add client
         </button>
       </div>
@@ -92,7 +95,7 @@ export function ClientsBoard({
           <div className="p-6">
             <EmptyState
               action={
-                <button type="button" className="btn-gold" onClick={openDialog}>
+                <button type="button" className="sf-btn-brand" onClick={openDialog}>
                   Add your first client
                 </button>
               }
@@ -109,10 +112,10 @@ export function ClientsBoard({
             {rows.map((row) => (
               <tr key={row.id} className="transition hover:bg-paper-50">
                 <Td>
-                  <Link href={`/crm/clients/${row.id}`} className="font-semibold text-navy-900 hover:text-gold-600">
+                  <Link href={`/crm/clients/${row.id}`} className="font-semibold text-ink-900 hover:text-gold-600">
                     {row.name}
                   </Link>
-                  <span className="mt-0.5 block text-xs text-navy-900/45">
+                  <span className="mt-0.5 block text-xs text-ink-500">
                     {row.email ?? LABELS.entityType[row.entity_type]}
                   </span>
                 </Td>
@@ -121,10 +124,10 @@ export function ClientsBoard({
                 </Td>
                 <Td className="whitespace-nowrap">{fmtMoney(row.target_writeoff_cents)}</Td>
                 <Td className="whitespace-nowrap">{fmtMoney(row.invested_cents)}</Td>
-                <Td className="whitespace-nowrap text-navy-900/70">
+                <Td className="whitespace-nowrap text-ink-700">
                   {row.unit_count} unit{row.unit_count === 1 ? "" : "s"} · {row.property_count} land
                 </Td>
-                <Td className="whitespace-nowrap text-navy-900/55">{fmtAgo(row.updated_at)}</Td>
+                <Td className="whitespace-nowrap text-ink-900/55">{fmtAgo(row.updated_at)}</Td>
               </tr>
             ))}
           </Table>
@@ -133,6 +136,7 @@ export function ClientsBoard({
 
       <Dialog open={open} onClose={closeDialog} title="Add client" wide>
         <ClientForm
+          pads={pads}
           states={states}
           onCancel={closeDialog}
           onSaved={(client) => {

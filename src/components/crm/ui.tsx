@@ -1,8 +1,14 @@
 "use client";
 
-// Shared CRM primitives. Compose these; don't restyle per page — the portal's
-// look is defined by the .card / .field / .btn-* classes in globals.css, and
-// these components are the CRM's only additions to that vocabulary.
+// Shared CRM primitives, in the Salesforce Lightning idiom.
+//
+// These are INTERNAL ONLY — no print page imports this module, which is what
+// makes the split possible: staff screens get Lightning's density and blue,
+// while proposals and contracts keep the navy/gold private-bank look that is
+// worth something in front of a client's CPA.
+//
+// Compose these; don't restyle per page. The vocabulary is the .sf-* classes in
+// globals.css.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Tone } from "@/lib/crm/tone";
@@ -16,18 +22,18 @@ import type { Tone } from "@/lib/crm/tone";
 // component cannot call a function exported from a "use client" module.
 
 const TONES: Record<Tone, string> = {
-  neutral: "bg-paper-100 text-navy-900/65 ring-paper-200",
-  gold: "bg-gold-500/15 text-gold-600 ring-gold-500/25",
-  green: "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20",
-  amber: "bg-amber-500/10 text-amber-700 ring-amber-500/20",
-  red: "bg-red-500/10 text-red-700 ring-red-500/20",
-  navy: "bg-navy-900/8 text-navy-800 ring-navy-900/12",
+  neutral: "bg-ink-100 text-ink-700 ring-ink-200",
+  gold: "bg-gold-500/15 text-gold-600 ring-gold-500/30",
+  green: "bg-ok-100 text-ok-700 ring-ok-500/25",
+  amber: "bg-warn-100 text-warn-700 ring-warn-500/30",
+  red: "bg-err-100 text-err-700 ring-err-500/25",
+  navy: "bg-sf-100 text-sf-700 ring-sf-300",
 };
 
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: Tone }) {
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${TONES[tone]}`}
+      className={`inline-flex items-center rounded-sm px-2 py-0.5 text-xs font-medium ring-1 ${TONES[tone]}`}
     >
       {children}
     </span>
@@ -50,16 +56,16 @@ export function StatTile({
   tone?: "navy" | "gold";
 }) {
   return (
-    <div className="card p-5">
-      <p className="text-xs font-semibold uppercase tracking-wide text-navy-800/55">{label}</p>
+    <div className="sf-card p-4">
+      <p className="text-xs font-medium uppercase tracking-wide text-ink-600">{label}</p>
       <p
-        className={`mt-2 font-serif text-2xl font-medium ${
-          tone === "gold" ? "text-gold-600" : "text-navy-900"
+        className={`mt-1.5 text-2xl font-semibold leading-tight ${
+          tone === "gold" ? "text-gold-600" : "text-ink-900"
         }`}
       >
         {value}
       </p>
-      {hint && <p className="mt-1 text-xs text-navy-900/50">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-ink-600">{hint}</p>}
     </div>
   );
 }
@@ -75,10 +81,10 @@ export function SectionHeading({
 }) {
   return (
     <div className="mb-4 flex items-center justify-between gap-4">
-      <h3 className="text-base font-semibold text-navy-900">
+      <h3 className="text-sm font-bold text-ink-900">
         {title}
         {count !== undefined && (
-          <span className="ml-2 text-sm font-normal text-navy-900/45">{count}</span>
+          <span className="ml-2 text-sm font-normal text-ink-600">({count})</span>
         )}
       </h3>
       {action}
@@ -88,8 +94,8 @@ export function SectionHeading({
 
 export function EmptyState({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-paper-300 p-8 text-center">
-      <p className="text-sm text-navy-900/55">{children}</p>
+    <div className="rounded border border-dashed border-ink-300 bg-white p-8 text-center">
+      <p className="text-sm text-ink-600">{children}</p>
       {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
   );
@@ -100,7 +106,7 @@ export function ErrorNote({ children }: { children: ReactNode }) {
   return (
     <p
       role="alert"
-      className="rounded-md border border-red-500/20 bg-red-500/5 px-3 py-2 text-sm text-red-700"
+      className="rounded border-l-4 border-err-500 bg-err-100 px-3 py-2 text-sm text-err-700"
     >
       {children}
     </p>
@@ -111,8 +117,8 @@ export function ErrorNote({ children }: { children: ReactNode }) {
 export function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-navy-800/50">{label}</dt>
-      <dd className="mt-0.5 text-sm text-navy-900">{children}</dd>
+      <dt className="text-xs font-medium text-ink-600">{label}</dt>
+      <dd className="mt-0.5 text-sm text-ink-900">{children}</dd>
     </div>
   );
 }
@@ -134,19 +140,19 @@ export function Field({
 }) {
   return (
     <label className={`block ${span ? "sm:col-span-2" : ""}`}>
-      <span className="field-label">{label}</span>
+      <span className="sf-label">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-navy-900/45">{hint}</span>}
+      {hint && <span className="mt-1 block text-xs text-ink-600">{hint}</span>}
     </label>
   );
 }
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`field ${props.className ?? ""}`} />;
+  return <input {...props} className={`sf-input ${props.className ?? ""}`} />;
 }
 
 export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`field ${props.className ?? ""}`} />;
+  return <textarea {...props} className={`sf-input ${props.className ?? ""}`} />;
 }
 
 export function Select({
@@ -158,7 +164,7 @@ export function Select({
   labels?: Record<string, string>;
 }) {
   return (
-    <select {...props} className={`field ${props.className ?? ""}`}>
+    <select {...props} className={`sf-input ${props.className ?? ""}`}>
       {options.map((o) => (
         <option key={o} value={o}>
           {labels?.[o] ?? o}
@@ -176,13 +182,13 @@ export function Select({
 export function MoneyInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="relative">
-      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-navy-900/40">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-500">
         $
       </span>
       <input
         inputMode="decimal"
         {...props}
-        className={`field pl-7 ${props.className ?? ""}`}
+        className={`sf-input pl-7 ${props.className ?? ""}`}
       />
     </div>
   );
@@ -194,9 +200,9 @@ export function PercentInput(props: React.InputHTMLAttributes<HTMLInputElement>)
       <input
         inputMode="decimal"
         {...props}
-        className={`field pr-8 ${props.className ?? ""}`}
+        className={`sf-input pr-8 ${props.className ?? ""}`}
       />
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-navy-900/40">
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-ink-500">
         %
       </span>
     </div>
@@ -254,7 +260,7 @@ export function Dialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy-950/50 p-4 py-10 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 py-10"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -264,15 +270,15 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`card w-full ${wide ? "max-w-3xl" : "max-w-xl"}`}
+        className={`sf-card w-full shadow-lift ${wide ? "max-w-3xl" : "max-w-xl"}`}
       >
-        <div className="flex items-center justify-between border-b border-paper-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-navy-900">{title}</h2>
+        <div className="flex items-center justify-between border-b border-ink-200 px-6 py-4">
+          <h2 className="text-base font-bold text-ink-900">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-navy-900/40 transition hover:bg-paper-100 hover:text-navy-900"
+            className="rounded p-1 text-ink-500 transition hover:bg-ink-100 hover:text-ink-900"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
@@ -300,23 +306,23 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b border-paper-200 text-left">
+          <tr className="border-b border-ink-200 bg-ink-100 text-left">
             {head.map((h, i) => (
               <th
                 key={i}
-                className="whitespace-nowrap px-3 py-2 text-xs font-semibold uppercase tracking-wide text-navy-800/50"
+                className="whitespace-nowrap px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-600"
               >
                 {h}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-paper-200">{children}</tbody>
+        <tbody className="divide-y divide-ink-200">{children}</tbody>
       </table>
     </div>
   );
 }
 
 export function Td({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <td className={`px-3 py-2.5 align-top text-navy-900/85 ${className}`}>{children}</td>;
+  return <td className={`px-3 py-2 align-middle text-ink-800 ${className}`}>{children}</td>;
 }

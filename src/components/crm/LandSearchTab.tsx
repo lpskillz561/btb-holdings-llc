@@ -207,7 +207,7 @@ export function LandSearchTab({
                       </select>
                       <button
                         type="button"
-                        className="btn-outline px-3 py-1.5 text-xs"
+                        className="sf-btn-neutral px-3 py-1.5 text-xs"
                         disabled={busyKey === row.parcel_key}
                         onClick={() =>
                           fit ? setOpenFit(openFit === row.parcel_key ? null : row.parcel_key) : void assess(row.parcel_key)
@@ -223,7 +223,7 @@ export function LandSearchTab({
                       </button>
                       <button
                         type="button"
-                        className="btn-outline px-3 py-1.5 text-xs"
+                        className="sf-btn-neutral px-3 py-1.5 text-xs"
                         disabled={busyKey === row.parcel_key}
                         onClick={() => void promote(row)}
                         title="Create a land holding from this parcel"
@@ -292,7 +292,7 @@ export function LandSearchTab({
               Vacant land only
             </label>
             <div className="self-end">
-              <button type="submit" className="btn-gold w-full" disabled={loading}>
+              <button type="submit" className="sf-btn-brand w-full" disabled={loading}>
                 {loading ? "Searching…" : "Search parcels"}
               </button>
             </div>
@@ -348,7 +348,7 @@ export function LandSearchTab({
                           ) : (
                             <button
                               type="button"
-                              className="btn-outline px-3 py-1.5 text-xs"
+                              className="sf-btn-neutral px-3 py-1.5 text-xs"
                               disabled={busyKey === key}
                               onClick={() => void saveParcel(row)}
                             >
@@ -366,7 +366,7 @@ export function LandSearchTab({
             <div className="mt-4 flex items-center justify-between">
               <button
                 type="button"
-                className="btn-outline px-4 py-2 text-sm"
+                className="sf-btn-neutral"
                 disabled={page <= 1 || loading}
                 onClick={() => void search(page - 1)}
               >
@@ -375,7 +375,7 @@ export function LandSearchTab({
               <span className="text-sm text-navy-900/50">Page {page}</span>
               <button
                 type="button"
-                className="btn-outline px-4 py-2 text-sm"
+                className="sf-btn-neutral"
                 disabled={!result.hasNext || loading}
                 onClick={() => void search(page + 1)}
               >

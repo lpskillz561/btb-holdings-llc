@@ -66,15 +66,29 @@ export type ContactRole = (typeof CONTACT_ROLES)[number];
 export const PROPOSAL_STATUSES = ["draft", "sent", "accepted", "declined", "expired"] as const;
 export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
 
+/**
+ * The first three are the generated execution set (see ./contract-templates and
+ * docs/). They are produced together and share a `deal_group_id`; the rest are
+ * for contracts recorded by hand.
+ */
 export const CONTRACT_TYPES = [
+  "equipment_purchase",
+  "equipment_finance",
+  "management",
   "unit_purchase",
   "land_purchase",
   "investment",
   "lease",
-  "management",
   "joint_venture",
 ] as const;
 export type ContractType = (typeof CONTRACT_TYPES)[number];
+
+/** The set generated as one deal, in the order they are executed. */
+export const GENERATED_CONTRACT_TYPES = [
+  "equipment_purchase",
+  "equipment_finance",
+  "management",
+] as const satisfies readonly ContractType[];
 
 export const CONTRACT_STATUSES = [
   "draft",
@@ -86,7 +100,16 @@ export const CONTRACT_STATUSES = [
 ] as const;
 export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
 
-/** Land parcels the client owns or is pursuing. */
+/**
+ * Land parcels the client owns or is pursuing.
+ *
+ * LEGACY. The business changed: BTB owns the land and the client buys only the
+ * home, which sits on a pad BTB provides (see the Management Agreement in
+ * docs/, which places the unit "on vacant improved land" the Agent manages).
+ * BTB's own land lives in `crm_parks` / `crm_pads` instead — deliberately NOT
+ * here, because this table's `client_id` cascades on delete and removing a
+ * client would take BTB's land with it.
+ */
 export const PROPERTY_STATUSES = [
   "prospect",
   "under_contract",
@@ -95,6 +118,38 @@ export const PROPERTY_STATUSES = [
   "sold",
 ] as const;
 export type PropertyStatus = (typeof PROPERTY_STATUSES)[number];
+
+/** A parcel of land BTB owns or is pursuing, on which pads are built. */
+export const PARK_STATUSES = [
+  "prospect",
+  "under_contract",
+  "owned",
+  "developing",
+  "operating",
+  "sold",
+] as const;
+export type ParkStatus = (typeof PARK_STATUSES)[number];
+
+/**
+ * One numbered site within a park.
+ *
+ * `available` and `occupied` are what capacity is counted from: a park's
+ * remaining capacity is its available pads, and a client's footprint is the
+ * square footage of the pad their home sits on.
+ */
+export const PAD_STATUSES = [
+  "planned",
+  "building",
+  "available",
+  "reserved",
+  "occupied",
+  "out_of_service",
+] as const;
+export type PadStatus = (typeof PAD_STATUSES)[number];
+
+/** How a pad's home came to exist — the prefab vs build-on-site question. */
+export const BUILD_METHODS = ["prefab", "site_built"] as const;
+export type BuildMethod = (typeof BUILD_METHODS)[number];
 
 /** A tiny home, from order through disposal. */
 export const UNIT_STATUSES = [
@@ -263,6 +318,27 @@ export interface CrmContract {
   end_date: string | null;
   signed_at: string | null;
   notes: string | null;
+
+  /**
+   * Set only on the generated execution set. The deal terms are frozen here the
+   * same way proposal economics are frozen — a signed document must keep saying
+   * what it said. They are NOT patchable; regenerate instead.
+   */
+  deal_group_id: string | null;
+  purchase_price_cents: number | null;
+  down_payment_cents: number | null;
+  financed_cents: number | null;
+  note_rate_bps: number | null;
+  note_term_months: number | null;
+  monthly_payment_cents: number | null;
+  revenue_split_bps: number | null;
+  buyer_legal_name: string | null;
+  trust_name: string | null;
+  unit_vin: string | null;
+  collateral_location: string | null;
+  body_md: string | null;
+  generated_at: string | null;
+
   created_at: string;
   updated_at: string;
 }
@@ -298,11 +374,112 @@ export interface CrmProperty {
   updated_at: string;
 }
 
+/**
+ * Land BTB owns. The client never appears here — that is the point.
+ *
+ * A park is bought, developed into pads, and then either carries a client's home
+ * or one BTB built for its own book. Its cost basis is BTB's, not a client's,
+ * and land is never depreciable in either case.
+ */
+export interface CrmPark {
+  id: string;
+  name: string;
+  status: ParkStatus;
+  /** "FL:12:PARCELID" — links back to the parcel database when sourced there. */
+  parcel_key: string | null;
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+  county: string | null;
+  state: string | null;
+  acres: number | null;
+  purchase_price_cents: number | null;
+  /** Title, recording, survey. Adds to LAND basis, so it is not depreciable. */
+  closing_costs_cents: number | null;
+  /**
+   * Site prep attached to the land rather than to one pad — access roads, well,
+   * septic, clearing, utility trunk runs. Depreciable (typically as 15-year land
+   * improvements), unlike the land underneath it.
+   */
+  improvements_cents: number | null;
+  purchase_date: string | null;
+  assessed_value_cents: number | null;
+  annual_property_tax_cents: number | null;
+  /**
+   * How many pads the site is expected to hold once built out. Planning figure
+   * only — actual capacity is the count of rows in crm_pads, and the two are
+   * shown side by side so a park that has not been built out is visible.
+   */
+  planned_pad_count: number | null;
+  /** A listing (typically Zillow) for land under consideration. */
+  listing_url: string | null;
+  asking_price_cents: number | null;
+  /**
+   * What the model says about the AREA — tourism, demand, seasonality.
+   * Prose only. Every number on this record is still computed in code.
+   */
+  area_analysis: string | null;
+  area_analysis_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A remark on a piece of land under consideration. */
+export interface CrmParkComment {
+  id: string;
+  park_id: string;
+  author_email: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * One numbered site within a park.
+ *
+ * This is the unit of capacity and the answer to "how much of our land is this
+ * client on": the pad's square footage against the park's acreage.
+ */
+export interface CrmPad {
+  id: string;
+  park_id: string;
+  /** "A-12". Unique within a park. */
+  label: string;
+  status: PadStatus;
+  /** The client's footprint. */
+  pad_sqft: number | null;
+  /** Pad-specific development: the slab, the hookups, the skirting. */
+  site_work_cents: number | null;
+  has_water: boolean | null;
+  has_sewer: boolean | null;
+  has_power: boolean | null;
+  /** What a night on this pad is expected to fetch. Drives the revenue model. */
+  nightly_rate_cents: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** A tiny home. Optionally sited on one of the client's land holdings. */
 export interface CrmUnit {
   id: string;
-  client_id: string;
+  /**
+   * NULL means BTB owns this home and rents it on its own book, rather than a
+   * client owning it. The dashboard splits the two on exactly this.
+   */
+  client_id: string | null;
+  /** Legacy: a client's own land. See the note on PROPERTY_STATUSES. */
   property_id: string | null;
+  /** The pad in a BTB park this home actually stands on. */
+  pad_id: string | null;
+  /**
+   * Bought prefab or built on site. Drives the cost comparison, and is a real
+   * tax question too: the memorandum's position rests on the home being
+   * transportable personal property with a VIN, which a site-built structure
+   * may not be.
+   */
+  build_method: BuildMethod | null;
   label: string;
   status: UnitStatus;
   unit_use: UnitUse;
@@ -452,11 +629,13 @@ export const LABELS = {
     expired: "Expired",
   } satisfies Record<ProposalStatus, string>,
   contractType: {
+    equipment_purchase: "Equipment purchase",
+    equipment_finance: "Equipment finance (note)",
+    management: "Management and revenue share",
     unit_purchase: "Tiny home purchase",
     land_purchase: "Land purchase",
     investment: "Investment agreement",
     lease: "Lease",
-    management: "Management agreement",
     joint_venture: "Joint venture",
   } satisfies Record<ContractType, string>,
   contractStatus: {
@@ -474,6 +653,26 @@ export const LABELS = {
     listed: "Listed",
     sold: "Sold",
   } satisfies Record<PropertyStatus, string>,
+  parkStatus: {
+    prospect: "Prospect",
+    under_contract: "Under contract",
+    owned: "Owned",
+    developing: "Developing",
+    operating: "Operating",
+    sold: "Sold",
+  } satisfies Record<ParkStatus, string>,
+  padStatus: {
+    planned: "Planned",
+    building: "Building",
+    available: "Available",
+    reserved: "Reserved",
+    occupied: "Occupied",
+    out_of_service: "Out of service",
+  } satisfies Record<PadStatus, string>,
+  buildMethod: {
+    prefab: "Prefab",
+    site_built: "Built on site",
+  } satisfies Record<BuildMethod, string>,
   unitStatus: {
     planned: "Planned",
     ordered: "Ordered",

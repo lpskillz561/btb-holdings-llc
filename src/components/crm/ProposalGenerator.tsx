@@ -222,10 +222,10 @@ export function ProposalGenerator({
         <ErrorNote>{error}</ErrorNote>
 
         <div className="flex justify-end gap-3">
-          <button type="button" className="btn-outline" onClick={onClose} disabled={saving}>
+          <button type="button" className="sf-btn-neutral" onClick={onClose} disabled={saving}>
             Cancel
           </button>
-          <button type="submit" className="btn-gold" disabled={saving}>
+          <button type="submit" className="sf-btn-brand" disabled={saving}>
             {saving ? "Drafting…" : "Draft proposal"}
           </button>
         </div>

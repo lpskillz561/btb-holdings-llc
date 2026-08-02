@@ -11,6 +11,7 @@
 
 import {
   CrmError,
+  bool,
   buildInsert,
   buildUpdate,
   cents,
@@ -28,6 +29,8 @@ import {
   CONTACT_ROLES,
   CONTRACT_STATUSES,
   CONTRACT_TYPES,
+  PAD_STATUSES,
+  PARK_STATUSES,
   PROPERTY_STATUSES,
   SAVED_PARCEL_STATUSES,
   TX_CATEGORIES,
@@ -98,6 +101,11 @@ export const CONTACTS: ResourceDef = {
 export const CONTRACTS: ResourceDef = {
   table: "crm_contracts",
   entity: "Contract",
+  // `fields` is the PATCH allow-list. The generated columns — the deal terms and
+  // `body_md` — are deliberately absent, exactly as proposal economics are:
+  // editing prose must never be able to alter a figure in a document someone
+  // signed. To change a term, generate a new set; the old one survives as a
+  // truthful record of what was offered.
   fields: {
     client_id: str,
     proposal_id: str,
@@ -117,6 +125,64 @@ export const CONTRACTS: ResourceDef = {
   filters: ["client_id", "status", "type", "proposal_id"],
   orderBy: "created_at DESC",
   describe: (r) => String(r.title ?? "contract"),
+};
+
+/** Land BTB owns. No client_id — that is the whole distinction from PROPERTIES. */
+export const PARKS: ResourceDef = {
+  table: "crm_parks",
+  entity: "Park",
+  fields: {
+    name: str,
+    status: enumOf(PARK_STATUSES, "prospect"),
+    parcel_key: str,
+    address: str,
+    city: str,
+    postal_code: str,
+    county: str,
+    state: str,
+    acres: num,
+    purchase_price_cents: cents,
+    closing_costs_cents: cents,
+    improvements_cents: cents,
+    purchase_date: date,
+    assessed_value_cents: cents,
+    annual_property_tax_cents: cents,
+    planned_pad_count: num,
+    listing_url: str,
+    asking_price_cents: cents,
+    notes: str,
+    // area_analysis is deliberately absent: it is written by the analyse
+    // endpoint and stamped, never hand-patched into something it did not say.
+  },
+  required: ["name"],
+  defaults: { status: "prospect" },
+  filters: ["status", "state", "county"],
+  orderBy: "created_at DESC",
+  describe: (r) => String(r.name ?? "park"),
+};
+
+/** A numbered site within a park. The unit of capacity. */
+export const PADS: ResourceDef = {
+  table: "crm_pads",
+  entity: "Pad",
+  fields: {
+    park_id: str,
+    label: str,
+    status: enumOf(PAD_STATUSES, "planned"),
+    pad_sqft: num,
+    site_work_cents: cents,
+    has_water: bool,
+    has_sewer: bool,
+    has_power: bool,
+    nightly_rate_cents: cents,
+    notes: str,
+  },
+  required: ["park_id", "label"],
+  defaults: { status: "planned" },
+  filters: ["park_id", "status"],
+  // Pads are read as a list to scan, so order by name rather than recency.
+  orderBy: "label ASC",
+  describe: (r) => String(r.label ?? "pad"),
 };
 
 export const PROPERTIES: ResourceDef = {
@@ -154,6 +220,8 @@ export const UNITS: ResourceDef = {
   fields: {
     client_id: str,
     property_id: str,
+    pad_id: str,
+    build_method: str,
     label: str,
     status: enumOf(UNIT_STATUSES, "planned"),
     unit_use: enumOf(UNIT_USES, "long_term_rental"),
@@ -175,9 +243,11 @@ export const UNITS: ResourceDef = {
     management_company: str,
     notes: str,
   },
-  required: ["client_id", "label"],
+  // client_id is no longer required: a home with none is one BTB owns and rents
+  // on its own book.
+  required: ["label"],
   defaults: { status: "planned", unit_use: "long_term_rental" },
-  filters: ["client_id", "status", "property_id"],
+  filters: ["client_id", "status", "property_id", "pad_id", "build_method"],
   orderBy: "created_at DESC",
   describe: (r) => String(r.label ?? "tiny home"),
 };

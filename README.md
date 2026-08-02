@@ -5,6 +5,10 @@ tiny homes, place them in service as rental assets, and take the depreciation
 that follows. This app tracks the relationship, the document, the asset and the
 money — and sources the land for it from a 19.5M-row county parcel database.
 
+**BTB owns the land; the client owns only the home.** A client's home stands on
+a pad in a BTB park, so `crm_parks` / `crm_pads` are BTB's inventory and carry no
+`client_id`. A home with no client is one BTB owns and rents on its own book.
+
 Extracted from the Ziora Capital Holdings portal, where it was built and run in
 production. Target home is AWS: Aurora PostgreSQL, EC2 behind an ALB, at
 **btbholdingsllc.com**. See [`docs/AWS-MIGRATION.md`](docs/AWS-MIGRATION.md) for
@@ -20,7 +24,8 @@ where that stands.
 | **Client card** | `/crm/clients/[id]` | Everything about one account, across seven tabs |
 | **Proposals** | `/crm/proposals` | Every proposal, its frozen figures, and where it stands |
 | **Contracts** | `/crm/contracts` | What is committed, and what is still waiting on a signature |
-| **Holdings** | `/crm/holdings` | All land and every unit — and which units are *not yet in service* |
+| **Our land** | `/crm/land` | The parks **BTB** owns, the pads on them, and how much capacity is earning |
+| **Holdings** | `/crm/holdings` | Every home across every client — and which are *not yet in service* |
 | **Financials** | `/crm/financials` | Cash in and out, per-client profitability, recent transactions |
 
 Each client card carries **Overview** (record, people, tax profile, land
@@ -48,6 +53,31 @@ joining at read time: the ETL re-imports the assessment roll wholesale, and a
 shortlist that renders blank after a re-import is worse than one holding a
 slightly stale snapshot. The parcel key is kept, so the live record is one
 lookup away.
+
+### Contracts: written from the client, not by a model
+
+`POST /api/crm/contracts/generate` produces the **three execution documents** in
+one transaction, sharing a `deal_group_id`: the Equipment Purchase Agreement,
+the Equipment Finance Agreement with its Schedule A, and the Management and
+Revenue Share Agreement. They are never generated singly — the note is Exhibit A
+to the purchase, and the management agreement produces the income that services
+the note, so any one alone describes a deal that cannot be executed.
+
+The legal text is a **template** transcribed from the executed samples in
+`docs/`. No language model touches it. A model that rephrases an arbitration
+clause or a security interest has altered a binding obligation while producing
+something that still reads fluently, which is a strictly worse failure than an
+inaccurate estimate.
+
+**The structure is fixed and the price varies.** 0% interest, 720 monthly
+payments and the 50/50 revenue split are constants in `src/lib/crm/deal.ts`,
+because the tax opinion's economic-substance reasoning is built on that exact
+shape. Only the purchase price and deposit are per-deal inputs; the monthly
+payment is derived, so Schedule A cannot disagree with the note.
+
+Deal terms are **frozen onto every row** and are absent from the PATCH
+allow-list, exactly like proposal economics. Delivery is print-to-PDF at
+`/crm/contracts/[id]/print`, which prints the whole packet.
 
 ### Proposals: figures are computed, not claimed
 
@@ -78,6 +108,21 @@ alone, site chrome dropped by the `@media print` rules in `globals.css`.
 > generated document says so. The assumptions that drive it — bonus rate,
 > recovery period, marginal rate — are environment configuration precisely
 > because they change and must be confirmed per deal.
+
+### User administration
+
+`/crm/admin` lists registered accounts with last sign-in, and blocks, unblocks,
+resets passwords and removes them. Gated by `getSuperUser()`, which **fails
+closed**.
+
+Two things it is careful about. Accounts from `AUTH_USERS` are checked by the
+login route *before* the database and are not rows, so the page marks them
+**built-in** and refuses to act on them rather than appearing to succeed. And it
+will not let you block or remove your own account, or the last one able to sign
+in — counting both registered rows and built-in accounts.
+
+A password reset generates a temporary password, shows it **once**, and stores
+only its hash.
 
 ### AI
 
@@ -120,6 +165,9 @@ There is no test suite. Verify by exercising the running app — and note that
 | `AUTH_USERS` | no | Built-in accounts, `email:password` comma-separated |
 | `REGISTRATION_CODE` | no | Invite code for `/register`. Blank closes registration. |
 | `CRM_ADMINS` | no | Comma-separated emails. **Unset means every signed-in user has access.** |
+| `CRM_SUPERUSERS` | no | Who may administer accounts at `/crm/admin`. Falls back to `CRM_ADMINS`; **unset on both means nobody** — this gate fails closed. |
+| `CRM_SELLER_*` | for contracts | The party named as Seller, Creditor and Agent. Generation refuses until the address is set. |
+| `CRM_WIRE_*` | for contracts | Where the buyer wires the deposit. Generation refuses until set. |
 | `CRM_BONUS_DEPRECIATION_RATE_BPS` | no | Default `10000` (100%). Confirm per deal. |
 | `CRM_DEFAULT_MARGINAL_RATE_BPS` | no | Default `3700` |
 | `CRM_DEFAULT_USEFUL_LIFE_YEARS` | no | Default `5` |
@@ -169,18 +217,33 @@ n8n. Without them the CRM works fine; land search returns nothing.
 
 ## Deployment
 
-`infra/aws/btb-crm-core.yaml` provisions the VPC, subnets, security groups and
-Aurora PostgreSQL cluster:
+Live at **https://btbholdingsllc.com**, in two CloudFormation stacks:
 
 ```bash
 aws cloudformation deploy --stack-name btb-crm-core \
   --template-file infra/aws/btb-crm-core.yaml --profile ziora
+
+aws cloudformation deploy --stack-name btb-crm-app \
+  --template-file infra/aws/btb-crm-app.yaml \
+  --capabilities CAPABILITY_IAM --profile ziora
 ```
+
+They are split so that a failure in the app tier cannot roll the database back
+out with it. `btb-crm-core` is the VPC, subnets, security groups and Aurora;
+`btb-crm-app` is the instance role, EC2, ALB, TLS listener and DNS.
 
 Aurora carries `DeletionPolicy: Snapshot` on purpose — this database holds
 client tax profiles and contracts, and losing them to a `delete-stack` typo is
 not an acceptable failure mode. The master password is generated straight into
 Secrets Manager and never appears in a parameter, a log, or this repo.
 
-The app stack (EC2, ALB, listeners, DNS) is **not built yet**. See
-[`docs/AWS-MIGRATION.md`](docs/AWS-MIGRATION.md).
+There is no ECR repo and no registry push: the instance pulls a source tarball
+from S3 and **builds the image itself**, which keeps one ARM container off a
+cross-architecture toolchain. Shipping a new build is an upload plus a re-run of
+`/opt/btb/deploy.sh` over SSM — the instance is not replaced. Runtime
+configuration lives in SSM Parameter Store under `/btb-crm/`, SecureString for
+the secrets, read by the instance role at deploy time.
+
+Still to do: the `pg_dump` of `parcels` into Aurora, the nightly backup, and
+n8n. See [`docs/AWS-MIGRATION.md`](docs/AWS-MIGRATION.md) for the commands and
+the current state.

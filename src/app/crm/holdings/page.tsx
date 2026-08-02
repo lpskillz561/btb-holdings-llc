@@ -62,20 +62,20 @@ export default async function HoldingsPage() {
           </div>
 
           <div>
-            <h2 className="mb-4 text-lg font-semibold text-navy-900">Tiny homes</h2>
+            <h2 className="mb-4 text-lg font-semibold text-ink-900">Tiny homes</h2>
             {units.length === 0 ? (
               <EmptyState>No units recorded yet.</EmptyState>
             ) : (
-              <div className="card">
+              <div className="sf-card">
                 <Table
                   head={["Unit", "Client", "Status", "Use", "Sited on", "Cost", "Placed in service", "Rent"]}
                 >
                   {units.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-paper-50">
+                    <tr key={row.id} className="transition hover:bg-white">
                       <Td>
-                        <span className="font-medium text-navy-900">{row.label}</span>
+                        <span className="font-medium text-ink-900">{row.label}</span>
                         {row.model && (
-                          <span className="mt-0.5 block text-xs text-navy-900/45">
+                          <span className="mt-0.5 block text-xs text-ink-500">
                             {[row.manufacturer, row.model].filter(Boolean).join(" ")}
                           </span>
                         )}
@@ -83,7 +83,7 @@ export default async function HoldingsPage() {
                       <Td>
                         <Link
                           href={`/crm/clients/${row.client_id}`}
-                          className="text-navy-900/70 hover:text-gold-600"
+                          className="text-ink-700 hover:text-gold-600"
                         >
                           {row.client_name}
                         </Link>
@@ -92,7 +92,7 @@ export default async function HoldingsPage() {
                         <Badge tone={statusTone(row.status)}>{LABELS.unitStatus[row.status]}</Badge>
                       </Td>
                       <Td>{LABELS.unitUse[row.unit_use]}</Td>
-                      <Td className="text-navy-900/70">{row.property_label ?? "—"}</Td>
+                      <Td className="text-ink-700">{row.property_label ?? "—"}</Td>
                       <Td className="whitespace-nowrap">{fmtMoney(row.purchase_price_cents)}</Td>
                       <Td className="whitespace-nowrap">
                         {row.placed_in_service_on ? (
@@ -110,28 +110,28 @@ export default async function HoldingsPage() {
           </div>
 
           <div>
-            <h2 className="mb-4 text-lg font-semibold text-navy-900">Land</h2>
+            <h2 className="mb-4 text-lg font-semibold text-ink-900">Land</h2>
             {properties.length === 0 ? (
               <EmptyState>
                 No land recorded yet. Shortlist parcels from a client&apos;s Land search tab.
               </EmptyState>
             ) : (
-              <div className="card">
+              <div className="sf-card">
                 <Table
                   head={["Parcel", "Client", "Status", "Where", "Lot size", "Purchase price", "Purchased"]}
                 >
                   {properties.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-paper-50">
+                    <tr key={row.id} className="transition hover:bg-white">
                       <Td>
-                        <span className="font-medium text-navy-900">{row.label}</span>
+                        <span className="font-medium text-ink-900">{row.label}</span>
                         {row.address && (
-                          <span className="mt-0.5 block text-xs text-navy-900/45">{row.address}</span>
+                          <span className="mt-0.5 block text-xs text-ink-500">{row.address}</span>
                         )}
                       </Td>
                       <Td>
                         <Link
                           href={`/crm/clients/${row.client_id}`}
-                          className="text-navy-900/70 hover:text-gold-600"
+                          className="text-ink-700 hover:text-gold-600"
                         >
                           {row.client_name}
                         </Link>
@@ -141,12 +141,12 @@ export default async function HoldingsPage() {
                           {LABELS.propertyStatus[row.status]}
                         </Badge>
                       </Td>
-                      <Td className="text-navy-900/70">
+                      <Td className="text-ink-700">
                         {[row.county && `${row.county} County`, row.state].filter(Boolean).join(", ") || "—"}
                       </Td>
                       <Td className="whitespace-nowrap">{fmtAcres(row.acres)}</Td>
                       <Td className="whitespace-nowrap">{fmtMoney(row.purchase_price_cents)}</Td>
-                      <Td className="whitespace-nowrap text-navy-900/60">
+                      <Td className="whitespace-nowrap text-ink-600">
                         {fmtDate(row.purchase_date)}
                       </Td>
                     </tr>

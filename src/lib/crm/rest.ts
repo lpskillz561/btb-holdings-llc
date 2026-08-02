@@ -17,10 +17,47 @@ import {
 /** Next 15 hands dynamic segments to route handlers as a promise. */
 export type RouteContext<T extends Record<string, string>> = { params: Promise<T> };
 
+/**
+ * Postgres integrity violations, which are the user's fault rather than ours.
+ *
+ * Without this a duplicate pad label and a bad enum value both surfaced as a
+ * 500 "Something went wrong" — indistinguishable from an outage, and useless to
+ * someone who has simply typed "A-01" twice. The messages stay generic about
+ * *which* column so no schema detail leaks; the status code is the part that
+ * matters, because it tells the UI to show the message rather than a crash.
+ */
+function integrityError(err: unknown): NextResponse | null {
+  const code = (err as { code?: string } | null)?.code;
+  switch (code) {
+    case "23505": // unique_violation
+      return NextResponse.json(
+        { error: "That value is already taken. Names must be unique here." },
+        { status: 409 },
+      );
+    case "23514": // check_violation
+      return NextResponse.json(
+        { error: "One of the values isn't allowed for that field." },
+        { status: 400 },
+      );
+    case "23503": // foreign_key_violation
+      return NextResponse.json(
+        { error: "That refers to a record which no longer exists." },
+        { status: 400 },
+      );
+    case "23502": // not_null_violation
+      return NextResponse.json({ error: "A required field is missing." }, { status: 400 });
+    default:
+      return null;
+  }
+}
+
 export function crmError(err: unknown): NextResponse {
   if (err instanceof CrmError) {
     return NextResponse.json({ error: err.message }, { status: err.status });
   }
+  const integrity = integrityError(err);
+  if (integrity) return integrity;
+
   // Anything else is a bug or an outage: log it in full, tell the caller nothing.
   console.error("crm api error", err);
   const message =

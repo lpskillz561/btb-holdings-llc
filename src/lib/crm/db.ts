@@ -160,6 +160,21 @@ export function bps(v: unknown): number | null {
   return n === null ? null : Math.round(n * 100);
 }
 
+/**
+ * Checkbox to boolean, or null when not supplied.
+ *
+ * Accepts what an HTML form actually sends — "on", "true", "1", "yes" — as well
+ * as a real JSON boolean, because the same endpoints take both. Anything else
+ * present but unrecognised is false rather than null: a pad that says "no
+ * sewer" is a different claim from one where nobody has looked yet, and only
+ * the second should read as unknown.
+ */
+export function bool(v: unknown): boolean | null {
+  if (v === null || v === undefined || v === "") return null;
+  if (typeof v === "boolean") return v;
+  return ["on", "true", "1", "yes"].includes(String(v).trim().toLowerCase());
+}
+
 /** 'YYYY-MM-DD', or null. Rejects anything that isn't a real date. */
 export function date(v: unknown): string | null {
   const s = str(v);

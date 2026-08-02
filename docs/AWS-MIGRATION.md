@@ -1,8 +1,9 @@
 # Moving the CRM to AWS
 
-Status: **in progress.** Infrastructure has started; the app has not been
-extracted yet. This document is the brief for whoever picks it up, including a
-fresh chat.
+Status: **the app is live at https://btbholdingsllc.com.** Both stacks are up,
+the schema has bootstrapped itself into Aurora, and a browser pass over the CRM
+comes back clean. What is left is the data: the 12 GB of parcels, the ETL
+schedule, and the backups.
 
 ## Decisions taken (2026-08-02)
 
@@ -15,30 +16,72 @@ fresh chat.
 | Ingress | ALB + ACM, TLS at the load balancer. The portal login is the gate; `CRM_ADMINS` narrows it. |
 | Networking | EC2 in a **public** subnet, no NAT Gateway (saves ~$32/mo). Inbound only from the ALB SG; shell via SSM Session Manager, no port 22, no key pair. |
 | IaC | CloudFormation in `infra/aws/`. Two stacks so an app failure cannot roll Aurora back out. |
+| Image delivery | **Source tarball to S3, built on the instance.** There is no ECR repo and no local Docker; the build host is ARM and so is the target, so building where it runs avoids a cross-architecture toolchain for one container. |
+| App config | SSM Parameter Store under `/btb-crm/`, SecureString for the secrets. Read by the instance role at deploy time, never committed. |
 
-### Provisioned so far
+### Provisioned
 
-- `btb-crm-core` stack: VPC `10.20.0.0/16`, 2 public + 2 private subnets, IGW,
-  three security groups, Aurora Serverless v2 cluster + writer.
-- ACM certificate for `btbholdingsllc.com` and `www`, DNS validation records
-  already written into Route53.
+- `btb-crm-core`: VPC `10.20.0.0/16`, 2 public + 2 private subnets, IGW, three
+  security groups, Aurora Serverless v2 cluster + writer.
+- ACM certificate for `btbholdingsllc.com` and `www` - **issued**. The DNS
+  propagation that was blocking validation resolved on its own.
+- `btb-crm-app`: IAM instance role + profile, `t4g.medium` EC2, ALB across both
+  public subnets, target group on 3000, HTTPS listener, HTTP-to-HTTPS redirect,
+  Route53 alias records for the apex and `www`, CloudWatch log group
+  `/btb-crm/web`.
+- `btb-crm-deploy-761540266321`: S3 bucket for the source tarball and, shortly,
+  the database backups. Versioned, encrypted, public access blocked, lifecycle
+  expiry set. Created **outside** CloudFormation deliberately - the tarball has
+  to exist before the instance boots, and the backups must outlive the stack.
 
-### Blocked on
+### Verified in a browser, not with curl
 
-- **DNS propagation.** The domain was registered minutes before provisioning and
-  did not yet resolve (`dig NS` empty), so the ACM certificate sits in
-  `PENDING_VALIDATION`. It should validate on its own once the registrar's
-  nameservers publish. Re-check with
-  `aws acm describe-certificate --certificate-arn ... --query Certificate.Status`.
-  Nothing else depends on it until the HTTPS listener is created.
+Chrome via Playwright, signed in, clicking rather than navigating: the login
+redirect, the session surviving the Edge middleware, the dashboard, and all four
+global sections reached by `next/link`. 17 of 18 checks pass. The one failure is
+`/favicon.ico` returning 404 because the app ships `favicon.svg` only - cosmetic,
+predates this migration, unrelated to AWS.
+
+`GET /api/crm/summary` answers 200 with a fully-formed zeroed summary, which is
+the proof that `ensureAppSchema` created its tables in Aurora on the first query
+and that the session is accepted by the API's own gate.
 
 ### Next
 
-1. Extract the CRM into a standalone Next.js app (see "What moves" below).
-2. `btb-crm-app` stack: IAM instance role, EC2, ALB, target group, listeners,
-   Route53 alias records.
-3. `pg_dump` the Mini's parcels + auctions into Aurora.
-4. n8n on the same instance, running the existing `etl/*.mjs` on a schedule.
+1. `pg_dump` the Mini's parcels + auctions into Aurora. Until this runs, land
+   search returns nothing - by design, the CRM works fine without it.
+2. Nightly `pg_dump` to `s3://btb-crm-deploy-761540266321/backups/`. The bucket,
+   the lifecycle rule and the instance's `s3:PutObject` permission are already
+   in place; the cron job is not. **This is still the gap that matters most.**
+3. n8n on the same instance, running the existing `etl/*.mjs` on a schedule.
+4. Set `/btb-crm/OPENAI_API_KEY` to switch the three AI surfaces on. It is
+   runtime-only, so this is an SSM write plus a redeploy - no rebuild.
+
+### Shipping a new build
+
+Two steps, and no instance replacement:
+
+```bash
+# --exclude=./docs is not tidiness. That directory holds client legal and tax
+# documents that have no business in a deploy artifact.
+tar --exclude=./.git --exclude=./node_modules --exclude=./.next \
+    --exclude=./docs --exclude=./tsconfig.tsbuildinfo \
+    -czf /tmp/app.tar.gz -C . .
+aws s3 cp /tmp/app.tar.gz s3://btb-crm-deploy-761540266321/source/app.tar.gz --profile ziora
+
+aws ssm send-command --instance-ids i-03cf7050d5d33c713 \
+  --document-name AWS-RunShellScript \
+  --parameters commands=/opt/btb/deploy.sh --profile ziora
+```
+
+`/opt/btb/deploy.sh` re-reads every parameter, rebuilds and restarts the
+container. It refuses to build at all if `/btb-crm/AUTH_SECRET` is empty, because
+an empty one fails every session silently rather than loudly.
+
+Shell in with `aws ssm start-session --target i-03cf7050d5d33c713` (needs the
+session-manager-plugin) or run one-off commands with `ssm send-command`, which
+needs nothing installed. Container logs are in CloudWatch under `/btb-crm/web`;
+the bootstrap log is `/var/log/btb-bootstrap.log` on the instance.
 
 ## Goal
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ShieldMark } from "@/components/Logo";
 import { site } from "@/lib/site";
 import type { ReactNode } from "react";
 
@@ -16,6 +17,8 @@ const SECTIONS = [
   { href: "/crm", label: "Overview" },
   { href: "/crm/proposals", label: "Proposals" },
   { href: "/crm/contracts", label: "Contracts" },
+  // BTB's own land, distinct from Holdings, which is the client-owned homes.
+  { href: "/crm/land", label: "Our land" },
   { href: "/crm/holdings", label: "Holdings" },
   { href: "/crm/financials", label: "Financials" },
 ];
@@ -27,6 +30,7 @@ export function CrmNav({
   intro,
   breadcrumb,
   actions,
+  isSuperUser = false,
 }: {
   /** href of the active section, or undefined on a detail page. */
   current?: string;
@@ -35,59 +39,56 @@ export function CrmNav({
   intro?: string;
   breadcrumb?: { href: string; label: string }[];
   actions?: ReactNode;
+  /**
+   * Show the Users link. Defaults to false so the link is hidden unless a page
+   * has actually checked — a nav that guesses would either show a 404 to
+   * ordinary staff or hint that the page exists.
+   */
+  isSuperUser?: boolean;
 }) {
   return (
-    <section className="bg-navy-950">
-      <div className="container-x py-10 lg:py-14">
-        {/* Sign out lives here because this app has no dashboard to host it —
-            without it there is no way to end a session from the UI. */}
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <nav className="text-sm text-paper-50/50">
-            <Link href="/crm" className="hover:text-gold-400">
-              {site.shortName}
-            </Link>
-            {(breadcrumb ?? []).map((crumb) => (
-              <span key={crumb.href}>
-                <span className="px-2">/</span>
-                <Link href={crumb.href} className="hover:text-gold-400">
-                  {crumb.label}
-                </Link>
-              </span>
-            ))}
-            <span className="px-2">/</span>
-            <span className="text-paper-50/80">{title}</span>
-          </nav>
-
-          <a
-            href="/api/auth/logout"
-            className="shrink-0 text-sm font-semibold text-paper-50/60 transition hover:text-gold-400"
-          >
-            Sign out
-          </a>
-        </div>
-
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <p className="eyebrow-light">{eyebrow}</p>
-            <h1 className="mt-3 font-serif text-3xl font-medium text-paper-50 lg:text-4xl">
-              {title}
-            </h1>
-            {intro && <p className="mt-3 max-w-2xl text-paper-50/65">{intro}</p>}
+    <>
+      {/* Global header — Lightning's dark utility bar. Kept navy rather than
+          Salesforce's own indigo so the product still looks like BTB at a
+          glance, which is the one place the brand should survive indoors. */}
+      <div className="bg-navy-950">
+        <div className="container-x flex h-12 items-center justify-between gap-4">
+          <Link href="/crm" className="inline-flex items-center gap-2 text-sm font-semibold text-paper-50">
+            <ShieldMark
+              simplified
+              className="h-[1.15rem] w-auto shrink-0"
+              field="#f6f3ec"
+              accent="#c8a45c"
+            />
+            {site.shortName}
+          </Link>
+          <div className="flex shrink-0 items-center gap-4">
+            {isSuperUser ? (
+              <Link href="/crm/admin" className="text-sm text-paper-50/70 transition hover:text-gold-400">
+                Users
+              </Link>
+            ) : null}
+            <a href="/api/auth/logout" className="text-sm text-paper-50/70 transition hover:text-gold-400">
+              Sign out
+            </a>
           </div>
-          {actions}
         </div>
+      </div>
 
-        <div className="mt-8 flex flex-wrap gap-1 border-t border-white/10 pt-4">
+      {/* Object nav — the blue bar of tabs Lightning puts under the header. */}
+      <div className="border-b border-ink-200 bg-white">
+        <div className="container-x flex flex-wrap items-stretch gap-0">
           {SECTIONS.map((section) => {
             const active = section.href === current;
             return (
               <Link
                 key={section.href}
                 href={section.href}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                aria-current={active ? "page" : undefined}
+                className={`border-b-2 px-4 py-2.5 text-sm transition ${
                   active
-                    ? "bg-white/10 text-gold-400"
-                    : "text-paper-50/60 hover:bg-white/5 hover:text-paper-50"
+                    ? "border-sf-500 font-semibold text-sf-600"
+                    : "border-transparent text-ink-700 hover:bg-ink-100 hover:text-sf-600"
                 }`}
               >
                 {section.label}
@@ -96,6 +97,44 @@ export function CrmNav({
           })}
         </div>
       </div>
-    </section>
+
+      {/* Record header — Lightning's "highlights panel": breadcrumb, object
+          type, record name, and the actions, all on white above the grey. */}
+      <div className="border-b border-ink-200 bg-white">
+        <div className="container-x min-h-[9.25rem] py-4">
+          <nav className="flex flex-wrap items-center text-xs text-ink-600">
+            <Link href="/crm" className="hover:text-sf-600 hover:underline">
+              {site.shortName}
+            </Link>
+            {(breadcrumb ?? []).map((crumb) => (
+              <span key={crumb.href}>
+                <span className="px-1.5">/</span>
+                <Link href={crumb.href} className="hover:text-sf-600 hover:underline">
+                  {crumb.label}
+                </Link>
+              </span>
+            ))}
+          </nav>
+
+          <div className="crm-enter mt-2 flex flex-wrap items-start justify-between gap-4">
+            <div className="flex min-w-0 items-start gap-3">
+              {/* The coloured object tile Lightning puts beside a record name. */}
+              <span
+                aria-hidden
+                className="mt-0.5 hidden h-10 w-10 shrink-0 items-center justify-center rounded bg-sf-500 sm:inline-flex"
+              >
+                <ShieldMark simplified className="h-5 w-auto" field="#ffffff" accent="#0176d3" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase tracking-wide text-ink-600">{eyebrow}</p>
+                <h1 className="mt-0.5 truncate text-xl font-bold text-ink-900">{title}</h1>
+                {intro && <p className="mt-1 line-clamp-2 max-w-3xl text-sm text-ink-700">{intro}</p>}
+              </div>
+            </div>
+            {actions}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

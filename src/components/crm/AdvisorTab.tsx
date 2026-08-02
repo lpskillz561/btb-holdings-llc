@@ -110,7 +110,7 @@ export function AdvisorTab({ client, aiEnabled }: { client: CrmClient; aiEnabled
       <aside>
         <button
           type="button"
-          className="btn-outline w-full text-sm"
+          className="sf-btn-neutral w-full text-sm"
           onClick={() => {
             setActiveId(null);
             setMessages([]);
@@ -214,7 +214,7 @@ export function AdvisorTab({ client, aiEnabled }: { client: CrmClient; aiEnabled
               placeholder={`Ask about ${client.name}…`}
               className="field flex-1 resize-none"
             />
-            <button type="submit" className="btn-gold self-end" disabled={sending || !input.trim()}>
+            <button type="submit" className="sf-btn-brand self-end" disabled={sending || !input.trim()}>
               Send
             </button>
           </form>

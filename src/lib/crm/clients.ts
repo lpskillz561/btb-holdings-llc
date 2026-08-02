@@ -20,6 +20,7 @@ import {
   queryOne,
   str,
 } from "./db";
+import { getClientFootprint, type ClientFootprint } from "./portfolio";
 import {
   CLIENT_STATUSES,
   ENTITY_TYPES,
@@ -272,6 +273,12 @@ export interface CostBasis {
 
 export interface ClientDetail {
   client: CrmClient;
+  /**
+   * Which pad on which BTB park each of this client's homes stands on, and how
+   * much of that park it takes up. Only meaningful since BTB started owning the
+   * land — the client buys the home, not the ground under it.
+   */
+  footprint: ClientFootprint[];
   contacts: CrmContact[];
   proposals: CrmProposal[];
   contracts: CrmContract[];
@@ -373,7 +380,7 @@ export async function clientCostBasis(clientId: string): Promise<CostBasis> {
 export async function getClientDetail(id: string): Promise<ClientDetail> {
   const client = await getClient(id);
 
-  const [contacts, proposals, contracts, properties, units, transactions, savedParcels, activity, finance, cost] =
+  const [contacts, proposals, contracts, properties, units, transactions, savedParcels, activity, finance, cost, footprint] =
     await Promise.all([
       query<CrmContact>(`SELECT * FROM crm_contacts WHERE client_id = $1 ORDER BY created_at`, [id]),
       query<CrmProposal>(
@@ -403,10 +410,12 @@ export async function getClientDetail(id: string): Promise<ClientDetail> {
       ),
       clientFinance(id),
       clientCostBasis(id),
+      getClientFootprint(id),
     ]);
 
   return {
     client,
+    footprint,
     contacts,
     proposals,
     contracts,

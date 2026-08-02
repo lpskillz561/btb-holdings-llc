@@ -35,6 +35,47 @@ export default {
           200: "#ece7da",
           300: "#ddd6c4",
         },
+
+        // ------------------------------------------------------------------
+        // Salesforce Lightning palette — the INTERNAL CRM only.
+        //
+        // The navy/gold above is the client-facing brand and stays on the
+        // proposals, the contracts and the print pages: those go to a taxpayer
+        // and their CPA, where "private bank" is worth more than "familiar
+        // software". Everything a member of staff works in uses these instead,
+        // because Lightning's density and colour are what a CRM is read fastest
+        // in. Gold survives as an accent so the two are visibly the same
+        // company.
+        // ------------------------------------------------------------------
+        sf: {
+          50: "#eef4ff",
+          100: "#d8e6fe",
+          200: "#aacbff",
+          300: "#78b0fd",
+          400: "#1b96ff",
+          500: "#0176d3", // Lightning Blue — the primary action colour
+          600: "#0b5cab",
+          700: "#014486",
+          800: "#032d60",
+          900: "#001639",
+        },
+        // Lightning's neutrals. `ink-100` is the page background that makes
+        // white cards read as raised without needing a shadow.
+        ink: {
+          50: "#ffffff",
+          100: "#f3f3f3",
+          200: "#e5e5e5",
+          300: "#c9c9c9",
+          400: "#aeaeae",
+          500: "#939393",
+          600: "#747474",
+          700: "#5c5c5c",
+          800: "#444444",
+          900: "#181818",
+        },
+        ok: { 100: "#d5f2dd", 500: "#2e844a", 700: "#1b5b2c" },
+        warn: { 100: "#fef1e0", 500: "#fe9339", 700: "#a75200" },
+        err: { 100: "#feded8", 500: "#ea001e", 700: "#8e021b" },
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],

@@ -1,0 +1,535 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  BTB Holdings CRM - application tier. EC2 build host, ALB, TLS and DNS.
+  Consumes the exports from btb-crm-core. Kept separate so a failure here rolls
+  back the app without taking Aurora with it.
+
+  ASCII only, everywhere. EC2 rejects non-ASCII in security group descriptions
+  and the failure mode is a full stack rollback, so the rule is applied to every
+  description field in this file rather than remembered per field.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: btb-crm
+
+  DomainName:
+    Type: String
+    Default: btbholdingsllc.com
+
+  HostedZoneId:
+    Type: String
+    Default: Z04363912WJVD2S7E35SL
+
+  CertificateArn:
+    Type: String
+    Default: arn:aws:acm:us-east-1:761540266321:certificate/2d148457-f463-4519-bdf4-4a61b8331351
+    Description: Issued ACM certificate covering the apex and www
+
+  DeployBucket:
+    Type: String
+    Default: btb-crm-deploy-761540266321
+    Description: >-
+      Holds the source tarball the instance builds from, and the pg_dump
+      backups. Created outside CloudFormation on purpose - the tarball must
+      exist before the instance boots, and the backups must outlive this stack.
+
+  InstanceType:
+    Type: String
+    Default: t4g.medium
+    Description: >-
+      ARM Graviton. 4 GB RAM is enough for next build only with swap, which the
+      bootstrap adds - see the swapfile step in the deploy script.
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+
+Resources:
+  # ------------------------------------------------------------------- logs --
+  WebLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/${ProjectName}/web"
+      RetentionInDays: 30
+
+  # -------------------------------------------------------------------- iam --
+  # No key pair and no inbound 22 anywhere: shell access is SSM Session Manager,
+  # which is what AmazonSSMManagedInstanceCore below buys.
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: btb-crm-app-runtime
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # The Aurora master credentials. AWS generated these into Secrets
+              # Manager and they are never typed or stored in this repo.
+              - Effect: Allow
+                Action: [secretsmanager:GetSecretValue]
+                Resource: !ImportValue btb-crm-db-secret
+
+              # App configuration, including the two SecureString parameters.
+              # Scoped to this app's prefix, not the whole parameter store.
+              - Effect: Allow
+                Action: [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath]
+                Resource: !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/btb-crm/*"
+
+              # SecureString values are KMS-encrypted under the AWS-managed SSM
+              # key, so reading them needs an explicit Decrypt.
+              - Effect: Allow
+                Action: [kms:Decrypt]
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub "ssm.${AWS::Region}.amazonaws.com"
+
+              # Read the source tarball and the ETL artifact; write the backups.
+              - Effect: Allow
+                Action: [s3:GetObject, s3:GetObjectVersion]
+                Resource:
+                  - !Sub "arn:aws:s3:::${DeployBucket}/source/*"
+                  - !Sub "arn:aws:s3:::${DeployBucket}/etl/*"
+              - Effect: Allow
+                Action: [s3:PutObject]
+                Resource: !Sub "arn:aws:s3:::${DeployBucket}/backups/*"
+              - Effect: Allow
+                Action: [s3:ListBucket]
+                Resource: !Sub "arn:aws:s3:::${DeployBucket}"
+
+              # The container logs straight to CloudWatch via the awslogs driver.
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams]
+                Resource: !GetAtt WebLogGroup.Arn
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+  # --------------------------------------------------------------- instance --
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !ImportValue btb-crm-public-a
+      SecurityGroupIds: [!ImportValue btb-crm-app-sg]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 40
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      MetadataOptions:
+        # IMDSv2 only. A server-side request forgery in the app must not be able
+        # to read this instance's role credentials with a plain GET.
+        HttpTokens: required
+        HttpPutResponseHopLimit: 1
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-app" }
+      UserData:
+        Fn::Base64:
+          # The variable-map form of Fn::Sub, because the database endpoint,
+          # name and secret ARN arrive as ImportValue and the plain string form
+          # of Sub cannot take a function.
+          #
+          # Fn::Sub rewrites every ${...} in this text before it ever reaches the
+          # instance. Shell variables below are therefore written bare ($VAR,
+          # never ${VAR}) so that Sub leaves them alone; where the shell genuinely
+          # needs braces the escape is ${!VAR}.
+          Fn::Sub:
+            - |
+              #!/bin/bash
+              set -euo pipefail
+              exec > >(tee -a /var/log/btb-bootstrap.log) 2>&1
+              echo "[btb] bootstrap starting $(date -u)"
+
+              dnf install -y docker
+
+              # next build peaks well above what 4 GB of RAM alone survives, and
+              # an OOM kill during the build looks like a hung deploy rather than
+              # an error. The swapfile is what makes t4g.medium sufficient.
+              if [ ! -f /swapfile ]; then
+                fallocate -l 4G /swapfile
+                chmod 600 /swapfile
+                mkswap /swapfile
+                swapon /swapfile
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+              fi
+
+              systemctl enable --now docker
+
+              mkdir -p /opt/btb
+
+              # Aurora's certificate chain. Fetched here rather than baked into
+              # the image so that a CA rotation is a redeploy, not a rebuild.
+              curl -fsSL -o /opt/btb/rds-ca.pem \
+                https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+              chmod 644 /opt/btb/rds-ca.pem
+
+              # The deploy is a script on the instance rather than inline UserData
+              # so that shipping a new build is a re-run over SSM, not an instance
+              # replacement.
+              cat > /opt/btb/deploy.sh <<'DEPLOY'
+              #!/bin/bash
+              set -euo pipefail
+              # Never `set -x` in here. The database password, AUTH_SECRET and the
+              # seed login all pass through this script.
+
+              REGION="${AWS::Region}"
+              BUCKET="${DeployBucket}"
+              DB_SECRET_ARN="${DbSecretArn}"
+              DB_HOST="${DbEndpoint}"
+              DB_NAME="${DbName}"
+              LOG_GROUP="/${ProjectName}/web"
+
+              echo "[deploy] fetching configuration"
+
+              ssm_get() {
+                aws ssm get-parameter --region "$REGION" --name "$1" \
+                  --with-decryption --query Parameter.Value --output text 2>/dev/null || true
+              }
+
+              AUTH_SECRET="$(ssm_get /btb-crm/AUTH_SECRET)"
+              if [ -z "$AUTH_SECRET" ]; then
+                echo "[deploy] FATAL: /btb-crm/AUTH_SECRET is empty. Refusing to build."
+                echo "[deploy] The Edge middleware freezes this value at build time; an"
+                echo "[deploy] empty or mismatched secret fails every session silently."
+                exit 1
+              fi
+
+              # Every parameter under /btb-crm/ becomes an env var of the same
+              # name. Deliberately generic: adding configuration (the CRM_SELLER_*
+              # and CRM_WIRE_* party block, a new default) is then an SSM write
+              # plus a redeploy, with no CloudFormation change and no instance
+              # replacement. Written by python rather than a shell loop so a value
+              # containing spaces or '=' survives intact.
+              APP_CONFIG="$(aws ssm get-parameters-by-path --region "$REGION" \
+                --path /btb-crm/ --recursive --with-decryption --output json)"
+
+              # Assemble DATABASE_URL from the AWS-managed secret. The password is
+              # percent-encoded: it is generated rather than chosen, and a raw
+              # reserved character in the userinfo section silently reinterprets
+              # the URL as a connection to some other host.
+              SECRET_JSON="$(aws secretsmanager get-secret-value --region "$REGION" \
+                --secret-id "$DB_SECRET_ARN" --query SecretString --output text)"
+              DB_USER="$(printf '%s' "$SECRET_JSON" | python3 -c 'import json,sys,urllib.parse; print(urllib.parse.quote(json.load(sys.stdin)["username"], safe=""))')"
+              DB_PASS="$(printf '%s' "$SECRET_JSON" | python3 -c 'import json,sys,urllib.parse; print(urllib.parse.quote(json.load(sys.stdin)["password"], safe=""))')"
+              unset SECRET_JSON
+
+              # verify-full, not no-verify. This database holds client tax
+              # profiles, and pg-connection-string turns sslrootcert into a real
+              # CA plus hostname check. The bundle is mounted into the container
+              # at the path named here.
+              DATABASE_URL="postgres://$DB_USER:$DB_PASS@$DB_HOST:5432/$DB_NAME?sslmode=verify-full&sslrootcert=/etc/ssl/rds-ca.pem"
+
+              umask 077
+              APP_CONFIG="$APP_CONFIG" DATABASE_URL="$DATABASE_URL" python3 - > /opt/btb/app.env <<'PYENV'
+              import json, os, sys
+
+              out = ["NODE_ENV=production", "DATABASE_URL=" + os.environ["DATABASE_URL"]]
+              for p in json.loads(os.environ["APP_CONFIG"])["Parameters"]:
+                  name = p["Name"].rsplit("/", 1)[-1]
+                  value = p["Value"]
+                  # docker --env-file reads to end of line and does no quote
+                  # processing, so a newline in a value would silently truncate
+                  # the file and drop every variable after it.
+                  if "\n" in value or "\r" in value:
+                      sys.stderr.write("[deploy] skipping %s: contains a newline\n" % name)
+                      continue
+                  if not value:
+                      continue
+                  out.append("%s=%s" % (name, value))
+              print("\n".join(out))
+              PYENV
+              chmod 600 /opt/btb/app.env
+
+              echo "[deploy] fetching source"
+              rm -rf /opt/btb/src
+              mkdir -p /opt/btb/src
+              aws s3 cp "s3://$BUCKET/source/app.tar.gz" /tmp/app.tar.gz --region "$REGION"
+              tar -xzf /tmp/app.tar.gz -C /opt/btb/src
+              rm -f /tmp/app.tar.gz
+
+              echo "[deploy] building image (this takes several minutes)"
+              # AUTH_SECRET is a build arg because the Edge middleware bundles it
+              # at build time and does not re-read process.env at runtime. It has
+              # to be supplied BOTH here and in app.env above, identically. That
+              # it lands in `docker history` is not a new exposure - it is
+              # compiled into the middleware chunk either way.
+              cd /opt/btb/src
+              docker build --build-arg AUTH_SECRET="$AUTH_SECRET" -t btb-crm:latest .
+
+              echo "[deploy] restarting container"
+              docker rm -f btb-crm >/dev/null 2>&1 || true
+              docker run -d --name btb-crm --restart unless-stopped \
+                -p 3000:3000 \
+                --env-file /opt/btb/app.env \
+                -v /opt/btb/rds-ca.pem:/etc/ssl/rds-ca.pem:ro \
+                --log-driver=awslogs \
+                --log-opt awslogs-region="$REGION" \
+                --log-opt awslogs-group="$LOG_GROUP" \
+                --log-opt awslogs-stream=web \
+                btb-crm:latest
+
+              docker image prune -f >/dev/null 2>&1 || true
+              echo "[deploy] done $(date -u)"
+              DEPLOY
+
+              chmod 700 /opt/btb/deploy.sh
+
+              # The parcel ETL, run here rather than on the Mini so the 19.5M
+              # rows never leave AWS and Aurora stays private. Dispatched from
+              # the Mini's n8n over SSM - see infra/etl/run-etl-on-ec2.sh.
+              cat > /opt/btb/run-etl.sh <<'RUNETL'
+              #!/bin/bash
+              set -euo pipefail
+              # Never `set -x`: DATABASE_URL carries the database password.
+
+              # Only one import at a time. import.mjs loads into a SINGLE shared
+              # `parcels_staging` table and then swaps one state's rows out of
+              # it, so two states running at once would interleave rows and swap
+              # each other's data. flock makes a second state WAIT rather than
+              # corrupt - which also makes queueing the next state just a matter
+              # of starting it.
+              exec 9>/var/lock/btb-etl.lock
+              flock 9
+
+              JOB="${!1:-parcels}"
+              STATE="${!2:-ALL}"
+              REGION="${AWS::Region}"
+              BUCKET="${DeployBucket}"
+
+              # The ETL lives in the ziora-capital-holdings repo, not this one,
+              # so it ships as its own artifact rather than being vendored into
+              # two places and drifting.
+              rm -rf /opt/btb/etl
+              mkdir -p /opt/btb/etl
+              aws s3 cp "s3://$BUCKET/etl/etl.tar.gz" /tmp/etl.tar.gz --region "$REGION"
+              tar -xzf /tmp/etl.tar.gz -C /opt/btb/etl
+              rm -f /tmp/etl.tar.gz
+
+              # Reuse the app's own DATABASE_URL, so the ETL writes to exactly
+              # the database the CRM reads. app.env is 0600 and root-owned.
+              DATABASE_URL="$(grep -m1 '^DATABASE_URL=' /opt/btb/app.env | cut -d= -f2-)"
+              if [ -z "$DATABASE_URL" ]; then
+                echo "[etl] FATAL: no DATABASE_URL in /opt/btb/app.env" >&2
+                exit 1
+              fi
+
+              # app.env is written for the CONTAINER, where the RDS CA bundle is
+              # bind-mounted at /etc/ssl/rds-ca.pem. The ETL runs on the host,
+              # where that path does not exist and the bundle is at
+              # /opt/btb/rds-ca.pem. Without this rewrite every ETL run dies with
+              # ENOENT on the certificate before it opens a single connection.
+              DATABASE_URL="$(printf '%s' "$DATABASE_URL" \
+                | sed 's#/etc/ssl/rds-ca.pem#/opt/btb/rds-ca.pem#')"
+
+              cd /opt/btb/etl
+              [ -f package.json ] && npm install --omit=dev --silent
+
+              echo "[etl] $JOB ($STATE) starting $(date -u)"
+              case "$JOB" in
+                parcels)
+                  DATABASE_URL="$DATABASE_URL" STATE="$STATE" node import.mjs ;;
+                auctions)
+                  DATABASE_URL="$DATABASE_URL" AUCTION_STATE="$STATE" node auctions.mjs ;;
+                reindex)
+                  DATABASE_URL="$DATABASE_URL" node reindex.mjs ;;
+                *)
+                  echo "[etl] unknown job '$JOB'" >&2; exit 2 ;;
+              esac
+              echo "[etl] $JOB complete $(date -u)"
+              RUNETL
+
+              chmod 700 /opt/btb/run-etl.sh
+
+              # Schedule the ETL on the instance itself.
+              #
+              # The three n8n workflows on the Mini were only ever a scheduler:
+              # they SSH in, run one command and check the exit code. A systemd
+              # timer does the same job with no second machine, no long-lived
+              # access key and no cross-network dependency. n8n dispatch via SSM
+              # still works and is left in place, but it is now optional.
+              cat > /etc/systemd/system/btb-etl@.service <<'UNIT'
+              [Unit]
+              Description=BTB parcel ETL (%i)
+              After=network-online.target
+              Wants=network-online.target
+
+              [Service]
+              Type=oneshot
+              # A full state import is hours, not minutes.
+              TimeoutStartSec=21600
+              ExecStart=/opt/btb/run-etl.sh parcels %i
+              StandardOutput=journal
+              StandardError=journal
+              UNIT
+
+              cat > /etc/systemd/system/btb-etl-auctions.service <<'UNIT'
+              [Unit]
+              Description=BTB auction sync
+              After=network-online.target
+              Wants=network-online.target
+
+              [Service]
+              Type=oneshot
+              TimeoutStartSec=7200
+              ExecStart=/opt/btb/run-etl.sh auctions ALL
+              UNIT
+
+              # Parcels monthly: assessment rolls are republished on that cadence,
+              # so nightly would re-scrape counties to produce identical rows and
+              # hammer the sources for nothing.
+              cat > /etc/systemd/system/btb-etl-parcels.timer <<'UNIT'
+              [Unit]
+              Description=Monthly parcel refresh
+
+              [Timer]
+              OnCalendar=*-*-01 07:00:00 UTC
+              Persistent=true
+              Unit=btb-etl@MT.service
+
+              [Install]
+              WantedBy=timers.target
+              UNIT
+
+              # Auctions move daily, so they are the one worth running nightly.
+              cat > /etc/systemd/system/btb-etl-auctions.timer <<'UNIT'
+              [Unit]
+              Description=Nightly auction sync
+
+              [Timer]
+              OnCalendar=*-*-* 09:00:00 UTC
+              Persistent=true
+              Unit=btb-etl-auctions.service
+
+              [Install]
+              WantedBy=timers.target
+              UNIT
+
+              systemctl daemon-reload
+              systemctl enable --now btb-etl-parcels.timer btb-etl-auctions.timer
+
+              # Node, for the ETL. The app itself runs in a container and does
+              # not need it on the host; this does.
+              dnf install -y nodejs npm || true
+
+              /opt/btb/deploy.sh
+              echo "[btb] bootstrap complete $(date -u)"
+            - DbSecretArn: !ImportValue btb-crm-db-secret
+              DbEndpoint: !ImportValue btb-crm-db-endpoint
+              DbName: !ImportValue btb-crm-db-name
+
+  # --------------------------------------------------------------- ingress --
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !ImportValue btb-crm-vpc-id
+      Port: 3000
+      Protocol: HTTP
+      TargetType: instance
+      Targets:
+        - Id: !Ref AppInstance
+      # /api/health is the only path that answers 200 without a session. Both
+      # / and /crm redirect, which no 200 matcher can pass.
+      HealthCheckPath: /api/health
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      # Generous: the first boot builds the image before anything answers, so the
+      # target is legitimately unhealthy for several minutes.
+      UnhealthyThresholdCount: 5
+      Matcher: { HttpCode: "200" }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: "30" }
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Type: application
+      Scheme: internet-facing
+      SecurityGroups: [!ImportValue btb-crm-alb-sg]
+      Subnets:
+        - !ImportValue btb-crm-public-a
+        - !ImportValue btb-crm-public-b
+      Tags:
+        - { Key: Name, Value: !Sub "${ProjectName}-alb" }
+
+  HttpsListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates: [{ CertificateArn: !Ref CertificateArn }]
+      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # TLS terminates at the load balancer, so plain HTTP never reaches the app.
+  HttpRedirectListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: "443"
+            StatusCode: HTTP_301
+
+  # ------------------------------------------------------------------- dns --
+  ApexRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "${DomainName}."
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: false
+
+  WwwRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "www.${DomainName}."
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: false
+
+Outputs:
+  InstanceId:
+    Description: Shell in with - aws ssm start-session --target this
+    Value: !Ref AppInstance
+    Export: { Name: !Sub "${ProjectName}-instance-id" }
+  LoadBalancerDns:
+    Value: !GetAtt LoadBalancer.DNSName
+  SiteUrl:
+    Value: !Sub "https://${DomainName}"
+  DeployCommand:
+    Description: Ship a new build after uploading a fresh source tarball
+    Value: !Sub >-
+      aws ssm send-command --instance-ids ${AppInstance}
+      --document-name AWS-RunShellScript
+      --parameters commands=/opt/btb/deploy.sh

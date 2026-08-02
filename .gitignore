@@ -36,3 +36,15 @@ yarn-error.log*
 *.log
 .DS_Store
 **/.DS_Store
+
+# ---- Client legal & tax documents ----
+# The contracts, the tax memorandum and the pro forma in docs/ are client
+# material, not source. They are the source of truth for how this app writes
+# documents (see CLAUDE.md) but they do not belong in the repository, and the
+# deploy tarball excludes docs/ for the same reason.
+# Markdown in docs/ IS tracked — that is project documentation.
+docs/*.pdf
+docs/*.docx
+docs/*.doc
+docs/*.xlsx
+docs/*.pptx

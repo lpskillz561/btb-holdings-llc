@@ -15,6 +15,7 @@
 // conditions that most often break it in practice come back in `caveats` so
 // they reach the proposal instead of being silently assumed away.
 
+import { MAX_AVERAGE_RENTAL_DAYS } from "./deal";
 import type { UnitUse } from "./types";
 
 /** Read an integer env override, falling back when unset or malformed. */
@@ -46,7 +47,17 @@ export const DEFAULT_MARGINAL_RATE_BPS = () => envInt("CRM_DEFAULT_MARGINAL_RATE
  */
 export const DEFAULT_USEFUL_LIFE_YEARS = () => envInt("CRM_DEFAULT_USEFUL_LIFE_YEARS", 5);
 
-export const DEFAULT_OCCUPANCY_BPS = () => envInt("CRM_DEFAULT_OCCUPANCY_BPS", 8_500);
+/**
+ * Nightly occupancy assumed across the book, in basis points.
+ *
+ * 70%, which is the stated operating assumption and what the pro forma in
+ * docs/ is headed with. Note the pro forma is internally inconsistent: it says
+ * "70% occupancy" and then bills 20 nights, which is 66.7%. This model uses the
+ * stated rate and derives nights from it (70% x 30 = 21), so a change to the
+ * rate moves the revenue rather than leaving a hardcoded night count behind.
+ * The previous default here was 85%, which nothing supported.
+ */
+export const DEFAULT_OCCUPANCY_BPS = () => envInt("CRM_DEFAULT_OCCUPANCY_BPS", 7_000);
 export const DEFAULT_OPEX_BPS = () => envInt("CRM_DEFAULT_OPEX_BPS", 3_500);
 
 export interface EconomicsInput {
@@ -212,8 +223,20 @@ function buildCaveats(
   }
 
   if (input.unitUse === "short_term_rental") {
+    // Two separate tests, and it matters which one this business runs on.
+    //
+    // The familiar "seven days or less" figure is the §469 short-term-rental
+    // route to non-passive treatment through the taxpayer's OWN participation.
+    // The structure in docs/ does not use it: it clears the §50(b)(2) lodging
+    // exclusion with the transient exception at UNDER 30 DAYS
+    // (Reg. 1.48-1(h)(2)(ii)), and gets material participation from the trustee
+    // rather than from the client's hours. Quoting seven days here described a
+    // deal we do not sell. See CLAUDE.md.
     caveats.push(
-      "The short-term rental treatment depends on an average guest stay of seven days or less AND the client materially participating. If either fails, the loss is passive and the offset against other income disappears.",
+      `Transient-lodging treatment depends on the average guest stay staying under ${MAX_AVERAGE_RENTAL_DAYS} days. That is the test that lifts the unit out of the lodging exclusion and makes it expensable at all — the management agreement carries it as an obligation for exactly this reason.`,
+    );
+    caveats.push(
+      "Material participation is a separate requirement and equally load-bearing. In this structure it comes from the trustee's involvement, not from the client's own hours; if that participation is not real and documented, the loss is passive and the offset against other income disappears.",
     );
   }
 

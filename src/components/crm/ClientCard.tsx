@@ -81,7 +81,7 @@ export function ClientCard({
 
   return (
     <>
-      <div className="border-b border-paper-200">
+      <div className="border-b border-ink-200">
         <div className="container-x flex gap-1 overflow-x-auto">
           {TABS.map((name) => (
             <button
@@ -90,8 +90,8 @@ export function ClientCard({
               onClick={() => setTab(name)}
               className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition ${
                 tab === name
-                  ? "border-gold-500 text-navy-900"
-                  : "border-transparent text-navy-900/55 hover:text-navy-900"
+                  ? "border-sf-500 font-semibold text-sf-600"
+                  : "border-transparent text-ink-600 hover:text-ink-900"
               }`}
             >
               {name}
@@ -133,7 +133,7 @@ export function ClientCard({
               onChanged={(rows) => patchDetail("contracts", rows as unknown as ClientDetail["contracts"])}
               head={["Contract", "Type", "Status", "Value", "Signed"]}
               render={(row) => [
-                <span key="t" className="font-medium text-navy-900">{String(row.title)}</span>,
+                <span key="t" className="font-medium text-ink-900">{String(row.title)}</span>,
                 LABELS.contractType[row.type as keyof typeof LABELS.contractType],
                 <Badge key="s" tone={statusTone(String(row.status))}>
                   {LABELS.contractStatus[row.status as keyof typeof LABELS.contractStatus]}
@@ -198,11 +198,11 @@ function OverviewTab({
   return (
     <div className="grid gap-8 lg:grid-cols-3">
       <div className="space-y-8 lg:col-span-2">
-        <div className="card p-6">
+        <div className="sf-card p-6">
           <SectionHeading
             title="Client"
             action={
-              <button type="button" className="btn-outline px-4 py-2 text-sm" onClick={openEdit}>
+              <button type="button" className="sf-btn-neutral" onClick={openEdit}>
                 Edit
               </button>
             }
@@ -227,20 +227,20 @@ function OverviewTab({
             <Detail label="Relationship owner">{client.owner_email ?? "—"}</Detail>
           </dl>
           {client.notes && (
-            <div className="mt-6 border-t border-paper-200 pt-4">
-              <p className="whitespace-pre-wrap text-sm text-navy-900/75">{client.notes}</p>
+            <div className="mt-6 border-t border-ink-200 pt-4">
+              <p className="whitespace-pre-wrap text-sm text-ink-700">{client.notes}</p>
             </div>
           )}
         </div>
 
-        <div className="card p-6">
+        <div className="sf-card p-6">
           <SectionHeading
             title="People"
             count={detail.contacts.length}
             action={
               <button
                 type="button"
-                className="btn-outline px-4 py-2 text-sm"
+                className="sf-btn-neutral"
                 onClick={() => {
                   setContact(undefined);
                   setContactOpen(true);
@@ -260,15 +260,15 @@ function OverviewTab({
               {detail.contacts.map((row) => (
                 <tr
                   key={row.id}
-                  className="cursor-pointer transition hover:bg-paper-50"
+                  className="cursor-pointer transition hover:bg-white"
                   onClick={() => {
                     setContact(row as unknown as Row);
                     setContactOpen(true);
                   }}
                 >
                   <Td>
-                    <span className="font-medium text-navy-900">{row.name}</span>
-                    {row.title && <span className="mt-0.5 block text-xs text-navy-900/45">{row.title}</span>}
+                    <span className="font-medium text-ink-900">{row.name}</span>
+                    {row.title && <span className="mt-0.5 block text-xs text-ink-500">{row.title}</span>}
                   </Td>
                   <Td>{LABELS.contactRole[row.role]}</Td>
                   <Td>{row.email ?? "—"}</Td>
@@ -281,8 +281,8 @@ function OverviewTab({
       </div>
 
       <div className="space-y-6">
-        <div className="card p-6">
-          <h3 className="mb-4 text-base font-semibold text-navy-900">Tax profile</h3>
+        <div className="sf-card p-6">
+          <h3 className="mb-4 text-base font-semibold text-ink-900">Tax profile</h3>
           <dl className="space-y-4">
             <Detail label="Deduction targeted">{fmtMoney(client.target_writeoff_cents)}</Detail>
             <Detail label="Marginal rate">{fmtPct(client.marginal_rate_bps)}</Detail>
@@ -291,14 +291,14 @@ function OverviewTab({
             <Detail label="CPA">
               {client.cpa_name ?? "—"}
               {client.cpa_email && (
-                <span className="block text-xs text-navy-900/50">{client.cpa_email}</span>
+                <span className="block text-xs text-ink-600">{client.cpa_email}</span>
               )}
             </Detail>
           </dl>
         </div>
 
-        <div className="card p-6">
-          <h3 className="mb-4 text-base font-semibold text-navy-900">Land criteria</h3>
+        <div className="sf-card p-6">
+          <h3 className="mb-4 text-base font-semibold text-ink-900">Land criteria</h3>
           <dl className="space-y-4">
             <Detail label="Where">
               {[client.target_county, client.target_state].filter(Boolean).join(", ") || "—"}
@@ -315,13 +315,13 @@ function OverviewTab({
         <CostPositionCard detail={detail} />
 
         {detail.activity.length > 0 && (
-          <div className="card p-6">
-            <h3 className="mb-4 text-base font-semibold text-navy-900">Activity</h3>
+          <div className="sf-card p-6">
+            <h3 className="mb-4 text-base font-semibold text-ink-900">Activity</h3>
             <ul className="space-y-3">
               {detail.activity.slice(0, 12).map((entry) => (
                 <li key={entry.id} className="text-sm">
-                  <p className="text-navy-900/85">{entry.summary}</p>
-                  <p className="text-xs text-navy-900/45">{fmtAgo(entry.created_at)}</p>
+                  <p className="text-ink-800">{entry.summary}</p>
+                  <p className="text-xs text-ink-500">{fmtAgo(entry.created_at)}</p>
                 </li>
               ))}
             </ul>
@@ -381,9 +381,9 @@ function CostPositionCard({ detail }: { detail: ClientDetail }) {
   ];
 
   return (
-    <div className="card p-6">
-      <h3 className="text-base font-semibold text-navy-900">Cost position</h3>
-      <p className="mb-4 mt-1 text-xs text-navy-900/50">
+    <div className="sf-card p-6">
+      <h3 className="text-base font-semibold text-ink-900">Cost position</h3>
+      <p className="mb-4 mt-1 text-xs text-ink-600">
         What the assets cost. Separate from the Financials tab, which tracks cash — the two
         are never added together.
       </p>
@@ -393,44 +393,44 @@ function CostPositionCard({ detail }: { detail: ClientDetail }) {
           .filter(([, value]) => value > 0)
           .map(([label, value]) => (
             <div key={label} className="flex justify-between gap-3">
-              <dt className="text-navy-900/60">{label}</dt>
-              <dd className="text-navy-900/85">{fmtMoney(value)}</dd>
+              <dt className="text-ink-600">{label}</dt>
+              <dd className="text-ink-800">{fmtMoney(value)}</dd>
             </div>
           ))}
-        <div className="flex justify-between gap-3 border-t border-paper-200 pt-2">
-          <dt className="font-semibold text-navy-900">All-in</dt>
-          <dd className="font-semibold text-navy-900">{fmtMoney(c.total_capital_cents)}</dd>
+        <div className="flex justify-between gap-3 border-t border-ink-200 pt-2">
+          <dt className="font-semibold text-ink-900">All-in</dt>
+          <dd className="font-semibold text-ink-900">{fmtMoney(c.total_capital_cents)}</dd>
         </div>
       </dl>
 
-      <dl className="mt-5 space-y-2 border-t border-paper-200 pt-4 text-sm">
+      <dl className="mt-5 space-y-2 border-t border-ink-200 pt-4 text-sm">
         <div className="flex justify-between gap-3">
-          <dt className="text-navy-900/60">Depreciable basis</dt>
-          <dd className="text-navy-900/85">{fmtMoney(c.depreciable_basis_cents)}</dd>
+          <dt className="text-ink-600">Depreciable basis</dt>
+          <dd className="text-ink-800">{fmtMoney(c.depreciable_basis_cents)}</dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-navy-900/60">
+          <dt className="text-ink-600">
             In service
-            <span className="ml-1 text-xs text-navy-900/40">
+            <span className="ml-1 text-xs text-ink-500">
               ({c.in_service_count}/{c.unit_count} units)
             </span>
           </dt>
-          <dd className="text-navy-900/85">{fmtMoney(c.in_service_basis_cents)}</dd>
+          <dd className="text-ink-800">{fmtMoney(c.in_service_basis_cents)}</dd>
         </div>
         <div className="flex justify-between gap-3">
-          <dt className="text-navy-900/60">Land basis (not depreciable)</dt>
-          <dd className="text-navy-900/85">{fmtMoney(c.land_basis_cents)}</dd>
+          <dt className="text-ink-600">Land basis (not depreciable)</dt>
+          <dd className="text-ink-800">{fmtMoney(c.land_basis_cents)}</dd>
         </div>
         {c.bonus_claimed_cents > 0 && (
           <div className="flex justify-between gap-3">
-            <dt className="text-navy-900/60">Bonus claimed</dt>
-            <dd className="text-navy-900/85">{fmtMoney(c.bonus_claimed_cents)}</dd>
+            <dt className="text-ink-600">Bonus claimed</dt>
+            <dd className="text-ink-800">{fmtMoney(c.bonus_claimed_cents)}</dd>
           </div>
         )}
         {c.annual_property_tax_cents > 0 && (
           <div className="flex justify-between gap-3">
-            <dt className="text-navy-900/60">Property tax / yr</dt>
-            <dd className="text-navy-900/85">{fmtMoney(c.annual_property_tax_cents)}</dd>
+            <dt className="text-ink-600">Property tax / yr</dt>
+            <dd className="text-ink-800">{fmtMoney(c.annual_property_tax_cents)}</dd>
           </div>
         )}
       </dl>
@@ -491,7 +491,7 @@ function ProposalsTab({
         action={
           <button
             type="button"
-            className="btn-gold"
+            className="sf-btn-brand"
             onClick={openGenerator}
             disabled={!aiEnabled}
             title={aiEnabled ? undefined : "OPENAI_API_KEY is not set on the web service."}
@@ -507,20 +507,20 @@ function ProposalsTab({
           client&apos;s tax profile, then writes the document around those figures.
         </EmptyState>
       ) : (
-        <div className="card">
+        <div className="sf-card">
           <Table
             head={["Proposal", "Status", "Investment", "First-year deduction", "Tax benefit", "Created"]}
           >
             {detail.proposals.map((row) => (
-              <tr key={row.id} className="transition hover:bg-paper-50">
+              <tr key={row.id} className="transition hover:bg-white">
                 <Td>
                   <Link
                     href={`/crm/proposals/${row.id}`}
-                    className="font-medium text-navy-900 hover:text-gold-600"
+                    className="font-medium text-ink-900 hover:text-gold-600"
                   >
                     {row.title}
                   </Link>
-                  <span className="mt-0.5 block text-xs text-navy-900/45">
+                  <span className="mt-0.5 block text-xs text-ink-500">
                     {row.unit_count} unit{row.unit_count === 1 ? "" : "s"}
                   </span>
                 </Td>
@@ -540,10 +540,10 @@ function ProposalsTab({
                 </Td>
                 <Td className="whitespace-nowrap">{fmtMoney(row.total_investment_cents)}</Td>
                 <Td className="whitespace-nowrap">{fmtMoney(row.year_one_deduction_cents)}</Td>
-                <Td className="whitespace-nowrap font-medium text-navy-900">
+                <Td className="whitespace-nowrap font-medium text-ink-900">
                   {fmtMoney(row.year_one_tax_savings_cents)}
                 </Td>
-                <Td className="whitespace-nowrap text-navy-900/55">{fmtAgo(row.created_at)}</Td>
+                <Td className="whitespace-nowrap text-ink-600">{fmtAgo(row.created_at)}</Td>
               </tr>
             ))}
           </Table>
@@ -599,7 +599,7 @@ function CollectionTab({
         action={
           <button
             type="button"
-            className="btn-outline px-4 py-2 text-sm"
+            className="sf-btn-neutral"
             onClick={() => {
               setEditing(undefined);
               setOpen(true);
@@ -613,12 +613,12 @@ function CollectionTab({
       {rows.length === 0 ? (
         <EmptyState>{empty}</EmptyState>
       ) : (
-        <div className="card">
+        <div className="sf-card">
           <Table head={head}>
             {rows.map((row) => (
               <tr
                 key={String(row.id)}
-                className="cursor-pointer transition hover:bg-paper-50"
+                className="cursor-pointer transition hover:bg-white"
                 onClick={() => {
                   setEditing(row);
                   setOpen(true);
@@ -673,24 +673,83 @@ function HoldingsTab({
 
   return (
     <div className="space-y-12">
+      {/* Where this client's homes actually sit. BTB owns the land, so this is
+          the client's footprint ON OUR PARKS — not something they own. It comes
+          first because under the current model it is the normal case, and the
+          "Land" collection below is the exception. */}
+      <div>
+        <h3 className="text-base font-semibold text-ink-900">Sited on our land</h3>
+        <p className="mb-4 mt-1 text-sm text-ink-600">
+          BTB owns the park; this client owns the home standing on the pad.
+        </p>
+        {detail.footprint.length === 0 ? (
+          <EmptyState>
+            None of this client&rsquo;s homes has been assigned a pad yet. Assign one from{" "}
+            <a href="/crm/land" className="link-underline">
+              Our land
+            </a>
+            .
+          </EmptyState>
+        ) : (
+          <div className="sf-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-ink-100 text-left text-xs uppercase tracking-wide text-ink-600">
+                <tr>
+                  <th className="px-4 py-2.5 font-semibold">Home</th>
+                  <th className="px-4 py-2.5 font-semibold">Park</th>
+                  <th className="px-4 py-2.5 font-semibold">Pad</th>
+                  <th className="px-4 py-2.5 font-semibold">Footprint</th>
+                  <th className="px-4 py-2.5 font-semibold">Share of park</th>
+                  <th className="px-4 py-2.5 font-semibold">Nightly</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.footprint.map((f) => (
+                  <tr key={f.unit_id} className="border-t border-ink-200">
+                    <td className="px-4 py-2.5 font-medium text-ink-900">{f.unit_label}</td>
+                    <td className="px-4 py-2.5">
+                      {f.park_id ? (
+                        <a href={`/crm/land/${f.park_id}`} className="link-underline">
+                          {f.park_name}
+                        </a>
+                      ) : (
+                        <span className="text-ink-500">Unassigned</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">{f.pad_label ?? "—"}</td>
+                    <td className="px-4 py-2.5">
+                      {f.pad_sqft ? `${f.pad_sqft.toLocaleString("en-US")} sq ft` : "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {f.share_of_park_bps === null ? "—" : fmtPct(f.share_of_park_bps, { digits: 2 })}
+                    </td>
+                    <td className="px-4 py-2.5">{fmtMoney(f.nightly_rate_cents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       <CollectionTab
         spec={PROPERTY_SPEC}
-        title="Land"
+        title="Land the client owns"
         clientId={detail.client.id}
         rows={detail.properties as unknown as Row[]}
         onChanged={(rows) => patchDetail("properties", rows as unknown as ClientDetail["properties"])}
         head={["Parcel", "Status", "Where", "Lot size", "Land price", "All-in", "Purchased"]}
         render={(row) => [
-          <span key="l" className="font-medium text-navy-900">{String(row.label)}</span>,
+          <span key="l" className="font-medium text-ink-900">{String(row.label)}</span>,
           <Badge key="s" tone={statusTone(String(row.status))}>
             {LABELS.propertyStatus[row.status as keyof typeof LABELS.propertyStatus]}
           </Badge>,
-          <span key="w" className="text-navy-900/70">
+          <span key="w" className="text-ink-700">
             {[row.address, row.city, row.state].filter(Boolean).join(", ") || "—"}
           </span>,
           fmtAcres(row.acres as number | null),
           fmtMoney(row.purchase_price_cents as number | null),
-          <span key="a" className="font-medium text-navy-900">
+          <span key="a" className="font-medium text-ink-900">
             {fmtMoney(
               ((row.purchase_price_cents as number) ?? 0) +
                 ((row.closing_costs_cents as number) ?? 0) +
@@ -711,7 +770,7 @@ function HoldingsTab({
         choices={landChoices}
         head={["Unit", "Status", "Use", "Sited on", "Unit cost", "All-in", "Placed in service", "Rent"]}
         render={(row) => [
-          <span key="l" className="font-medium text-navy-900">{String(row.label)}</span>,
+          <span key="l" className="font-medium text-ink-900">{String(row.label)}</span>,
           <Badge key="s" tone={statusTone(String(row.status))}>
             {LABELS.unitStatus[row.status as keyof typeof LABELS.unitStatus]}
           </Badge>,
@@ -720,7 +779,7 @@ function HoldingsTab({
           fmtMoney(row.purchase_price_cents as number | null),
           // Unit + site work + soft costs — the number that actually enters the
           // depreciable basis, which the unit price alone understates.
-          <span key="a" className="font-medium text-navy-900">
+          <span key="a" className="font-medium text-ink-900">
             {fmtMoney(
               ((row.purchase_price_cents as number) ?? 0) +
                 ((row.site_work_cents as number) ?? 0) +
@@ -777,7 +836,7 @@ function FinancialsTab({
         }}
         head={["Description", "Category", "Direction", "Amount", "Date", "Status"]}
         render={(row) => [
-          <span key="d" className="font-medium text-navy-900">{String(row.description)}</span>,
+          <span key="d" className="font-medium text-ink-900">{String(row.description)}</span>,
           LABELS.txCategory[row.category as keyof typeof LABELS.txCategory],
           LABELS.txKind[row.kind as keyof typeof LABELS.txKind],
           <span key="a" className={row.kind === "expense" ? "text-red-700" : "text-emerald-700"}>

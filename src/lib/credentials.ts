@@ -58,6 +58,18 @@ export function envUserExists(email: string): boolean {
 }
 
 /**
+ * Emails of the built-in accounts. Passwords are deliberately not exposed.
+ *
+ * Used by the admin screen's lockout guard, which has to know that these
+ * accounts can still sign in even when every row in `portal_users` is gone —
+ * otherwise it refuses to delete the last registered user while an env account
+ * is sitting there perfectly able to log in.
+ */
+export function envUserEmails(): string[] {
+  return loadUsers().map((u) => u.email);
+}
+
+/**
  * Verify an email/password pair. Returns the canonical email on success, or
  * null. Always checks against every configured user so timing does not reveal
  * whether the email exists.

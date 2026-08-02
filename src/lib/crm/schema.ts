@@ -27,7 +27,10 @@ import {
   CONTRACT_TYPES,
   ENTITY_TYPES,
   HEALTHS,
+  BUILD_METHODS,
   LEAD_SOURCES,
+  PAD_STATUSES,
+  PARK_STATUSES,
   PROPERTY_STATUSES,
   PROPOSAL_STATUSES,
   SAVED_PARCEL_STATUSES,
@@ -45,6 +48,16 @@ interface TableDef {
   /** Generated from ./types so SQL and TypeScript cannot disagree. */
   checks?: { column: string; values: readonly string[] }[];
   indexes?: string[];
+  /**
+   * Re-runnable ALTERs for changes the three mechanisms above cannot express —
+   * in practice, relaxing a constraint on a column that already exists.
+   * `ADD COLUMN IF NOT EXISTS` is a no-op once the column is there, so it can
+   * never drop a NOT NULL that a previous install created.
+   *
+   * Every statement here must be safe to run on every boot. Keep the list
+   * short: it is an escape hatch, not a migration history.
+   */
+  alters?: string[];
 }
 
 /**
@@ -81,6 +94,13 @@ const TABLES: TableDef[] = [
       // "<scheme>:<salt>:<hash>" — see lib/portalUsers.ts.
       ["password_hash", "TEXT NOT NULL"],
       ["last_login_at", "TEXT"],
+      // Blocking is a timestamp rather than a boolean so the record says *when*,
+      // which is what anyone asking "why can't this person sign in" needs.
+      // Enforced in verifyPortalUser — a column nothing checks is decoration.
+      ["blocked_at", "TEXT"],
+      ["blocked_reason", "TEXT"],
+      /** Last administrative password reset, for the same audit reason. */
+      ["password_changed_at", "TEXT"],
       ...TIMESTAMPS,
     ],
   },
@@ -214,6 +234,31 @@ const TABLES: TableDef[] = [
       ["end_date", "TEXT"],
       ["signed_at", "TEXT"],
       ["notes", "TEXT"],
+
+      // --- generated execution set -------------------------------------
+      // Null on hand-recorded contracts; set on the three documents produced
+      // together by lib/crm/contracts-gen.ts. Every column here is nullable
+      // because this table is already populated (see CLAUDE.md).
+      //
+      // The deal terms are duplicated onto all three rows on purpose. They are
+      // FROZEN, exactly as proposal economics are: the document a client signed
+      // must keep saying what it said, whatever the client record does later. It
+      // also means any one document is independently auditable without a join.
+      ["deal_group_id", "TEXT"],
+      ["purchase_price_cents", "BIGINT"],
+      ["down_payment_cents", "BIGINT"],
+      ["financed_cents", "BIGINT"],
+      ["note_rate_bps", "INTEGER"],
+      ["note_term_months", "INTEGER"],
+      ["monthly_payment_cents", "BIGINT"],
+      ["revenue_split_bps", "INTEGER"],
+      ["buyer_legal_name", "TEXT"],
+      ["trust_name", "TEXT"],
+      ["unit_vin", "TEXT"],
+      ["collateral_location", "TEXT"],
+      /** The rendered document. Never model-written - see contract-templates.ts. */
+      ["body_md", "TEXT"],
+      ["generated_at", "TEXT"],
       ...TIMESTAMPS,
     ],
     checks: [
@@ -223,6 +268,7 @@ const TABLES: TableDef[] = [
     indexes: [
       "CREATE INDEX IF NOT EXISTS crm_contracts_client_idx ON crm_contracts (client_id, created_at DESC)",
       "CREATE INDEX IF NOT EXISTS crm_contracts_status_idx ON crm_contracts (status)",
+      "CREATE INDEX IF NOT EXISTS crm_contracts_deal_idx ON crm_contracts (deal_group_id)",
     ],
   },
   {
@@ -256,12 +302,103 @@ const TABLES: TableDef[] = [
       "CREATE INDEX IF NOT EXISTS crm_properties_parcel_idx ON crm_properties (parcel_key)",
     ],
   },
+  // --------------------------------------------------------- BTB's own land --
+  // Deliberately NOT crm_properties. That table hangs off a client with ON
+  // DELETE CASCADE, which is right for a client's own holding and catastrophic
+  // for BTB inventory: deleting a client would delete the land underneath every
+  // other client's home. A park has no client_id at all.
+  {
+    name: "crm_parks",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["name", "TEXT NOT NULL"],
+      ["status", "TEXT NOT NULL DEFAULT 'prospect'"],
+      ["parcel_key", "TEXT"],
+      ["address", "TEXT"],
+      ["city", "TEXT"],
+      ["postal_code", "TEXT"],
+      ["county", "TEXT"],
+      ["state", "TEXT"],
+      ["acres", "DOUBLE PRECISION"],
+      ["purchase_price_cents", "BIGINT"],
+      ["closing_costs_cents", "BIGINT"],
+      ["improvements_cents", "BIGINT"],
+      ["purchase_date", "TEXT"],
+      ["assessed_value_cents", "BIGINT"],
+      ["annual_property_tax_cents", "BIGINT"],
+      ["planned_pad_count", "INTEGER"],
+      // A Zillow (or any) listing for land we are considering. A park with
+      // status 'prospect' and a listing_url IS the saved link — no separate
+      // table, so promoting a prospect to owned land is a status change rather
+      // than a migration between two places.
+      ["listing_url", "TEXT"],
+      ["asking_price_cents", "BIGINT"],
+      /** Model-written assessment of the AREA. Prose only — never figures. */
+      ["area_analysis", "TEXT"],
+      ["area_analysis_at", "TEXT"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [{ column: "status", values: PARK_STATUSES }],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_parks_status_idx ON crm_parks (status)",
+      "CREATE INDEX IF NOT EXISTS crm_parks_parcel_idx ON crm_parks (parcel_key)",
+    ],
+  },
+  // Discussion against a piece of land we are considering. Deliberately a table
+  // rather than a notes column: several people weigh in on whether a parcel is
+  // worth buying, and a single field means the last person to type wins.
+  {
+    name: "crm_park_comments",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["park_id", "TEXT NOT NULL REFERENCES crm_parks(id) ON DELETE CASCADE"],
+      ["author_email", "TEXT NOT NULL"],
+      ["body", "TEXT NOT NULL"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_park_comments_park_idx ON crm_park_comments (park_id, created_at)",
+    ],
+  },
+  {
+    name: "crm_pads",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      // Cascade is correct here: a pad has no meaning without its park.
+      ["park_id", "TEXT NOT NULL REFERENCES crm_parks(id) ON DELETE CASCADE"],
+      ["label", "TEXT NOT NULL"],
+      ["status", "TEXT NOT NULL DEFAULT 'planned'"],
+      ["pad_sqft", "INTEGER"],
+      ["site_work_cents", "BIGINT"],
+      ["has_water", "BOOLEAN"],
+      ["has_sewer", "BOOLEAN"],
+      ["has_power", "BOOLEAN"],
+      ["nightly_rate_cents", "BIGINT"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [{ column: "status", values: PAD_STATUSES }],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_pads_park_idx ON crm_pads (park_id)",
+      "CREATE INDEX IF NOT EXISTS crm_pads_status_idx ON crm_pads (status)",
+      // One "A-12" per park. Capacity counting depends on pads being distinct.
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_pads_park_label_idx ON crm_pads (park_id, label)",
+    ],
+  },
   {
     name: "crm_units",
     columns: [
       ["id", "TEXT PRIMARY KEY"],
-      ["client_id", "TEXT NOT NULL REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      // Nullable since the model changed: NULL means BTB owns this home and
+      // rents it on its own book. See the `alters` below, which is what
+      // actually relaxes this on an install created before the change.
+      ["client_id", "TEXT REFERENCES crm_clients(id) ON DELETE CASCADE"],
       ["property_id", "TEXT REFERENCES crm_properties(id) ON DELETE SET NULL"],
+      // Where the home actually sits. SET NULL rather than CASCADE: retiring a
+      // pad must not delete the asset standing on it.
+      ["pad_id", "TEXT REFERENCES crm_pads(id) ON DELETE SET NULL"],
+      ["build_method", "TEXT"],
       ["label", "TEXT NOT NULL"],
       ["status", "TEXT NOT NULL DEFAULT 'planned'"],
       ["unit_use", "TEXT NOT NULL DEFAULT 'long_term_rental'"],
@@ -284,13 +421,22 @@ const TABLES: TableDef[] = [
       ["notes", "TEXT"],
       ...TIMESTAMPS,
     ],
+    // The one thing ADD COLUMN IF NOT EXISTS cannot do: an install created
+    // before BTB started holding its own homes already has client_id NOT NULL,
+    // and the ADD COLUMN above is a no-op on an existing column.
+    alters: ["ALTER TABLE crm_units ALTER COLUMN client_id DROP NOT NULL"],
     checks: [
       { column: "status", values: UNIT_STATUSES },
       { column: "unit_use", values: UNIT_USES },
+      // A CHECK evaluates to NULL, not false, when the column is NULL, and
+      // Postgres accepts that — so this constrains the value on rows that have
+      // one without forcing a build method onto rows that don't.
+      { column: "build_method", values: BUILD_METHODS },
     ],
     indexes: [
       "CREATE INDEX IF NOT EXISTS crm_units_client_idx ON crm_units (client_id)",
       "CREATE INDEX IF NOT EXISTS crm_units_property_idx ON crm_units (property_id)",
+      "CREATE INDEX IF NOT EXISTS crm_units_pad_idx ON crm_units (pad_id)",
     ],
   },
   {
@@ -415,6 +561,10 @@ function statementsFor(table: TableDef): string[] {
     if (/PRIMARY KEY/i.test(type)) continue;
     sql.push(`ALTER TABLE ${table.name} ADD COLUMN IF NOT EXISTS ${name} ${type}`);
   }
+
+  // Applied before the CHECKs so a column can be relaxed and re-constrained in
+  // the same pass.
+  sql.push(...(table.alters ?? []));
 
   // Re-derive every enum constraint from ./types on each boot, so widening an
   // enum there is all that's needed to widen it here.

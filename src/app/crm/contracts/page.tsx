@@ -55,16 +55,16 @@ export default async function ContractsPage() {
               accepted.
             </EmptyState>
           ) : (
-            <div className="card">
+            <div className="sf-card">
               <Table
                 head={["Contract", "Client", "Type", "Status", "Value", "Effective", "Signed"]}
               >
                 {contracts.map((row) => (
-                  <tr key={row.id} className="transition hover:bg-paper-50">
+                  <tr key={row.id} className="transition hover:bg-white">
                     <Td>
-                      <span className="font-medium text-navy-900">{row.title}</span>
+                      <span className="font-medium text-ink-900">{row.title}</span>
                       {row.counterparty && (
-                        <span className="mt-0.5 block text-xs text-navy-900/45">
+                        <span className="mt-0.5 block text-xs text-ink-500">
                           {row.counterparty}
                         </span>
                       )}
@@ -72,7 +72,7 @@ export default async function ContractsPage() {
                     <Td>
                       <Link
                         href={`/crm/clients/${row.client_id}`}
-                        className="text-navy-900/70 hover:text-gold-600"
+                        className="text-ink-700 hover:text-gold-600"
                       >
                         {row.client_name}
                       </Link>
@@ -82,10 +82,10 @@ export default async function ContractsPage() {
                       <Badge tone={statusTone(row.status)}>{LABELS.contractStatus[row.status]}</Badge>
                     </Td>
                     <Td className="whitespace-nowrap">{fmtMoney(row.value_cents)}</Td>
-                    <Td className="whitespace-nowrap text-navy-900/60">
+                    <Td className="whitespace-nowrap text-ink-600">
                       {fmtDate(row.effective_date)}
                     </Td>
-                    <Td className="whitespace-nowrap text-navy-900/60">{fmtDate(row.signed_at)}</Td>
+                    <Td className="whitespace-nowrap text-ink-600">{fmtDate(row.signed_at)}</Td>
                   </tr>
                 ))}
               </Table>

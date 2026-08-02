@@ -4,7 +4,8 @@ import { CrmNav } from "@/components/crm/CrmNav";
 import { ClientsBoard } from "@/components/crm/ClientsBoard";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, StatTile } from "@/components/crm/ui";
-import { getCrmPageUser } from "@/lib/crm/access";
+import { getCrmPageUser, isSuperUser } from "@/lib/crm/access";
+import { listAvailablePads } from "@/lib/crm/portfolio";
 import { getCrmSummary, listClients } from "@/lib/crm/clients";
 import { fmtAgo, fmtMoneyShort, fmtNum } from "@/lib/crm/format";
 import { CLIENT_STATUSES, LABELS } from "@/lib/crm/types";
@@ -26,16 +27,20 @@ export default async function CrmPage() {
   // that the section exists.
   if (!user) notFound();
 
-  const [summary, clients, states] = await Promise.all([
+  const [summary, clients, states, pads] = await Promise.all([
     getCrmSummary(),
     listClients(),
     listStates().catch(() => []),
+    // Offered in the create-client dialog so a new client can be placed on land
+    // BTB already owns at the moment they are taken on.
+    listAvailablePads().catch(() => []),
   ]);
 
   return (
     <>
       <CrmNav
         current="/crm"
+        isSuperUser={isSuperUser(user)}
         eyebrow="Tiny home programme"
         title="Client CRM"
         intro="Every prospect, what they're solving for, what we've proposed, and what they own."
@@ -91,16 +96,16 @@ export default async function CrmPage() {
           </div>
 
           {/* Pipeline strip — where every relationship currently sits. */}
-          <div className="card p-6">
-            <h2 className="mb-4 text-base font-semibold text-navy-900">Pipeline</h2>
+          <div className="sf-card p-6">
+            <h2 className="mb-4 text-base font-semibold text-ink-900">Pipeline</h2>
             <div className="flex flex-wrap gap-3">
               {CLIENT_STATUSES.map((stage) => (
                 <div
                   key={stage}
-                  className="min-w-[8.5rem] flex-1 rounded-lg border border-paper-200 bg-paper-50 px-4 py-3"
+                  className="min-w-[8.5rem] flex-1 rounded-lg border border-ink-200 bg-white px-4 py-3"
                 >
                   <Badge tone={statusTone(stage)}>{LABELS.clientStatus[stage]}</Badge>
-                  <p className="mt-2 font-serif text-xl text-navy-900">
+                  <p className="mt-2 text-xl text-ink-900">
                     {summary.by_status[stage]}
                   </p>
                 </div>
@@ -109,18 +114,18 @@ export default async function CrmPage() {
           </div>
 
           <div>
-            <h2 className="mb-4 text-lg font-semibold text-navy-900">Clients</h2>
-            <ClientsBoard initial={clients} states={states} />
+            <h2 className="mb-4 text-lg font-semibold text-ink-900">Clients</h2>
+            <ClientsBoard initial={clients} states={states} pads={pads} />
           </div>
 
           {summary.activity.length > 0 && (
-            <div className="card p-6">
-              <h2 className="mb-4 text-base font-semibold text-navy-900">Recent activity</h2>
+            <div className="sf-card p-6">
+              <h2 className="mb-4 text-base font-semibold text-ink-900">Recent activity</h2>
               <ul className="space-y-2.5">
                 {summary.activity.map((entry) => (
                   <li key={entry.id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                    <span className="text-navy-900/85">{entry.summary}</span>
-                    <span className="text-xs text-navy-900/45">
+                    <span className="text-ink-800">{entry.summary}</span>
+                    <span className="text-xs text-ink-500">
                       {entry.actor_email ? `${entry.actor_email} · ` : ""}
                       {fmtAgo(entry.created_at)}
                     </span>

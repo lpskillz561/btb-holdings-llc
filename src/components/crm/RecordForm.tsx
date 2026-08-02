@@ -370,10 +370,10 @@ export function RecordDialog({
               Delete
             </button>
           )}
-          <button type="button" className="btn-outline" onClick={onClose} disabled={saving}>
+          <button type="button" className="sf-btn-neutral" onClick={onClose} disabled={saving}>
             Cancel
           </button>
-          <button type="submit" className="btn-gold" disabled={saving}>
+          <button type="submit" className="sf-btn-brand" disabled={saving}>
             {saving ? "Saving…" : editing ? "Save changes" : `Add ${spec.title.toLowerCase()}`}
           </button>
         </div>

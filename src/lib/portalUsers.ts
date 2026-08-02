@@ -120,6 +120,7 @@ interface PortalUserRow {
   email: string;
   name: string | null;
   password_hash: string;
+  blocked_at: string | null;
 }
 
 const normalise = (email: string) => email.trim().toLowerCase();
@@ -228,11 +229,16 @@ export async function verifyPortalUser(email: string, password: string): Promise
   await ready();
   const target = normalise(email);
   const user = await queryOne<PortalUserRow>(
-    `SELECT email, name, password_hash FROM portal_users WHERE email = $1`,
+    `SELECT email, name, password_hash, blocked_at FROM portal_users WHERE email = $1`,
     [target],
   );
   if (!user) return null;
+
+  // Checked AFTER the password so a blocked account is indistinguishable from a
+  // wrong password to whoever is trying: telling an attacker "that account
+  // exists but is suspended" is free reconnaissance.
   if (!(await verifyPassword(password, user.password_hash))) return null;
+  if (user.blocked_at) return null;
 
   const stamp = nowIso();
   if (needsRehash(user.password_hash)) {

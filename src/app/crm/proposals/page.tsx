@@ -59,16 +59,16 @@ export default async function ProposalsPage() {
               come from their tax profile.
             </EmptyState>
           ) : (
-            <div className="card">
+            <div className="sf-card">
               <Table
                 head={["Proposal", "Client", "Status", "Investment", "Deduction", "Tax benefit", "Created"]}
               >
                 {proposals.map((row) => (
-                  <tr key={row.id} className="transition hover:bg-paper-50">
+                  <tr key={row.id} className="transition hover:bg-white">
                     <Td>
                       <Link
                         href={`/crm/proposals/${row.id}`}
-                        className="font-medium text-navy-900 hover:text-gold-600"
+                        className="font-medium text-ink-900 hover:text-gold-600"
                       >
                         {row.title}
                       </Link>
@@ -76,7 +76,7 @@ export default async function ProposalsPage() {
                     <Td>
                       <Link
                         href={`/crm/clients/${row.client_id}`}
-                        className="text-navy-900/70 hover:text-gold-600"
+                        className="text-ink-700 hover:text-gold-600"
                       >
                         {row.client_name}
                       </Link>
@@ -86,10 +86,10 @@ export default async function ProposalsPage() {
                     </Td>
                     <Td className="whitespace-nowrap">{fmtMoney(row.total_investment_cents)}</Td>
                     <Td className="whitespace-nowrap">{fmtMoney(row.year_one_deduction_cents)}</Td>
-                    <Td className="whitespace-nowrap font-medium text-navy-900">
+                    <Td className="whitespace-nowrap font-medium text-ink-900">
                       {fmtMoney(row.year_one_tax_savings_cents)}
                     </Td>
-                    <Td className="whitespace-nowrap text-navy-900/55">{fmtAgo(row.created_at)}</Td>
+                    <Td className="whitespace-nowrap text-ink-600">{fmtAgo(row.created_at)}</Td>
                   </tr>
                 ))}
               </Table>

@@ -22,6 +22,15 @@ import {
 import { apiPatch, apiPost } from "./api";
 import { ErrorNote, Field, MoneyInput, PercentInput, Select, TextArea, TextInput } from "./ui";
 
+/** An unoccupied pad, offered when taking a client on. */
+export interface AvailablePad {
+  id: string;
+  label: string;
+  park_id: string;
+  park_name: string;
+  pad_sqft: number | null;
+}
+
 export interface StateOption {
   code: string;
   name: string;
@@ -31,12 +40,15 @@ export function ClientForm({
   client,
   states,
   onSaved,
+  pads = [],
   onCancel,
 }: {
   /** Absent ⇒ create. Present ⇒ edit that client. */
   client?: CrmClient;
   states: StateOption[];
   onSaved: (client: CrmClient) => void;
+  /** Pads with status 'available'. Empty hides the placement section entirely. */
+  pads?: AvailablePad[];
   onCancel?: () => void;
 }) {
   const [saving, setSaving] = useState(false);
@@ -54,6 +66,26 @@ export function ClientForm({
       const saved = client
         ? await apiPatch<CrmClient>(`/api/crm/clients/${client.id}`, body)
         : await apiPost<CrmClient>("/api/crm/clients", body);
+
+      // Placement is a second call on purpose: it creates a home and flips a
+      // pad, which is a different resource from the client record. A failure
+      // here must not lose the client we just captured, so it is reported
+      // rather than thrown.
+      const padId = String(body.pad_id ?? "");
+      if (padId) {
+        try {
+          await apiPost(`/api/crm/clients/${saved.id}/place`, {
+            pad_id: padId,
+            label: String(body.unit_label ?? ""),
+          });
+        } catch (err) {
+          setError(
+            `${saved.name} was saved, but placing them on that pad failed: ${
+              err instanceof Error ? err.message : "unknown error"
+            }`,
+          );
+        }
+      }
       onSaved(saved);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the client.");
@@ -167,6 +199,36 @@ export function ClientForm({
         </div>
       </div>
 
+      {/* The half that was missing: a new client has to end up somewhere, and
+          under the current model that somewhere is a pad BTB already owns. */}
+      {pads.length > 0 ? (
+        <div>
+          <h3 className="mb-1 text-sm font-semibold text-ink-900">Place on our land</h3>
+          <p className="mb-4 text-xs text-ink-600">
+            Optional. Assigns an available pad and creates the client&apos;s home on it. The pad
+            becomes occupied, so it stops counting as capacity we can still sell.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Available pad">
+              {/* A plain select: ui.tsx's Select renders a fixed enum, and
+                  these options come from the database. */}
+              <select name="pad_id" defaultValue="" className="sf-input">
+                <option value="">Do not place yet</option>
+                {pads.map((pad) => (
+                  <option key={pad.id} value={pad.id}>
+                    {pad.park_name} — {pad.label}
+                    {pad.pad_sqft ? ` (${pad.pad_sqft.toLocaleString("en-US")} sq ft)` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Name this home" hint="Defaults to the park name.">
+              <TextInput name="unit_label" placeholder="Cabin 1" />
+            </Field>
+          </div>
+        </div>
+      ) : null}
+
       <Field label="Notes">
         <TextArea name="notes" rows={4} defaultValue={client?.notes ?? ""} placeholder="What they're solving for, who introduced them, anything the AI advisor should know." />
       </Field>
@@ -175,11 +237,11 @@ export function ClientForm({
 
       <div className="flex justify-end gap-3">
         {onCancel && (
-          <button type="button" className="btn-outline" onClick={onCancel} disabled={saving}>
+          <button type="button" className="sf-btn-neutral" onClick={onCancel} disabled={saving}>
             Cancel
           </button>
         )}
-        <button type="submit" className="btn-gold" disabled={saving}>
+        <button type="submit" className="sf-btn-brand" disabled={saving}>
           {saving ? "Saving…" : client ? "Save changes" : "Add client"}
         </button>
       </div>

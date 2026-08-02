@@ -70,7 +70,7 @@ export function ProposalView({
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr_20rem]">
       <div className="min-w-0">
-        <div className="card p-7">
+        <div className="sf-card p-7">
           {editing ? (
             <div className="space-y-4">
               <label className="block">
@@ -90,7 +90,7 @@ export function ProposalView({
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
-                  className="btn-outline"
+                  className="sf-btn-neutral"
                   disabled={saving}
                   onClick={() => {
                     setDraft(proposal.body_md);
@@ -102,7 +102,7 @@ export function ProposalView({
                 </button>
                 <button
                   type="button"
-                  className="btn-gold"
+                  className="sf-btn-brand"
                   disabled={saving}
                   onClick={async () => {
                     if (await patch({ title, body_md: draft })) setEditing(false);
@@ -113,7 +113,7 @@ export function ProposalView({
               </div>
             </div>
           ) : (
-            <article className="text-navy-900/85">
+            <article className="text-ink-900/85">
               <Markdown>{proposal.body_md}</Markdown>
             </article>
           )}
@@ -121,7 +121,7 @@ export function ProposalView({
       </div>
 
       <aside className="space-y-6 no-print">
-        <div className="card p-6">
+        <div className="sf-card p-6">
           <div className="flex items-center justify-between">
             <Badge tone={statusTone(proposal.status)}>
               {LABELS.proposalStatus[proposal.status]}
@@ -162,12 +162,12 @@ export function ProposalView({
           </label>
 
           {proposal.sent_at && (
-            <p className="mt-4 text-xs text-navy-900/50">Sent {fmtDate(proposal.sent_at)}</p>
+            <p className="mt-4 text-xs text-ink-600">Sent {fmtDate(proposal.sent_at)}</p>
           )}
 
           <button
             type="button"
-            className="btn-outline mt-5 w-full"
+            className="sf-btn-neutral mt-5 w-full"
             onClick={() => setEditing((v) => !v)}
           >
             {editing ? "Stop editing" : "Edit prose"}
@@ -175,17 +175,17 @@ export function ProposalView({
           <ErrorNote>{error}</ErrorNote>
         </div>
 
-        <div className="card p-6">
-          <h3 className="mb-1 text-base font-semibold text-navy-900">The frozen figures</h3>
-          <p className="mb-4 text-xs text-navy-900/50">
+        <div className="sf-card p-6">
+          <h3 className="mb-1 text-base font-semibold text-ink-900">The frozen figures</h3>
+          <p className="mb-4 text-xs text-ink-600">
             Calculated when this was drafted and stored on the record. Editing the prose cannot
             change them; to quote differently, draft a new proposal for {clientName}.
           </p>
           <dl className="space-y-2 text-sm">
             {figures.map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3">
-                <dt className="text-navy-900/60">{label}</dt>
-                <dd className="text-right font-medium text-navy-900">{value}</dd>
+                <dt className="text-ink-600">{label}</dt>
+                <dd className="text-right font-medium text-ink-900">{value}</dd>
               </div>
             ))}
           </dl>

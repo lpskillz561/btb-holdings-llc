@@ -56,20 +56,20 @@ export default async function FinancialsPage() {
           </div>
 
           <div>
-            <h2 className="mb-4 text-lg font-semibold text-navy-900">By client</h2>
+            <h2 className="mb-4 text-lg font-semibold text-ink-900">By client</h2>
             {active.length === 0 ? (
               <EmptyState>
                 No transactions recorded yet. Add them from a client&apos;s Financials tab.
               </EmptyState>
             ) : (
-              <div className="card">
+              <div className="sf-card">
                 <Table head={["Client", "Received", "Spent", "Net", "Outstanding"]}>
                   {active.map((row) => (
-                    <tr key={row.client_id} className="transition hover:bg-paper-50">
+                    <tr key={row.client_id} className="transition hover:bg-white">
                       <Td>
                         <Link
                           href={`/crm/clients/${row.client_id}`}
-                          className="font-medium text-navy-900 hover:text-gold-600"
+                          className="font-medium text-ink-900 hover:text-gold-600"
                         >
                           {row.client_name}
                         </Link>
@@ -78,7 +78,7 @@ export default async function FinancialsPage() {
                       <Td className="whitespace-nowrap">{fmtMoney(row.expense_cents)}</Td>
                       <Td
                         className={`whitespace-nowrap font-medium ${
-                          row.net_cents < 0 ? "text-red-700" : "text-navy-900"
+                          row.net_cents < 0 ? "text-red-700" : "text-ink-900"
                         }`}
                       >
                         {fmtMoney(row.net_cents)}
@@ -92,21 +92,21 @@ export default async function FinancialsPage() {
           </div>
 
           <div>
-            <h2 className="mb-4 text-lg font-semibold text-navy-900">Recent transactions</h2>
+            <h2 className="mb-4 text-lg font-semibold text-ink-900">Recent transactions</h2>
             {transactions.length === 0 ? (
               <EmptyState>Nothing recorded yet.</EmptyState>
             ) : (
-              <div className="card">
+              <div className="sf-card">
                 <Table head={["Date", "Description", "Client", "Category", "Amount", "Status"]}>
                   {transactions.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-paper-50">
-                      <Td className="whitespace-nowrap text-navy-900/60">
+                    <tr key={row.id} className="transition hover:bg-white">
+                      <Td className="whitespace-nowrap text-ink-600">
                         {fmtDate(row.occurred_on)}
                       </Td>
                       <Td>
-                        <span className="font-medium text-navy-900">{row.description}</span>
+                        <span className="font-medium text-ink-900">{row.description}</span>
                         {row.invoice_number && (
-                          <span className="mt-0.5 block text-xs text-navy-900/45">
+                          <span className="mt-0.5 block text-xs text-ink-500">
                             #{row.invoice_number}
                           </span>
                         )}
@@ -115,12 +115,12 @@ export default async function FinancialsPage() {
                         {row.client_id ? (
                           <Link
                             href={`/crm/clients/${row.client_id}`}
-                            className="text-navy-900/70 hover:text-gold-600"
+                            className="text-ink-700 hover:text-gold-600"
                           >
                             {row.client_name}
                           </Link>
                         ) : (
-                          <span className="text-navy-900/45">—</span>
+                          <span className="text-ink-500">—</span>
                         )}
                       </Td>
                       <Td>{LABELS.txCategory[row.category]}</Td>
