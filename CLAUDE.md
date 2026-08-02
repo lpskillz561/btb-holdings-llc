@@ -351,6 +351,27 @@ Things about that deployment that are not visible from the code:
   two states at once interleave and swap each other's data. `run-etl.sh` takes an
   `flock` on `/var/lock/btb-etl.lock`; a second state waits rather than corrupts,
   which also makes queueing the next state just a matter of starting it.
+- **A wedged import looks exactly like a slow one, and used to stay wedged for
+  hours.** MT once sat two hours having loaded nothing, holding an open `COPY
+  parcels_staging` whose lock blocked two later imports and made the table
+  unreadable — `systemctl` said `activating` throughout. Three faults had to
+  line up, and the middle one is the trap: `importState`'s `catch` opens with
+  `ROLLBACK`, but the connection was still in COPY-in mode, where the server
+  wants `CopyData`/`CopyFail` and will not answer a new query. **The error
+  handler hung on its own first statement**, so the `ERROR:` line explaining any
+  of it never printed. Fixed in the ETL repo: `lib/http.mjs` puts a deadline on
+  every request (armed over the *body* — `fetch()` resolves at the headers, so a
+  timeout around the call alone still lets `res.json()` hang), the COPY is
+  destroyed on failure so the lock goes immediately, and a stall watchdog aborts
+  any load that goes 15 minutes without a row. **Diagnose from
+  `pg_stat_activity`, not the unit state**: a `COPY` sitting in
+  `Client/ClientRead` with a two-hour `xact_start` is the signature.
+- **Check the source host before assuming the ETL is broken.** `gisservicemt.gov`
+  in the MT adapter was NXDOMAIN from every resolver — a long-standing typo for
+  `gisservice.mt.gov`, whose service has since moved to `msdi_cadastral_map_v1`
+  with parcels on **layer 1** (layer 0 is conservation easements, layer 2 is
+  public lands, so a careless port imports the wrong features rather than
+  failing). `getent hosts` on the instance is the thirty-second check.
 - **`systemctl is-active --quiet` is FALSE for a running oneshot.** A long
   `Type=oneshot` sits in `activating` for its whole life, and `--quiet` only
   succeeds on `active` — so a "wait for the import to finish" loop written that
