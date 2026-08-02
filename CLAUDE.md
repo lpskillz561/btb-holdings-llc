@@ -315,9 +315,20 @@ ALB, listeners, Route53) are both up; the ACM cert is issued. See
 
 Not built yet: the parcel data itself, and the nightly backup.
 
-**The importer is a SCRIPT, and EC2 now schedules it itself.** `etl/import.mjs`
-does the work; the three n8n workflows were only ever a scheduler that SSHes in,
-runs one command and checks the exit code. Two systemd timers on the instance do
+**The importer is a SCRIPT, and it is NOT IN THIS REPO.** It lives in
+`ziora-capital-holdings/etl/` and is deliberately not vendored here, because it
+has **two** consumers: this app's Aurora, and the Mini's own research tool,
+which reads `parcels` out of the Mini's local Postgres (`web/src/lib/parcels.ts`
+there, fed by `docker compose run --rm etl`). Copying it here would fork it.
+
+The catch is that the coupling is invisible from this side: **a commit in that
+repo changes what this production database ingests**, with nothing here to say
+so. Ship it with the tarball step in `infra/etl/README.md`, and treat an ETL
+change as a change to this app. `etl/import.mjs` in the notes below means
+`ziora-capital-holdings/etl/import.mjs`.
+
+EC2 now schedules it itself; the three n8n workflows were only ever a scheduler
+that SSHes in, runs one command and checks the exit code. Two systemd timers on the instance do
 the same job with no second machine and no long-lived access key:
 `btb-etl-parcels.timer` (monthly, matching how assessment rolls are republished)
 and `btb-etl-auctions.timer` (nightly, since auctions move daily). The Mini is
