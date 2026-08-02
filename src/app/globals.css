@@ -1,0 +1,140 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    sans-serif;
+  --font-serif: Georgia, "Times New Roman", ui-serif, serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: #fbfaf7;
+  color: #0a1430;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-serif;
+  }
+}
+
+@layer components {
+  /* ---- Layout ---- */
+  .container-x {
+    @apply mx-auto w-full max-w-content px-6 lg:px-8;
+  }
+  .section {
+    @apply py-20 lg:py-28;
+  }
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-gold-600;
+  }
+  .eyebrow-light {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-gold-400;
+  }
+
+  /* ---- Buttons ---- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply btn bg-navy-800 text-paper-50 hover:bg-navy-700;
+  }
+  .btn-gold {
+    @apply btn bg-gold-500 text-navy-950 hover:bg-gold-400 shadow-gold;
+  }
+  .btn-outline {
+    @apply btn border border-navy-800/20 bg-transparent text-navy-800 hover:border-navy-800/40 hover:bg-navy-800/5;
+  }
+  .btn-ghost-light {
+    @apply btn border border-white/20 bg-white/5 text-paper-50 hover:bg-white/10;
+  }
+
+  /* ---- Surfaces ---- */
+  .card {
+    @apply rounded-xl border border-paper-200 bg-white shadow-card;
+  }
+  .card-pad {
+    @apply card p-7;
+  }
+  .hairline {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-paper-300 to-transparent;
+  }
+
+  /* ---- Inputs ---- */
+  .field-label {
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-navy-800/60;
+  }
+  .field {
+    @apply w-full rounded-md border border-paper-300 bg-white px-3.5 py-2.5 text-sm text-navy-900 outline-none transition placeholder:text-navy-900/30 focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20;
+  }
+
+  .link-underline {
+    @apply font-semibold text-navy-700 underline-offset-4 hover:text-gold-600 hover:underline;
+  }
+}
+
+/* A faint vertical rule used to flank wordmarks, banking-statement style. */
+.rule-gold {
+  background: linear-gradient(
+    to right,
+    transparent,
+    theme("colors.gold.500"),
+    transparent
+  );
+}
+
+/* Printing.
+   Proposals are delivered by handing the client a PDF, so a printed page must
+   be the document and nothing else: the site chrome, the portal nav and any
+   on-screen-only controls (marked .no-print) drop out. */
+@media print {
+  body > header,
+  body > footer,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .card {
+    box-shadow: none;
+    border-color: #ddd6c4;
+  }
+  /* Keep a heading with the text it introduces. */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+  table,
+  blockquote {
+    break-inside: avoid;
+  }
+  @page {
+    margin: 18mm 16mm;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(10, 20, 48, 0.18);
+  border-radius: 9999px;
+}
+::selection {
+  background: theme("colors.gold.300");
+  color: theme("colors.navy.950");
+}

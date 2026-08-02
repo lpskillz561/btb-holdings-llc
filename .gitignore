@@ -1,0 +1,38 @@
+# ---- Dependencies ----
+node_modules/
+**/node_modules/
+
+# ---- Next.js build output ----
+.next/
+**/.next/
+out/
+**/out/
+*.tsbuildinfo
+**/*.tsbuildinfo
+next-env.d.ts
+**/next-env.d.ts
+
+# ---- Secrets / environment ----
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# ---- Databases & uploads (runtime data) ----
+*.db
+*.db-journal
+**/*.db
+**/*.db-journal
+**/prisma/dev.db
+**/uploads/
+ziora-ai-business-overview/uploads/
+
+# ---- Logs & OS ----
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.DS_Store
+**/.DS_Store

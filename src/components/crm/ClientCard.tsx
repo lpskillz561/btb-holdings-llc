@@ -1,0 +1,796 @@
+"use client";
+
+// The client card: one place that answers "where does this account stand".
+//
+// State lives here rather than in each tab so an edit made on one tab is
+// reflected on the others without a page round-trip — adding a unit updates the
+// financial rollups; shortlisting a parcel is visible from Holdings.
+//
+// Every tab is also reachable as a global section (/crm/proposals, /contracts,
+// /holdings, /financials) which answers the cross-client questions a single
+// record cannot. Both views render the same records; neither is the "real" one.
+
+import Link from "next/link";
+import { useState } from "react";
+import type { ClientDetail } from "@/lib/crm/clients";
+import { fmtAgo, fmtAcres, fmtDate, fmtMoney, fmtPct } from "@/lib/crm/format";
+import {
+  LABELS,
+  PROPOSAL_STATUSES,
+  type CrmProposal,
+  type CrmSavedParcel,
+} from "@/lib/crm/types";
+import { AdvisorTab } from "./AdvisorTab";
+import { ClientForm, type StateOption } from "./ClientForm";
+import { LandSearchTab } from "./LandSearchTab";
+import { ProposalGenerator, type ProposalDefaults } from "./ProposalGenerator";
+import { apiPatch } from "./api";
+import {
+  CONTACT_SPEC,
+  CONTRACT_SPEC,
+  PROPERTY_SPEC,
+  RecordDialog,
+  TRANSACTION_SPEC,
+  UNIT_SPEC,
+  type Choices,
+  type RecordSpec,
+} from "./RecordForm";
+import { statusTone } from "@/lib/crm/tone";
+import { Badge, Detail, Dialog, EmptyState, ErrorNote, SectionHeading, StatTile, Table, Td, useDialog } from "./ui";
+
+type Row = Record<string, unknown>;
+
+const TABS = [
+  "Overview",
+  "Proposals",
+  "Contracts",
+  "Holdings",
+  "Financials",
+  "Land search",
+  "AI advisor",
+] as const;
+type Tab = (typeof TABS)[number];
+
+export function ClientCard({
+  detail: initial,
+  states,
+  proposalDefaults,
+  aiEnabled,
+}: {
+  detail: ClientDetail;
+  states: StateOption[];
+  proposalDefaults: ProposalDefaults;
+  aiEnabled: boolean;
+}) {
+  const [detail, setDetail] = useState(initial);
+  const [tab, setTab] = useState<Tab>("Overview");
+  const [error, setError] = useState("");
+  const client = detail.client;
+
+  /** Replace one collection on the detail bundle. */
+  function patchDetail<K extends keyof ClientDetail>(key: K, value: ClientDetail[K]) {
+    setDetail((current) => ({ ...current, [key]: value }));
+  }
+
+  /** Insert-or-replace by id, newest first — what every add/edit dialog needs. */
+  function upsert<T extends { id: string }>(rows: T[], row: T): T[] {
+    return rows.some((r) => r.id === row.id)
+      ? rows.map((r) => (r.id === row.id ? row : r))
+      : [row, ...rows];
+  }
+
+  return (
+    <>
+      <div className="border-b border-paper-200">
+        <div className="container-x flex gap-1 overflow-x-auto">
+          {TABS.map((name) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => setTab(name)}
+              className={`whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition ${
+                tab === name
+                  ? "border-gold-500 text-navy-900"
+                  : "border-transparent text-navy-900/55 hover:text-navy-900"
+              }`}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <section className="section pt-10">
+        <div className="container-x">
+          <ErrorNote>{error}</ErrorNote>
+
+          {tab === "Overview" && (
+            <OverviewTab
+              detail={detail}
+              states={states}
+              onClientSaved={(saved) => patchDetail("client", saved)}
+              onContactsChanged={(rows) => patchDetail("contacts", rows)}
+              upsert={upsert}
+            />
+          )}
+
+          {tab === "Proposals" && (
+            <ProposalsTab
+              detail={detail}
+              defaults={proposalDefaults}
+              aiEnabled={aiEnabled}
+              onChanged={(rows) => patchDetail("proposals", rows)}
+              onError={setError}
+              upsert={upsert}
+            />
+          )}
+
+          {tab === "Contracts" && (
+            <CollectionTab
+              spec={CONTRACT_SPEC}
+              clientId={client.id}
+              rows={detail.contracts as unknown as Row[]}
+              onChanged={(rows) => patchDetail("contracts", rows as unknown as ClientDetail["contracts"])}
+              head={["Contract", "Type", "Status", "Value", "Signed"]}
+              render={(row) => [
+                <span key="t" className="font-medium text-navy-900">{String(row.title)}</span>,
+                LABELS.contractType[row.type as keyof typeof LABELS.contractType],
+                <Badge key="s" tone={statusTone(String(row.status))}>
+                  {LABELS.contractStatus[row.status as keyof typeof LABELS.contractStatus]}
+                </Badge>,
+                fmtMoney(row.value_cents as number),
+                fmtDate(row.signed_at as string | null),
+              ]}
+              empty="No contracts yet. Add one when a proposal is accepted."
+            />
+          )}
+
+          {tab === "Holdings" && (
+            <HoldingsTab detail={detail} patchDetail={patchDetail} />
+          )}
+
+          {tab === "Financials" && (
+            <FinancialsTab
+              detail={detail}
+              onChanged={(rows) =>
+                patchDetail("transactions", rows as unknown as ClientDetail["transactions"])
+              }
+            />
+          )}
+
+          {tab === "Land search" && (
+            <LandSearchTab
+              client={client}
+              saved={detail.savedParcels}
+              onSavedChange={(rows: CrmSavedParcel[]) => patchDetail("savedParcels", rows)}
+            />
+          )}
+
+          {tab === "AI advisor" && <AdvisorTab client={client} aiEnabled={aiEnabled} />}
+        </div>
+      </section>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Overview                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function OverviewTab({
+  detail,
+  states,
+  onClientSaved,
+  onContactsChanged,
+  upsert,
+}: {
+  detail: ClientDetail;
+  states: StateOption[];
+  onClientSaved: (client: ClientDetail["client"]) => void;
+  onContactsChanged: (rows: ClientDetail["contacts"]) => void;
+  upsert: <T extends { id: string }>(rows: T[], row: T) => T[];
+}) {
+  const [editing, openEdit, closeEdit] = useDialog();
+  const [contactOpen, setContactOpen] = useState(false);
+  const [contact, setContact] = useState<Row | undefined>();
+  const client = detail.client;
+
+  return (
+    <div className="grid gap-8 lg:grid-cols-3">
+      <div className="space-y-8 lg:col-span-2">
+        <div className="card p-6">
+          <SectionHeading
+            title="Client"
+            action={
+              <button type="button" className="btn-outline px-4 py-2 text-sm" onClick={openEdit}>
+                Edit
+              </button>
+            }
+          />
+          <dl className="grid gap-5 sm:grid-cols-3">
+            <Detail label="Stage">
+              <Badge tone={statusTone(client.status)}>{LABELS.clientStatus[client.status]}</Badge>
+            </Detail>
+            <Detail label="Health">
+              <Badge tone={client.health === "green" ? "green" : client.health === "amber" ? "amber" : "red"}>
+                {LABELS.health[client.health]}
+              </Badge>
+            </Detail>
+            <Detail label="Source">{LABELS.source[client.source]}</Detail>
+            <Detail label="Filing entity">{LABELS.entityType[client.entity_type]}</Detail>
+            <Detail label="Email">{client.email ?? "—"}</Detail>
+            <Detail label="Phone">{client.phone ?? "—"}</Detail>
+            <Detail label="Location">
+              {[client.city, client.state].filter(Boolean).join(", ") || "—"}
+            </Detail>
+            <Detail label="Files in">{client.tax_state ?? "—"}</Detail>
+            <Detail label="Relationship owner">{client.owner_email ?? "—"}</Detail>
+          </dl>
+          {client.notes && (
+            <div className="mt-6 border-t border-paper-200 pt-4">
+              <p className="whitespace-pre-wrap text-sm text-navy-900/75">{client.notes}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="card p-6">
+          <SectionHeading
+            title="People"
+            count={detail.contacts.length}
+            action={
+              <button
+                type="button"
+                className="btn-outline px-4 py-2 text-sm"
+                onClick={() => {
+                  setContact(undefined);
+                  setContactOpen(true);
+                }}
+              >
+                Add contact
+              </button>
+            }
+          />
+          {detail.contacts.length === 0 ? (
+            <EmptyState>
+              No one on file. Add the principal, and their CPA — the CPA is who decides whether the
+              proposal survives.
+            </EmptyState>
+          ) : (
+            <Table head={["Name", "Role", "Email", "Phone"]}>
+              {detail.contacts.map((row) => (
+                <tr
+                  key={row.id}
+                  className="cursor-pointer transition hover:bg-paper-50"
+                  onClick={() => {
+                    setContact(row as unknown as Row);
+                    setContactOpen(true);
+                  }}
+                >
+                  <Td>
+                    <span className="font-medium text-navy-900">{row.name}</span>
+                    {row.title && <span className="mt-0.5 block text-xs text-navy-900/45">{row.title}</span>}
+                  </Td>
+                  <Td>{LABELS.contactRole[row.role]}</Td>
+                  <Td>{row.email ?? "—"}</Td>
+                  <Td>{row.phone ?? "—"}</Td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-6">
+        <div className="card p-6">
+          <h3 className="mb-4 text-base font-semibold text-navy-900">Tax profile</h3>
+          <dl className="space-y-4">
+            <Detail label="Deduction targeted">{fmtMoney(client.target_writeoff_cents)}</Detail>
+            <Detail label="Marginal rate">{fmtPct(client.marginal_rate_bps)}</Detail>
+            <Detail label="Estimated income">{fmtMoney(client.est_annual_income_cents)}</Detail>
+            <Detail label="Capital available">{fmtMoney(client.investment_capacity_cents)}</Detail>
+            <Detail label="CPA">
+              {client.cpa_name ?? "—"}
+              {client.cpa_email && (
+                <span className="block text-xs text-navy-900/50">{client.cpa_email}</span>
+              )}
+            </Detail>
+          </dl>
+        </div>
+
+        <div className="card p-6">
+          <h3 className="mb-4 text-base font-semibold text-navy-900">Land criteria</h3>
+          <dl className="space-y-4">
+            <Detail label="Where">
+              {[client.target_county, client.target_state].filter(Boolean).join(", ") || "—"}
+            </Detail>
+            <Detail label="Lot size">
+              {client.target_min_acres || client.target_max_acres
+                ? `${fmtAcres(client.target_min_acres)} – ${fmtAcres(client.target_max_acres)}`
+                : "—"}
+            </Detail>
+            <Detail label="Budget">{fmtMoney(client.target_max_price_cents)}</Detail>
+          </dl>
+        </div>
+
+        <CostPositionCard detail={detail} />
+
+        {detail.activity.length > 0 && (
+          <div className="card p-6">
+            <h3 className="mb-4 text-base font-semibold text-navy-900">Activity</h3>
+            <ul className="space-y-3">
+              {detail.activity.slice(0, 12).map((entry) => (
+                <li key={entry.id} className="text-sm">
+                  <p className="text-navy-900/85">{entry.summary}</p>
+                  <p className="text-xs text-navy-900/45">{fmtAgo(entry.created_at)}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <Dialog open={editing} onClose={closeEdit} title={`Edit ${client.name}`} wide>
+        <ClientForm
+          client={client}
+          states={states}
+          onCancel={closeEdit}
+          onSaved={(saved) => {
+            onClientSaved(saved);
+            closeEdit();
+          }}
+        />
+      </Dialog>
+
+      <RecordDialog
+        spec={CONTACT_SPEC}
+        open={contactOpen}
+        onClose={() => setContactOpen(false)}
+        row={contact}
+        fixed={{ client_id: client.id }}
+        onSaved={(row) =>
+          onContactsChanged(
+            upsert(detail.contacts, row as unknown as ClientDetail["contacts"][number]),
+          )
+        }
+        onDeleted={() =>
+          onContactsChanged(detail.contacts.filter((c) => c.id !== (contact?.id as string)))
+        }
+      />
+    </div>
+  );
+}
+
+/**
+ * What the client is in for, all in.
+ *
+ * Kept visibly separate from the Financials tab: this is what the assets cost,
+ * that is what cash has moved. Adding the two together would double-count every
+ * deal, so they never appear in the same total.
+ */
+function CostPositionCard({ detail }: { detail: ClientDetail }) {
+  const c = detail.cost;
+  if (c.property_count === 0 && c.unit_count === 0) return null;
+
+  const rows: [string, number, string?][] = [
+    ["Land", c.land_cents],
+    ["Closing costs", c.land_closing_cents],
+    ["Land improvements", c.land_improvements_cents],
+    ["Units", c.unit_cents],
+    ["Site work", c.unit_site_work_cents],
+    ["Soft costs", c.unit_soft_costs_cents],
+  ];
+
+  return (
+    <div className="card p-6">
+      <h3 className="text-base font-semibold text-navy-900">Cost position</h3>
+      <p className="mb-4 mt-1 text-xs text-navy-900/50">
+        What the assets cost. Separate from the Financials tab, which tracks cash — the two
+        are never added together.
+      </p>
+
+      <dl className="space-y-2 text-sm">
+        {rows
+          .filter(([, value]) => value > 0)
+          .map(([label, value]) => (
+            <div key={label} className="flex justify-between gap-3">
+              <dt className="text-navy-900/60">{label}</dt>
+              <dd className="text-navy-900/85">{fmtMoney(value)}</dd>
+            </div>
+          ))}
+        <div className="flex justify-between gap-3 border-t border-paper-200 pt-2">
+          <dt className="font-semibold text-navy-900">All-in</dt>
+          <dd className="font-semibold text-navy-900">{fmtMoney(c.total_capital_cents)}</dd>
+        </div>
+      </dl>
+
+      <dl className="mt-5 space-y-2 border-t border-paper-200 pt-4 text-sm">
+        <div className="flex justify-between gap-3">
+          <dt className="text-navy-900/60">Depreciable basis</dt>
+          <dd className="text-navy-900/85">{fmtMoney(c.depreciable_basis_cents)}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-navy-900/60">
+            In service
+            <span className="ml-1 text-xs text-navy-900/40">
+              ({c.in_service_count}/{c.unit_count} units)
+            </span>
+          </dt>
+          <dd className="text-navy-900/85">{fmtMoney(c.in_service_basis_cents)}</dd>
+        </div>
+        <div className="flex justify-between gap-3">
+          <dt className="text-navy-900/60">Land basis (not depreciable)</dt>
+          <dd className="text-navy-900/85">{fmtMoney(c.land_basis_cents)}</dd>
+        </div>
+        {c.bonus_claimed_cents > 0 && (
+          <div className="flex justify-between gap-3">
+            <dt className="text-navy-900/60">Bonus claimed</dt>
+            <dd className="text-navy-900/85">{fmtMoney(c.bonus_claimed_cents)}</dd>
+          </div>
+        )}
+        {c.annual_property_tax_cents > 0 && (
+          <div className="flex justify-between gap-3">
+            <dt className="text-navy-900/60">Property tax / yr</dt>
+            <dd className="text-navy-900/85">{fmtMoney(c.annual_property_tax_cents)}</dd>
+          </div>
+        )}
+      </dl>
+
+      {/* The two states that silently shrink a deduction, called out where the
+          number is, not buried in a tab. */}
+      {c.in_service_basis_cents < c.depreciable_basis_cents && (
+        <p className="mt-4 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
+          {fmtMoney(c.depreciable_basis_cents - c.in_service_basis_cents)} of basis is not yet
+          placed in service and is deducting nothing.
+        </p>
+      )}
+      {c.personal_use_count > 0 && (
+        <p className="mt-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
+          {c.personal_use_count} unit{c.personal_use_count === 1 ? " is" : "s are"} recorded as
+          personal use and excluded from the depreciable basis.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Proposals                                                                   */
+/* -------------------------------------------------------------------------- */
+
+function ProposalsTab({
+  detail,
+  defaults,
+  aiEnabled,
+  onChanged,
+  onError,
+  upsert,
+}: {
+  detail: ClientDetail;
+  defaults: ProposalDefaults;
+  aiEnabled: boolean;
+  onChanged: (rows: CrmProposal[]) => void;
+  onError: (message: string) => void;
+  upsert: <T extends { id: string }>(rows: T[], row: T) => T[];
+}) {
+  const [open, openGenerator, closeGenerator] = useDialog();
+
+  async function setStatus(proposal: CrmProposal, status: string) {
+    try {
+      const saved = await apiPatch<CrmProposal>(`/api/crm/proposals/${proposal.id}`, { status });
+      onChanged(upsert(detail.proposals, saved));
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Could not update the proposal.");
+    }
+  }
+
+  return (
+    <>
+      <SectionHeading
+        title="Proposals"
+        count={detail.proposals.length}
+        action={
+          <button
+            type="button"
+            className="btn-gold"
+            onClick={openGenerator}
+            disabled={!aiEnabled}
+            title={aiEnabled ? undefined : "OPENAI_API_KEY is not set on the web service."}
+          >
+            Draft a proposal
+          </button>
+        }
+      />
+
+      {detail.proposals.length === 0 ? (
+        <EmptyState>
+          No proposals yet. Drafting one computes the investment, deduction and payback from the
+          client&apos;s tax profile, then writes the document around those figures.
+        </EmptyState>
+      ) : (
+        <div className="card">
+          <Table
+            head={["Proposal", "Status", "Investment", "First-year deduction", "Tax benefit", "Created"]}
+          >
+            {detail.proposals.map((row) => (
+              <tr key={row.id} className="transition hover:bg-paper-50">
+                <Td>
+                  <Link
+                    href={`/crm/proposals/${row.id}`}
+                    className="font-medium text-navy-900 hover:text-gold-600"
+                  >
+                    {row.title}
+                  </Link>
+                  <span className="mt-0.5 block text-xs text-navy-900/45">
+                    {row.unit_count} unit{row.unit_count === 1 ? "" : "s"}
+                  </span>
+                </Td>
+                <Td>
+                  <select
+                    value={row.status}
+                    onChange={(e) => void setStatus(row, e.target.value)}
+                    aria-label="Proposal status"
+                    className="field w-auto py-1 text-xs"
+                  >
+                    {PROPOSAL_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {LABELS.proposalStatus[s]}
+                      </option>
+                    ))}
+                  </select>
+                </Td>
+                <Td className="whitespace-nowrap">{fmtMoney(row.total_investment_cents)}</Td>
+                <Td className="whitespace-nowrap">{fmtMoney(row.year_one_deduction_cents)}</Td>
+                <Td className="whitespace-nowrap font-medium text-navy-900">
+                  {fmtMoney(row.year_one_tax_savings_cents)}
+                </Td>
+                <Td className="whitespace-nowrap text-navy-900/55">{fmtAgo(row.created_at)}</Td>
+              </tr>
+            ))}
+          </Table>
+        </div>
+      )}
+
+      <ProposalGenerator
+        client={detail.client}
+        defaults={defaults}
+        open={open}
+        onClose={closeGenerator}
+        onCreated={(proposal) => onChanged([proposal, ...detail.proposals])}
+      />
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Generic collection tab (contracts, land, units, transactions)               */
+/* -------------------------------------------------------------------------- */
+
+function CollectionTab({
+  spec,
+  clientId,
+  rows,
+  onChanged,
+  head,
+  render,
+  empty,
+  fixed,
+  choices,
+  title,
+}: {
+  spec: RecordSpec;
+  clientId: string;
+  rows: Row[];
+  onChanged: (rows: Row[]) => void;
+  head: string[];
+  render: (row: Row) => React.ReactNode[];
+  empty: string;
+  fixed?: Record<string, string>;
+  choices?: Choices;
+  title?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Row | undefined>();
+
+  return (
+    <>
+      <SectionHeading
+        title={title ?? `${spec.title}s`}
+        count={rows.length}
+        action={
+          <button
+            type="button"
+            className="btn-outline px-4 py-2 text-sm"
+            onClick={() => {
+              setEditing(undefined);
+              setOpen(true);
+            }}
+          >
+            Add {spec.title.toLowerCase()}
+          </button>
+        }
+      />
+
+      {rows.length === 0 ? (
+        <EmptyState>{empty}</EmptyState>
+      ) : (
+        <div className="card">
+          <Table head={head}>
+            {rows.map((row) => (
+              <tr
+                key={String(row.id)}
+                className="cursor-pointer transition hover:bg-paper-50"
+                onClick={() => {
+                  setEditing(row);
+                  setOpen(true);
+                }}
+              >
+                {render(row).map((cell, i) => (
+                  <Td key={i} className={i === 0 ? "" : "whitespace-nowrap"}>
+                    {cell}
+                  </Td>
+                ))}
+              </tr>
+            ))}
+          </Table>
+        </div>
+      )}
+
+      <RecordDialog
+        spec={spec}
+        open={open}
+        onClose={() => setOpen(false)}
+        row={editing}
+        fixed={{ client_id: clientId, ...fixed }}
+        choices={choices}
+        onSaved={(saved) =>
+          onChanged(
+            rows.some((r) => r.id === saved.id)
+              ? rows.map((r) => (r.id === saved.id ? saved : r))
+              : [saved, ...rows],
+          )
+        }
+        onDeleted={() => onChanged(rows.filter((r) => r.id !== editing?.id))}
+      />
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Holdings                                                                    */
+/* -------------------------------------------------------------------------- */
+
+function HoldingsTab({
+  detail,
+  patchDetail,
+}: {
+  detail: ClientDetail;
+  patchDetail: <K extends keyof ClientDetail>(key: K, value: ClientDetail[K]) => void;
+}) {
+  const propertyById = new Map(detail.properties.map((p) => [p.id, p]));
+  const landChoices = {
+    properties: detail.properties.map((p) => ({ value: p.id, label: p.label })),
+  };
+
+  return (
+    <div className="space-y-12">
+      <CollectionTab
+        spec={PROPERTY_SPEC}
+        title="Land"
+        clientId={detail.client.id}
+        rows={detail.properties as unknown as Row[]}
+        onChanged={(rows) => patchDetail("properties", rows as unknown as ClientDetail["properties"])}
+        head={["Parcel", "Status", "Where", "Lot size", "Land price", "All-in", "Purchased"]}
+        render={(row) => [
+          <span key="l" className="font-medium text-navy-900">{String(row.label)}</span>,
+          <Badge key="s" tone={statusTone(String(row.status))}>
+            {LABELS.propertyStatus[row.status as keyof typeof LABELS.propertyStatus]}
+          </Badge>,
+          <span key="w" className="text-navy-900/70">
+            {[row.address, row.city, row.state].filter(Boolean).join(", ") || "—"}
+          </span>,
+          fmtAcres(row.acres as number | null),
+          fmtMoney(row.purchase_price_cents as number | null),
+          <span key="a" className="font-medium text-navy-900">
+            {fmtMoney(
+              ((row.purchase_price_cents as number) ?? 0) +
+                ((row.closing_costs_cents as number) ?? 0) +
+                ((row.improvements_cents as number) ?? 0),
+            )}
+          </span>,
+          fmtDate(row.purchase_date as string | null),
+        ]}
+        empty="No land recorded. Shortlist parcels on the Land search tab and promote one here when it goes under contract."
+      />
+
+      <CollectionTab
+        spec={UNIT_SPEC}
+        title="Tiny homes"
+        clientId={detail.client.id}
+        rows={detail.units as unknown as Row[]}
+        onChanged={(rows) => patchDetail("units", rows as unknown as ClientDetail["units"])}
+        choices={landChoices}
+        head={["Unit", "Status", "Use", "Sited on", "Unit cost", "All-in", "Placed in service", "Rent"]}
+        render={(row) => [
+          <span key="l" className="font-medium text-navy-900">{String(row.label)}</span>,
+          <Badge key="s" tone={statusTone(String(row.status))}>
+            {LABELS.unitStatus[row.status as keyof typeof LABELS.unitStatus]}
+          </Badge>,
+          LABELS.unitUse[row.unit_use as keyof typeof LABELS.unitUse],
+          row.property_id ? (propertyById.get(String(row.property_id))?.label ?? "—") : "—",
+          fmtMoney(row.purchase_price_cents as number | null),
+          // Unit + site work + soft costs — the number that actually enters the
+          // depreciable basis, which the unit price alone understates.
+          <span key="a" className="font-medium text-navy-900">
+            {fmtMoney(
+              ((row.purchase_price_cents as number) ?? 0) +
+                ((row.site_work_cents as number) ?? 0) +
+                ((row.soft_costs_cents as number) ?? 0),
+            )}
+          </span>,
+          row.placed_in_service_on ? (
+            fmtDate(row.placed_in_service_on as string)
+          ) : (
+            <span key="p" className="text-amber-700">Not yet</span>
+          ),
+          fmtMoney(row.monthly_rent_cents as number | null),
+        ]}
+        empty="No units yet. A unit only produces a deduction once it is placed in service, so record that date when it happens."
+      />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Financials                                                                  */
+/* -------------------------------------------------------------------------- */
+
+function FinancialsTab({
+  detail,
+  onChanged,
+}: {
+  detail: ClientDetail;
+  onChanged: (rows: Row[]) => void;
+}) {
+  const { finance } = detail;
+  return (
+    <div className="space-y-10">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="Received" value={fmtMoney(finance.income_cents)} hint="Paid income" />
+        <StatTile label="Spent" value={fmtMoney(finance.expense_cents)} hint="Paid expenses" />
+        <StatTile label="Net" value={fmtMoney(finance.net_cents)} tone="gold" />
+        <StatTile
+          label="Outstanding"
+          value={fmtMoney(finance.outstanding_cents)}
+          hint="Invoiced, not collected"
+        />
+      </div>
+
+      <CollectionTab
+        spec={TRANSACTION_SPEC}
+        title="Transactions"
+        clientId={detail.client.id}
+        rows={detail.transactions as unknown as Row[]}
+        onChanged={onChanged}
+        choices={{
+          properties: detail.properties.map((p) => ({ value: p.id, label: p.label })),
+          units: detail.units.map((u) => ({ value: u.id, label: u.label })),
+        }}
+        head={["Description", "Category", "Direction", "Amount", "Date", "Status"]}
+        render={(row) => [
+          <span key="d" className="font-medium text-navy-900">{String(row.description)}</span>,
+          LABELS.txCategory[row.category as keyof typeof LABELS.txCategory],
+          LABELS.txKind[row.kind as keyof typeof LABELS.txKind],
+          <span key="a" className={row.kind === "expense" ? "text-red-700" : "text-emerald-700"}>
+            {row.kind === "expense" ? "−" : "+"}
+            {fmtMoney(row.amount_cents as number)}
+          </span>,
+          fmtDate(row.occurred_on as string),
+          <Badge key="s" tone={statusTone(String(row.status))}>
+            {LABELS.txStatus[row.status as keyof typeof LABELS.txStatus]}
+          </Badge>,
+        ]}
+        empty="No transactions recorded for this client yet."
+      />
+    </div>
+  );
+}

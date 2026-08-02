@@ -1,0 +1,466 @@
+// CRM schema, applied lazily and idempotently against the same Postgres that
+// holds the parcel data (`db` in docker-compose).
+//
+// There is no migration tool in `web/` — the app owns its own tables and brings
+// them up to date on first use. The definitions below are the single source of
+// truth and are applied three ways, all of which are safe to re-run:
+//
+//   1. CREATE TABLE IF NOT EXISTS   — new installs
+//   2. ADD COLUMN IF NOT EXISTS     — a column added here later appears on an
+//                                     existing install without a manual step.
+//                                     NEW COLUMNS MUST BE NULLABLE OR HAVE A
+//                                     DEFAULT, or the ALTER fails on a table
+//                                     that already has rows.
+//   3. DROP + ADD named CHECK       — the enum CHECKs are generated from the
+//                                     arrays in ./types, so adding a value
+//                                     there widens the constraint on the next
+//                                     boot. This is why the two can't drift.
+//
+// Everything is prefixed `crm_` so it can never collide with `parcels` /
+// `auctions`, which are owned by the ETL and dropped/recreated on re-import.
+
+import { getPool } from "@/lib/db";
+import {
+  CLIENT_STATUSES,
+  CONTACT_ROLES,
+  CONTRACT_STATUSES,
+  CONTRACT_TYPES,
+  ENTITY_TYPES,
+  HEALTHS,
+  LEAD_SOURCES,
+  PROPERTY_STATUSES,
+  PROPOSAL_STATUSES,
+  SAVED_PARCEL_STATUSES,
+  TX_CATEGORIES,
+  TX_KINDS,
+  TX_STATUSES,
+  UNIT_STATUSES,
+  UNIT_USES,
+} from "./types";
+
+interface TableDef {
+  name: string;
+  /** [column, type + inline constraints]. Order is the CREATE TABLE order. */
+  columns: [string, string][];
+  /** Generated from ./types so SQL and TypeScript cannot disagree. */
+  checks?: { column: string; values: readonly string[] }[];
+  indexes?: string[];
+}
+
+/**
+ * Default for the TEXT timestamp columns.
+ *
+ * Every write supplies its own `nowIso()` value, so this only fires for a row
+ * inserted by hand. It still has to match that format exactly: these columns are
+ * sorted and compared as TEXT, and Postgres's own `::text` cast renders a space
+ * between the date and the time, which sorts *before* the "T" in an ISO string
+ * and would silently misorder the activity feed.
+ */
+const TS_DEFAULT =
+  `TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
+/** Columns every table carries. */
+const TIMESTAMPS: [string, string][] = [
+  ["created_at", TS_DEFAULT],
+  ["updated_at", TS_DEFAULT],
+];
+
+const TABLES: TableDef[] = [
+  // ---------------------------------------------------------------------------
+  // Portal tables. Not CRM records, but they live here because this is the app's
+  // only auto-migration mechanism, and because both replaced files on a Docker
+  // volume — which a Workers deployment cannot have, and which nothing was
+  // backing up.
+  // ---------------------------------------------------------------------------
+  {
+    name: "portal_users",
+    columns: [
+      // Email is the identity, so it is the key. Stored lower-cased.
+      ["email", "TEXT PRIMARY KEY"],
+      ["name", "TEXT"],
+      // "<scheme>:<salt>:<hash>" — see lib/portalUsers.ts.
+      ["password_hash", "TEXT NOT NULL"],
+      ["last_login_at", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+  },
+  {
+    name: "contact_submissions",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["name", "TEXT NOT NULL"],
+      ["email", "TEXT NOT NULL"],
+      ["company", "TEXT"],
+      ["phone", "TEXT"],
+      ["interest", "TEXT"],
+      ["message", "TEXT NOT NULL"],
+      ["created_at", TS_DEFAULT],
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS contact_submissions_created_idx ON contact_submissions (created_at DESC)",
+    ],
+  },
+  {
+    name: "crm_clients",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["name", "TEXT NOT NULL"],
+      ["legal_name", "TEXT"],
+      ["status", "TEXT NOT NULL DEFAULT 'prospect'"],
+      ["health", "TEXT NOT NULL DEFAULT 'green'"],
+      ["source", "TEXT NOT NULL DEFAULT 'referral'"],
+      ["entity_type", "TEXT NOT NULL DEFAULT 'individual'"],
+      ["email", "TEXT"],
+      ["phone", "TEXT"],
+      ["city", "TEXT"],
+      ["state", "TEXT"],
+      ["tax_state", "TEXT"],
+      ["marginal_rate_bps", "INTEGER"],
+      ["est_annual_income_cents", "BIGINT"],
+      ["target_writeoff_cents", "BIGINT"],
+      ["investment_capacity_cents", "BIGINT"],
+      ["cpa_name", "TEXT"],
+      ["cpa_email", "TEXT"],
+      ["target_state", "TEXT"],
+      ["target_county", "TEXT"],
+      ["target_min_acres", "DOUBLE PRECISION"],
+      ["target_max_acres", "DOUBLE PRECISION"],
+      ["target_max_price_cents", "BIGINT"],
+      ["owner_email", "TEXT"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [
+      { column: "status", values: CLIENT_STATUSES },
+      { column: "health", values: HEALTHS },
+      { column: "source", values: LEAD_SOURCES },
+      { column: "entity_type", values: ENTITY_TYPES },
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_clients_status_idx ON crm_clients (status)",
+      "CREATE INDEX IF NOT EXISTS crm_clients_name_idx ON crm_clients (lower(name))",
+    ],
+  },
+  {
+    name: "crm_contacts",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["client_id", "TEXT NOT NULL REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      ["name", "TEXT NOT NULL"],
+      ["role", "TEXT NOT NULL DEFAULT 'principal'"],
+      ["title", "TEXT"],
+      ["email", "TEXT"],
+      ["phone", "TEXT"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [{ column: "role", values: CONTACT_ROLES }],
+    indexes: ["CREATE INDEX IF NOT EXISTS crm_contacts_client_idx ON crm_contacts (client_id)"],
+  },
+  {
+    name: "crm_proposals",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["client_id", "TEXT NOT NULL REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      ["title", "TEXT NOT NULL"],
+      ["status", "TEXT NOT NULL DEFAULT 'draft'"],
+      // Frozen inputs.
+      ["unit_count", "INTEGER NOT NULL DEFAULT 1"],
+      ["unit_cost_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["site_work_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["soft_costs_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["land_cost_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["marginal_rate_bps", "INTEGER NOT NULL DEFAULT 3700"],
+      ["bonus_rate_bps", "INTEGER NOT NULL DEFAULT 10000"],
+      // Fractional on purpose: residential rental real property is 27.5 years.
+      ["useful_life_years", "DOUBLE PRECISION NOT NULL DEFAULT 5"],
+      ["monthly_rent_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["occupancy_bps", "INTEGER NOT NULL DEFAULT 8500"],
+      ["opex_bps", "INTEGER NOT NULL DEFAULT 3500"],
+      // Frozen outputs.
+      ["total_investment_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["depreciable_basis_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["year_one_deduction_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["year_one_tax_savings_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["net_year_one_outlay_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["annual_noi_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["cash_on_cash_bps", "INTEGER"],
+      ["payback_years", "DOUBLE PRECISION"],
+      ["body_md", "TEXT NOT NULL DEFAULT ''"],
+      ["valid_until", "TEXT"],
+      ["created_by", "TEXT"],
+      ["sent_at", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [{ column: "status", values: PROPOSAL_STATUSES }],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_proposals_client_idx ON crm_proposals (client_id, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS crm_proposals_status_idx ON crm_proposals (status)",
+    ],
+  },
+  {
+    name: "crm_contracts",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["client_id", "TEXT NOT NULL REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      ["proposal_id", "TEXT REFERENCES crm_proposals(id) ON DELETE SET NULL"],
+      ["title", "TEXT NOT NULL"],
+      ["type", "TEXT NOT NULL DEFAULT 'unit_purchase'"],
+      ["status", "TEXT NOT NULL DEFAULT 'draft'"],
+      ["value_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["counterparty", "TEXT"],
+      ["document_url", "TEXT"],
+      ["effective_date", "TEXT"],
+      ["end_date", "TEXT"],
+      ["signed_at", "TEXT"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [
+      { column: "type", values: CONTRACT_TYPES },
+      { column: "status", values: CONTRACT_STATUSES },
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_contracts_client_idx ON crm_contracts (client_id, created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS crm_contracts_status_idx ON crm_contracts (status)",
+    ],
+  },
+  {
+    name: "crm_properties",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["client_id", "TEXT NOT NULL REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      ["label", "TEXT NOT NULL"],
+      ["status", "TEXT NOT NULL DEFAULT 'prospect'"],
+      ["parcel_key", "TEXT"],
+      ["address", "TEXT"],
+      ["city", "TEXT"],
+      ["postal_code", "TEXT"],
+      ["county", "TEXT"],
+      ["state", "TEXT"],
+      ["acres", "DOUBLE PRECISION"],
+      ["purchase_price_cents", "BIGINT"],
+      // Adds to land basis (not depreciable).
+      ["closing_costs_cents", "BIGINT"],
+      // Land-level site prep: access, well, septic, clearing. Depreciable.
+      ["improvements_cents", "BIGINT"],
+      ["purchase_date", "TEXT"],
+      ["assessed_value_cents", "BIGINT"],
+      ["annual_property_tax_cents", "BIGINT"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [{ column: "status", values: PROPERTY_STATUSES }],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_properties_client_idx ON crm_properties (client_id)",
+      "CREATE INDEX IF NOT EXISTS crm_properties_parcel_idx ON crm_properties (parcel_key)",
+    ],
+  },
+  {
+    name: "crm_units",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["client_id", "TEXT NOT NULL REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      ["property_id", "TEXT REFERENCES crm_properties(id) ON DELETE SET NULL"],
+      ["label", "TEXT NOT NULL"],
+      ["status", "TEXT NOT NULL DEFAULT 'planned'"],
+      ["unit_use", "TEXT NOT NULL DEFAULT 'long_term_rental'"],
+      ["manufacturer", "TEXT"],
+      ["model", "TEXT"],
+      ["serial_number", "TEXT"],
+      ["sqft", "INTEGER"],
+      ["bedrooms", "INTEGER"],
+      ["purchase_price_cents", "BIGINT"],
+      ["site_work_cents", "BIGINT"],
+      ["soft_costs_cents", "BIGINT"],
+      ["delivered_on", "TEXT"],
+      ["placed_in_service_on", "TEXT"],
+      ["useful_life_years", "DOUBLE PRECISION"],
+      ["bonus_claimed_cents", "BIGINT"],
+      ["sold_on", "TEXT"],
+      ["sale_price_cents", "BIGINT"],
+      ["monthly_rent_cents", "BIGINT"],
+      ["management_company", "TEXT"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [
+      { column: "status", values: UNIT_STATUSES },
+      { column: "unit_use", values: UNIT_USES },
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_units_client_idx ON crm_units (client_id)",
+      "CREATE INDEX IF NOT EXISTS crm_units_property_idx ON crm_units (property_id)",
+    ],
+  },
+  {
+    name: "crm_transactions",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["client_id", "TEXT REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      ["property_id", "TEXT REFERENCES crm_properties(id) ON DELETE SET NULL"],
+      ["unit_id", "TEXT REFERENCES crm_units(id) ON DELETE SET NULL"],
+      ["kind", "TEXT NOT NULL DEFAULT 'income'"],
+      ["category", "TEXT NOT NULL DEFAULT 'other'"],
+      ["description", "TEXT NOT NULL"],
+      ["amount_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["occurred_on", "TEXT NOT NULL"],
+      ["status", "TEXT NOT NULL DEFAULT 'paid'"],
+      ["invoice_number", "TEXT"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [
+      { column: "kind", values: TX_KINDS },
+      { column: "category", values: TX_CATEGORIES },
+      { column: "status", values: TX_STATUSES },
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_tx_client_idx ON crm_transactions (client_id, occurred_on DESC)",
+      "CREATE INDEX IF NOT EXISTS crm_tx_occurred_idx ON crm_transactions (occurred_on DESC)",
+      "CREATE INDEX IF NOT EXISTS crm_tx_kind_idx ON crm_transactions (kind, occurred_on DESC)",
+    ],
+  },
+  {
+    name: "crm_saved_parcels",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["client_id", "TEXT NOT NULL REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      ["parcel_key", "TEXT NOT NULL"],
+      ["status", "TEXT NOT NULL DEFAULT 'shortlisted'"],
+      ["one_line", "TEXT"],
+      ["owner_name", "TEXT"],
+      ["state", "TEXT"],
+      ["county", "TEXT"],
+      ["acres", "DOUBLE PRECISION"],
+      ["assessed_value_cents", "BIGINT"],
+      ["land_value_cents", "BIGINT"],
+      ["fit_json", "TEXT"],
+      ["notes", "TEXT"],
+      ["saved_by", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [{ column: "status", values: SAVED_PARCEL_STATUSES }],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_saved_parcels_client_idx ON crm_saved_parcels (client_id, created_at DESC)",
+      // Saving the same parcel twice for one client is a duplicate, not a second
+      // candidate — the save endpoint relies on this for its upsert.
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_saved_parcels_uniq ON crm_saved_parcels (client_id, parcel_key)",
+    ],
+  },
+  {
+    name: "crm_activity",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["entity_type", "TEXT NOT NULL"],
+      ["entity_id", "TEXT"],
+      // No FK: activity outlives the record it describes, and a cascade delete
+      // would erase the audit trail exactly when it matters most.
+      ["client_id", "TEXT"],
+      ["verb", "TEXT NOT NULL"],
+      ["summary", "TEXT NOT NULL"],
+      ["actor_email", "TEXT"],
+      ["created_at", TS_DEFAULT],
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_activity_created_idx ON crm_activity (created_at DESC)",
+      "CREATE INDEX IF NOT EXISTS crm_activity_client_idx ON crm_activity (client_id, created_at DESC)",
+    ],
+  },
+  {
+    name: "crm_conversations",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["scope_type", "TEXT NOT NULL DEFAULT 'global'"],
+      ["scope_id", "TEXT"],
+      ["title", "TEXT NOT NULL DEFAULT 'New conversation'"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_conversations_scope_idx ON crm_conversations (scope_type, scope_id, updated_at DESC)",
+    ],
+  },
+  {
+    name: "crm_messages",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["conversation_id", "TEXT NOT NULL REFERENCES crm_conversations(id) ON DELETE CASCADE"],
+      ["role", "TEXT NOT NULL"],
+      ["content", "TEXT NOT NULL"],
+      ["created_at", TS_DEFAULT],
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_messages_conversation_idx ON crm_messages (conversation_id, created_at)",
+    ],
+  },
+];
+
+/** `CHECK (col IN ('a','b'))` from a TypeScript enum array. */
+function checkClause(column: string, values: readonly string[]): string {
+  // Values are compile-time literals from ./types, never user input, but escape
+  // quotes anyway so a future value with an apostrophe can't break the DDL.
+  const list = values.map((v) => `'${v.replace(/'/g, "''")}'`).join(", ");
+  return `CHECK (${column} IN (${list}))`;
+}
+
+function statementsFor(table: TableDef): string[] {
+  const sql: string[] = [];
+
+  const cols = table.columns.map(([name, type]) => `  ${name} ${type}`).join(",\n");
+  sql.push(`CREATE TABLE IF NOT EXISTS ${table.name} (\n${cols}\n)`);
+
+  // Bring an older install forward. A PRIMARY KEY can't be added this way, so
+  // skip the key column — it is present on every install by construction.
+  for (const [name, type] of table.columns) {
+    if (/PRIMARY KEY/i.test(type)) continue;
+    sql.push(`ALTER TABLE ${table.name} ADD COLUMN IF NOT EXISTS ${name} ${type}`);
+  }
+
+  // Re-derive every enum constraint from ./types on each boot, so widening an
+  // enum there is all that's needed to widen it here.
+  for (const { column, values } of table.checks ?? []) {
+    const name = `${table.name}_${column}_chk`;
+    sql.push(`ALTER TABLE ${table.name} DROP CONSTRAINT IF EXISTS ${name}`);
+    sql.push(`ALTER TABLE ${table.name} ADD CONSTRAINT ${name} ${checkClause(column, values)}`);
+  }
+
+  sql.push(...(table.indexes ?? []));
+  return sql;
+}
+
+let ready: Promise<void> | null = null;
+
+/**
+ * Create/refresh the CRM tables. Cheap and idempotent, but only ever runs once
+ * per process — the promise is memoised, so concurrent first requests share a
+ * single migration rather than racing each other through the same DDL.
+ *
+ * A failure clears the memo so the next request retries: caching a rejection
+ * would leave the CRM permanently broken after one transient DB blip at boot.
+ */
+export function ensureAppSchema(): Promise<void> {
+  if (!ready) {
+    ready = (async () => {
+      const pool = getPool();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        for (const table of TABLES) {
+          for (const statement of statementsFor(table)) {
+            await client.query(statement);
+          }
+        }
+        await client.query("COMMIT");
+      } catch (err) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw err;
+      } finally {
+        client.release();
+      }
+    })().catch((err) => {
+      ready = null;
+      throw err;
+    });
+  }
+  return ready;
+}

@@ -1,0 +1,218 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  BTB Holdings CRM - core network and database.
+  Split from the app stack on purpose: Aurora takes ~10 minutes to create, and a
+  later failure in the app stack should not roll the database back out with it.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: btb-crm
+  DBName:
+    Type: String
+    Default: btbcrm
+  DBMasterUsername:
+    Type: String
+    Default: btbadmin
+  MinCapacity:
+    Type: Number
+    Default: 0.5
+    Description: >-
+      Aurora Serverless v2 floor in ACUs. 0 enables scale-to-zero and is cheaper
+      at idle, but a resume costs ~15s on the first request, which on this app
+      looks exactly like a dead link. 0.5 keeps it warm.
+  MaxCapacity:
+    Type: Number
+    Default: 4
+
+Resources:
+  # ---------------------------------------------------------------- network --
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-vpc" }]
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-igw" }]
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public subnets carry the ALB and the app instance. There is deliberately no
+  # NAT Gateway: it would cost more per month than the instance itself, and the
+  # instance reaches the internet directly from a public subnet while staying
+  # unreachable inbound except from the ALB security group.
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: us-east-1a
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-public-a" }]
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.2.0/24
+      AvailabilityZone: us-east-1b
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-public-b" }]
+
+  # Aurora only. No route to the internet in either direction.
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.11.0/24
+      AvailabilityZone: us-east-1a
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-private-a" }]
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.20.12.0/24
+      AvailabilityZone: us-east-1b
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-private-b" }]
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-public-rt" }]
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicSubnetA, RouteTableId: !Ref PublicRouteTable }
+
+  PublicSubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicSubnetB, RouteTableId: !Ref PublicRouteTable }
+
+  # --------------------------------------------------------------- security --
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public HTTPS/HTTP to the load balancer
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: HTTPS }
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: HTTP redirect to HTTPS }
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-alb-sg" }]
+
+  # No SSH rule anywhere: shell access is via SSM Session Manager, so port 22 is
+  # never open to the internet and there is no key pair to lose.
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: App instance - only the ALB may reach it
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref AlbSecurityGroup
+          Description: Next.js from the ALB only
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-app-sg" }]
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Aurora - only the app instance may reach it
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref AppSecurityGroup
+          Description: Postgres from the app only
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-db-sg" }]
+
+  # --------------------------------------------------------------- database --
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub "${ProjectName} Aurora subnets (private)"
+      SubnetIds: [!Ref PrivateSubnetA, !Ref PrivateSubnetB]
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-db-subnets" }]
+
+  DbCluster:
+    Type: AWS::RDS::DBCluster
+    # Retain on stack delete: the CRM holds client tax profiles and contracts.
+    # Losing them to a `cloudformation delete-stack` typo is not an acceptable
+    # failure mode. Delete the cluster by hand, deliberately, after taking a dump.
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      Engine: aurora-postgresql
+      EngineVersion: "17.10"
+      DatabaseName: !Ref DBName
+      MasterUsername: !Ref DBMasterUsername
+      # AWS generates and rotates the password into Secrets Manager. It is never
+      # typed, logged, or placed in a template parameter.
+      ManageMasterUserPassword: true
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VpcSecurityGroupIds: [!Ref DbSecurityGroup]
+      StorageEncrypted: true
+      BackupRetentionPeriod: 7
+      PreferredBackupWindow: "07:00-08:00"
+      PreferredMaintenanceWindow: "sun:08:30-sun:09:30"
+      EnableCloudwatchLogsExports: [postgresql]
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: !Ref MinCapacity
+        MaxCapacity: !Ref MaxCapacity
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-aurora" }]
+
+  DbWriterInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref DbCluster
+      DBInstanceClass: db.serverless
+      Engine: aurora-postgresql
+      PubliclyAccessible: false
+      Tags: [{ Key: Name, Value: !Sub "${ProjectName}-aurora-writer" }]
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub "${ProjectName}-vpc-id" }
+  PublicSubnetA:
+    Value: !Ref PublicSubnetA
+    Export: { Name: !Sub "${ProjectName}-public-a" }
+  PublicSubnetB:
+    Value: !Ref PublicSubnetB
+    Export: { Name: !Sub "${ProjectName}-public-b" }
+  AlbSecurityGroupId:
+    Value: !Ref AlbSecurityGroup
+    Export: { Name: !Sub "${ProjectName}-alb-sg" }
+  AppSecurityGroupId:
+    Value: !Ref AppSecurityGroup
+    Export: { Name: !Sub "${ProjectName}-app-sg" }
+  DbEndpoint:
+    Value: !GetAtt DbCluster.Endpoint.Address
+    Export: { Name: !Sub "${ProjectName}-db-endpoint" }
+  DbName:
+    Value: !Ref DBName
+    Export: { Name: !Sub "${ProjectName}-db-name" }
+  DbSecretArn:
+    Description: Secrets Manager secret holding the master credentials
+    Value: !GetAtt DbCluster.MasterUserSecret.SecretArn
+    Export: { Name: !Sub "${ProjectName}-db-secret" }
