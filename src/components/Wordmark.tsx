@@ -1,15 +1,23 @@
 import Link from "next/link";
 import { site } from "@/lib/site";
-import { ShieldMark } from "@/components/Logo";
+import { BtbMark } from "@/components/Logo";
 
 /**
- * The shield lockup: mark plus typeset name.
+ * The full lockup: mark, name, and the descriptor under it.
  *
- * The mark is drawn inline rather than loaded as an <Image> so it can be
- * inverted for the navy login screen and the light print stylesheet from one
- * source — see the `tone` prop. `aria-label` on the link already names the
- * business, so the mark itself stays decorative and screen readers hear the
- * name once rather than twice.
+ * Follows `logo/btb-logo-primary-horizontal.png` — bold sans rather than the
+ * serif this used to set the name in, and the descriptor rather than the gold
+ * "CRM" chip that used to sit alongside. The login screen already says what it
+ * is twice over ("Client Sign In", "Secure access"), so the chip was spending
+ * the one line of brand real estate on the least interesting fact.
+ *
+ * The mark is drawn inline rather than loaded as an <Image> so the navy login
+ * screen gets the reversed treatment from the same source — see `tone`.
+ * `aria-label` on the link already names the business, so the mark stays
+ * decorative and a screen reader hears the name once rather than twice.
+ *
+ * Sized in `em`, so the caller sets the scale with a font size or just takes
+ * the default.
  */
 export function Wordmark({
   tone = "dark",
@@ -24,29 +32,29 @@ export function Wordmark({
   return (
     <Link
       href={href}
-      className={`inline-flex items-center gap-2.5 ${className}`}
+      className={`inline-flex items-center gap-[0.6em] ${className}`}
       aria-label={`${site.name} home`}
     >
-      <ShieldMark
-        className="h-[1.35em] w-auto shrink-0"
-        field={light ? "#f6f3ec" : "#0a1430"}
-        accent={light ? "#a9853f" : "#d4b876"}
-        rule={light ? "#0a1430" : "#c8a45c"}
+      <BtbMark
+        className="h-[2.5em] w-auto shrink-0"
+        variant={light ? "reversed" : "default"}
       />
-      <span
-        className={`font-serif text-xl font-medium tracking-tight ${
-          light ? "text-paper-50" : "text-navy-900"
-        }`}
-      >
-        {site.shortName}
-      </span>
-      <span
-        aria-hidden
-        className={`text-xs font-semibold uppercase tracking-[0.22em] ${
-          light ? "text-gold-400" : "text-gold-600"
-        }`}
-      >
-        CRM
+      <span className="flex flex-col justify-center leading-none">
+        <span
+          className={`text-[1.3em] font-bold tracking-tight ${
+            light ? "text-white" : "text-sf-800"
+          }`}
+        >
+          {site.shortName}
+        </span>
+        <span
+          aria-hidden
+          className={`mt-[0.45em] text-[0.52em] font-semibold uppercase tracking-[0.24em] ${
+            light ? "text-sf-400" : "text-sf-500"
+          }`}
+        >
+          Land acquisition &amp; leasing
+        </span>
       </span>
     </Link>
   );

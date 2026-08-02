@@ -1,98 +1,69 @@
 /**
- * The BTB Holdings mark.
+ * The BTB Holdings mark: a disc carrying a pediment over two rules.
  *
- * A heraldic shield carrying a classical portico. The reference is a private
- * bank's crest, because that is the register this business sells in — the
- * audience is a high-income taxpayer and their CPA, and the documents this mark
- * appears on are a purchase agreement, an installment note and a tax proposal.
+ * Read as architecture the triangle is a portico; read as a silhouette it is a
+ * roofline over ground. That is the business in one shape — homes, on land.
  *
- * The pediment does double duty: read as architecture it is a bank portico,
- * read as a silhouette it is a roofline. That is the whole business in one
- * shape — lodging, financed.
+ * Drawn rather than imported from `logo/*.png`. Every place this appears it is
+ * between 18px and 27px, where a downscaled 2048px raster goes soft, and the
+ * navy header needs the reversed treatment from the same source. The geometry
+ * below was measured off `logo/btb-logo-mark.png` and normalised onto a 64
+ * viewBox with the disc centred, so it is the supplied artwork rather than an
+ * approximation of it.
  *
- * Drawn rather than imported so it inherits `currentColor` for the field and
- * takes the gold as a prop. A PNG could not be tinted for the dark navy header
- * and the light print stylesheet from a single source.
+ * The three colours are the artwork's own, and they are already in
+ * tailwind.config.ts: #032d60 is sf-800, #1b96ff is sf-400, #0176d3 is sf-500.
+ * The mark is native to the Lightning palette the CRM is built in.
  */
-export function ShieldMark({
+
+const NAVY = "#032d60"; // sf-800
+const BAR_LIGHT = "#1b96ff"; // sf-400
+const BAR_MID = "#0176d3"; // sf-500
+
+export function BtbMark({
   className = "",
-  field = "#0a1430",
-  accent = "#d4b876",
-  rule = "#c8a45c",
-  title,
+  variant = "default",
   simplified = false,
+  title,
 }: {
   className?: string;
-  /** Shield body. Navy on light surfaces; pass a light value to invert. */
-  field?: string;
-  /** Portico. */
-  accent?: string;
-  /** The inner keyline. */
-  rule?: string;
-  /** Set only when the mark stands alone; omit when adjacent text names it. */
-  title?: string;
   /**
-   * Drop the keyline and architrave, widen the columns.
+   * `default` is the navy disc for light surfaces. `reversed` is the white disc
+   * for dark ones — the navy disc on the navy header would be a hole. Both are
+   * supplied artwork (`btb-logo-mark.png` / `btb-logo-reversed-navy.png`); the
+   * bars stay blue in both, which is what keeps the two readable as one mark.
+   */
+  variant?: "default" | "reversed";
+  /**
+   * Thicken the two rules.
    *
-   * Below roughly 24px those details stop being detail and become noise: the
-   * keyline merges with the shield edge and the architrave closes the gap above
-   * the columns, so the whole thing reads as a smudge. Use anywhere the mark
-   * renders small — breadcrumbs, avatars. Matches public/favicon.svg, which
-   * exists for the same reason.
+   * True to the vector they are 2.33 units of 64, which is a hair under a pixel
+   * once the mark is drawn at 18px in the header — it renders as a grey smear or
+   * drops out to nothing depending on the display. Everywhere the mark is small
+   * this is the honest reading of it. Matches public/favicon.svg, which exists
+   * for the same reason.
    */
   simplified?: boolean;
+  /** Set only when the mark stands alone; omit when adjacent text names it. */
+  title?: string;
 }) {
-  const common = {
-    viewBox: "0 0 64 64",
-    className,
-    role: title ? "img" : "presentation",
-    "aria-label": title,
-    "aria-hidden": title ? undefined : true,
-    xmlns: "http://www.w3.org/2000/svg",
-  } as const;
-
-  const shield =
-    "M10 8h44a2 2 0 0 1 2 2v21c0 14.5-11.2 24.8-24 29.5C19.2 55.8 8 45.5 8 31V10a2 2 0 0 1 2-2z";
-
-  if (simplified) {
-    return (
-      <svg {...common}>
-        <path d={shield} fill={field} />
-        <g fill={accent}>
-          <path d="M32 16 49 30.5H15z" />
-          <rect x="18" y="34.5" width="6" height="12" />
-          <rect x="29" y="34.5" width="6" height="12" />
-          <rect x="40" y="34.5" width="6" height="12" />
-          <rect x="15" y="48" width="34" height="4" />
-        </g>
-      </svg>
-    );
-  }
+  const disc = variant === "reversed" ? "#ffffff" : NAVY;
+  const pediment = variant === "reversed" ? NAVY : "#ffffff";
+  const barH = simplified ? 3.4 : 2.33;
 
   return (
-    <svg {...common}>
-      <path
-        d="M10 8h44a2 2 0 0 1 2 2v21c0 14.5-11.2 24.8-24 29.5C19.2 55.8 8 45.5 8 31V10a2 2 0 0 1 2-2z"
-        fill={field}
-      />
-      {/* Inset keyline. The detail that makes a crest read as engraved rather
-          than printed, and the first thing to disappear at favicon size. */}
-      <path
-        d="M13 12.5h38a1 1 0 0 1 1 1V31c0 11.9-9.2 20.6-20 24.9C21.2 51.6 12 42.9 12 31V13.5a1 1 0 0 1 1-1z"
-        fill="none"
-        stroke={rule}
-        strokeWidth="0.9"
-        opacity="0.75"
-      />
-      <g fill={accent}>
-        {/* Pediment: portico above, roofline below. */}
-        <path d="M32 17.5 47.8 30H16.2z" />
-        <rect x="16.2" y="31.8" width="31.6" height="3.1" />
-        <rect x="20" y="36.7" width="4.5" height="10.2" />
-        <rect x="29.75" y="36.7" width="4.5" height="10.2" />
-        <rect x="39.5" y="36.7" width="4.5" height="10.2" />
-        <rect x="15.6" y="48.1" width="32.8" height="3.1" />
-      </g>
+    <svg
+      viewBox="0 0 64 64"
+      className={className}
+      role={title ? "img" : "presentation"}
+      aria-label={title}
+      aria-hidden={title ? undefined : true}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle cx="32" cy="32" r="32" fill={disc} />
+      <path d="M32 17.77 47.6 34.65H16.4z" fill={pediment} />
+      <rect x="13.69" y="39.35" width="36.67" height={barH} fill={BAR_LIGHT} />
+      <rect x="19.69" y="44.02" width="24.67" height={barH} fill={BAR_MID} />
     </svg>
   );
 }

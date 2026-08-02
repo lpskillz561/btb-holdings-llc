@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ShieldMark } from "@/components/Logo";
+import { BtbMark } from "@/components/Logo";
 import { site } from "@/lib/site";
 import type { ReactNode } from "react";
 
@@ -44,13 +44,10 @@ export function RecordHeader({
 
         <div className="crm-enter mt-2 flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            {/* The coloured object tile Lightning puts beside a record name. */}
-            <span
-              aria-hidden
-              className="mt-0.5 hidden h-10 w-10 shrink-0 items-center justify-center rounded bg-sf-500 sm:inline-flex"
-            >
-              <ShieldMark simplified className="h-5 w-auto" field="#ffffff" accent="#0176d3" />
-            </span>
+            {/* Lightning puts a coloured tile beside a record name. The disc is
+                already that shape and already that blue, so it stands in for the
+                tile rather than sitting inside one. */}
+            <BtbMark simplified className="mt-0.5 hidden h-10 w-10 shrink-0 sm:block" />
             <div className="min-w-0">
               <p className="text-xs font-medium uppercase tracking-wide text-ink-600">{eyebrow}</p>
               <h1 className="mt-0.5 truncate text-xl font-bold text-ink-900">{title}</h1>

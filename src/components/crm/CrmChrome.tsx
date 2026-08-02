@@ -19,7 +19,7 @@
 
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { ShieldMark } from "@/components/Logo";
+import { BtbMark } from "@/components/Logo";
 import { site } from "@/lib/site";
 
 /**
@@ -98,12 +98,8 @@ export function CrmChrome({ isSuperUser = false }: { isSuperUser?: boolean }) {
       <div className="bg-navy-950">
         <div className="container-x flex h-12 items-center justify-between gap-4">
           <Link href="/crm" className="inline-flex items-center gap-2 text-sm font-semibold text-paper-50">
-            <ShieldMark
-              simplified
-              className="h-[1.15rem] w-auto shrink-0"
-              field="#f6f3ec"
-              accent="#c8a45c"
-            />
+            {/* Reversed: the navy disc on the navy bar would be a hole. */}
+            <BtbMark simplified variant="reversed" className="h-[1.25rem] w-auto shrink-0" />
             {site.shortName}
           </Link>
           <div className="flex shrink-0 items-center gap-4">

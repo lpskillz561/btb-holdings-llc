@@ -28,7 +28,12 @@ export const metadata: Metadata = {
   metadataBase: new URL(`https://${site.domain}`),
   title: { default: `${site.name} — CRM`, template: `%s — ${site.name}` },
   description: site.description,
-  icons: { icon: "/favicon.svg" },
+  // iOS ignores an SVG favicon entirely, so the home-screen icon is the one
+  // raster in the set — resized from logo/btb-logo-app-icon.png.
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/apple-touch-icon.png",
+  },
   robots: { index: false, follow: false },
 };
 

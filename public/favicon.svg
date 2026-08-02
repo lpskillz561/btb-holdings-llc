@@ -1,19 +1,16 @@
 <!--
-  Favicon variant of the BTB Holdings shield. (Replaces a leftover Ziora "Z"
-  mark, which was off-palette and the wrong brand entirely.)
+  Favicon variant of the BTB Holdings mark, from logo/btb-logo-app-icon.png.
 
-  Deliberately NOT the same file as the full mark. At 16px the inset keyline and
-  the architrave collapse into the columns and the whole thing turns to mush, so
-  this version drops both and widens the columns. Edit the two together.
+  Deliberately NOT the same composition as the disc in src/components/Logo.tsx.
+  A disc inside a 16px square wastes the corners and shrinks the pediment to
+  nothing, so the app-icon lockup bleeds the navy to the edges and gets a bigger
+  triangle out of the same box. The two rules are thickened for the same reason
+  they are in <BtbMark simplified> — true to the vector they are under a pixel
+  here. Edit the two together.
 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <path d="M10 8h44a2 2 0 0 1 2 2v21c0 14.5-11.2 24.8-24 29.5C19.2 55.8 8 45.5 8 31V10a2 2 0 0 1 2-2z"
-        fill="#0a1430"/>
-  <g fill="#d4b876">
-    <path d="M32 16 49 30.5H15z"/>
-    <rect x="18" y="34.5" width="6" height="12"/>
-    <rect x="29" y="34.5" width="6" height="12"/>
-    <rect x="40" y="34.5" width="6" height="12"/>
-    <rect x="15" y="48" width="34" height="4"/>
-  </g>
+  <rect width="64" height="64" fill="#032d60"/>
+  <path d="M32 19.06 46.19 34.47H17.78z" fill="#ffffff"/>
+  <rect x="15.38" y="38.75" width="33.25" height="3.2" fill="#1b96ff"/>
+  <rect x="20.75" y="43.4" width="22.5" height="3.2" fill="#0176d3"/>
 </svg>
