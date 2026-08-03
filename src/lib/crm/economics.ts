@@ -15,7 +15,7 @@
 // conditions that most often break it in practice come back in `caveats` so
 // they reach the proposal instead of being silently assumed away.
 
-import { MAX_AVERAGE_RENTAL_DAYS } from "./deal";
+import { MAX_AVERAGE_RENTAL_DAYS, NOTE_TERM_MONTHS } from "./deal";
 import type { UnitUse } from "./types";
 
 /** Read an integer env override, falling back when unset or malformed. */
@@ -69,6 +69,13 @@ export interface EconomicsInput {
   softCostsCents: number;
   /** Land is never depreciable — carried for the investment total only. */
   landCostCents: number;
+  /**
+   * Cash deposit. The balance is seller-financed on ./deal's terms.
+   *
+   * Omit or zero and the model is all-cash, which is what it assumed before
+   * financing existed — so old proposals keep the figures they were frozen with.
+   */
+  downPaymentCents?: number;
   marginalRateBps: number;
   bonusRateBps: number;
   usefulLifeYears: number;
@@ -88,6 +95,19 @@ export interface Economics {
   landCostCents: number;
   totalInvestmentCents: number;
 
+  /** Cash deposit, and the note that carries the rest. */
+  downPaymentCents: number;
+  financedCents: number;
+  monthlyNoteCents: number;
+  annualDebtServiceCents: number;
+  /** Cash actually at stake: the deposit, or the whole price when unfinanced. */
+  cashInvestedCents: number;
+  /**
+   * First-year deduction per dollar of cash, in basis points — 100_000 is
+   * "10 to 1". A ratio, not a rate, and conditional on a recourse note.
+   */
+  deductionLeverageBps: number | null;
+
   /** Everything except land — and zero when the use isn't a business use. */
   depreciableBasisCents: number;
   bonusDeductionCents: number;
@@ -102,10 +122,12 @@ export interface Economics {
   effectiveRentCents: number;
   annualOpexCents: number;
   annualNoiCents: number;
+  /** NOI less debt service — what the owner actually keeps. */
+  annualCashFlowCents: number;
 
-  /** NOI over net year-one outlay. Null when the outlay is zero or negative. */
+  /** Cash flow over cash invested. Null when either is zero or negative. */
   cashOnCashBps: number | null;
-  /** Years of NOI to recover the net outlay. Null when NOI is zero or negative. */
+  /** Years of cash flow to recover the net outlay. Null when it never does. */
   paybackYears: number | null;
 
   marginalRateBps: number;
@@ -149,7 +171,41 @@ export function computeEconomics(input: EconomicsInput): Economics {
   const yearOneDeductionCents = bonusDeductionCents + firstYearRemainderCents;
   const marginalRateBps = Math.min(10_000, Math.max(0, input.marginalRateBps));
   const yearOneTaxSavingsCents = pctOf(yearOneDeductionCents, marginalRateBps);
-  const netYearOneOutlayCents = totalInvestmentCents - yearOneTaxSavingsCents;
+
+  /* ---- Seller financing -------------------------------------------------- */
+  // This is the whole point of the structure and the model had none of it. The
+  // buyer puts down a deposit, the balance is a recourse note guaranteed by the
+  // Trust, and the deduction is taken on the FULL basis — which is what makes a
+  // deduction many times the cash a real thing rather than a sales claim. Same
+  // terms the contract engine writes (0%, 720 months), imported rather than
+  // restated so a proposal and the note it becomes cannot disagree.
+  const downPaymentCents = Math.min(
+    Math.max(0, Math.round(input.downPaymentCents ?? 0)),
+    totalInvestmentCents,
+  );
+  const financedCents = totalInvestmentCents - downPaymentCents;
+  const monthlyNoteCents =
+    NOTE_TERM_MONTHS > 0 ? Math.round(financedCents / NOTE_TERM_MONTHS) : 0;
+  const annualDebtServiceCents = monthlyNoteCents * 12;
+
+  // With nothing financed the buyer's cash IS the whole investment, which is
+  // exactly how this model behaved before financing existed.
+  const cashInvestedCents = financedCents > 0 ? downPaymentCents : totalInvestmentCents;
+
+  // Cash out of pocket less the year-one tax benefit. NEGATIVE means the tax
+  // saving exceeded the cash — the deck's "net tax savings" figure, and the
+  // ordinary outcome of a financed deal.
+  const netYearOneOutlayCents = cashInvestedCents - yearOneTaxSavingsCents;
+
+  /**
+   * Deduction per dollar of cash, in basis points: 100_000 is the "10 to 1"
+   * the strategy deck leads with. It is a RATIO, not a rate, and it is only
+   * true while the note is recourse — see the at-risk caveat below.
+   */
+  const deductionLeverageBps =
+    cashInvestedCents > 0
+      ? Math.round((yearOneDeductionCents / cashInvestedCents) * 10_000)
+      : null;
 
   const grossScheduledRentCents = unitCount * Math.max(0, input.monthlyRentCents) * 12;
   const effectiveRentCents = pctOf(
@@ -158,13 +214,21 @@ export function computeEconomics(input: EconomicsInput): Economics {
   );
   const annualOpexCents = pctOf(effectiveRentCents, Math.max(0, input.opexBps));
   const annualNoiCents = effectiveRentCents - annualOpexCents;
+  // What the owner actually keeps. The note is serviced from rent, so quoting
+  // NOI as the return on a financed deal overstates it by the debt service.
+  const annualCashFlowCents = annualNoiCents - annualDebtServiceCents;
 
+  // Return on the cash actually invested, after debt service — which is what
+  // "cash on cash" means. Unfinanced, the denominator is the whole investment
+  // and this is the figure it always was.
   const cashOnCashBps =
-    netYearOneOutlayCents > 0
-      ? Math.round((annualNoiCents / netYearOneOutlayCents) * 10_000)
+    cashInvestedCents > 0 && annualCashFlowCents > 0
+      ? Math.round((annualCashFlowCents / cashInvestedCents) * 10_000)
       : null;
   const paybackYears =
-    annualNoiCents > 0 ? Math.round((netYearOneOutlayCents / annualNoiCents) * 10) / 10 : null;
+    annualCashFlowCents > 0 && netYearOneOutlayCents > 0
+      ? Math.round((netYearOneOutlayCents / annualCashFlowCents) * 10) / 10
+      : null;
 
   return {
     unitCount,
@@ -172,6 +236,12 @@ export function computeEconomics(input: EconomicsInput): Economics {
     improvementsCents,
     landCostCents,
     totalInvestmentCents,
+    downPaymentCents,
+    financedCents,
+    monthlyNoteCents,
+    annualDebtServiceCents,
+    cashInvestedCents,
+    deductionLeverageBps,
     depreciableBasisCents,
     bonusDeductionCents,
     remainingBasisCents,
@@ -183,6 +253,7 @@ export function computeEconomics(input: EconomicsInput): Economics {
     effectiveRentCents,
     annualOpexCents,
     annualNoiCents,
+    annualCashFlowCents,
     cashOnCashBps,
     paybackYears,
     marginalRateBps,
@@ -192,6 +263,9 @@ export function computeEconomics(input: EconomicsInput): Economics {
       deductible,
       landCostCents,
       bonusRateBps,
+      financedCents,
+      annualCashFlowCents,
+      deductionLeverageBps,
     }),
   };
 }
@@ -203,12 +277,38 @@ export function computeEconomics(input: EconomicsInput): Economics {
  */
 function buildCaveats(
   input: EconomicsInput,
-  ctx: { deductible: boolean; landCostCents: number; bonusRateBps: number },
+  ctx: {
+    deductible: boolean;
+    landCostCents: number;
+    bonusRateBps: number;
+    financedCents: number;
+    annualCashFlowCents: number;
+    deductionLeverageBps: number | null;
+  },
 ): string[] {
   const caveats: string[] = [
     "Figures are estimates for discussion, not tax advice. The client's CPA must confirm the classification, recovery period and deduction before it is relied on.",
     "The deduction requires the unit to be placed in service — delivered, complete and available for its intended use — within the tax year being claimed. Ordering alone is not enough.",
   ];
+
+  if (ctx.financedCents > 0) {
+    // The single most load-bearing sentence in a financed proposal. A deduction
+    // many times the cash is only available because the buyer is AT RISK for
+    // the financed balance; make the note non-recourse and §465 limits the
+    // deduction to the deposit, which collapses the whole case. Stating it is
+    // not a hedge — it is the condition the number depends on.
+    caveats.push(
+      "The first-year deduction is taken on the full basis, not on the deposit, and that depends on the note being RECOURSE and guaranteed by the Trust. Under the at-risk rules of §465 a non-recourse note would limit the deduction to the amount actually at risk — broadly the cash deposit — and the leverage shown here would not survive. This is a condition of the structure, not a formality.",
+    );
+    caveats.push(
+      "The financed balance is a real obligation for the full term regardless of how the unit performs. The deduction arrives once; the note payment recurs.",
+    );
+    if (ctx.annualCashFlowCents < 0) {
+      caveats.push(
+        "At the occupancy and rent modelled, income does not cover the note payment. The shortfall is funded by the owner, and a proposal that does not say so is not one a CPA will accept.",
+      );
+    }
+  }
 
   if (!ctx.deductible) {
     caveats.push(

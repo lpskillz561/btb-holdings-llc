@@ -55,6 +55,7 @@ export function ProposalGenerator({
     site_work: "",
     soft_costs: "",
     land_cost: "",
+    down_payment: "",
     monthly_rent: "",
     unit_use: "long_term_rental" as UnitUse,
     marginal_rate: String(defaults.marginalRateBps / 100),
@@ -80,6 +81,7 @@ export function ProposalGenerator({
         siteWorkCents: toCents(form.site_work),
         softCostsCents: toCents(form.soft_costs),
         landCostCents: toCents(form.land_cost),
+        downPaymentCents: toCents(form.down_payment),
         marginalRateBps: toBps(form.marginal_rate),
         bonusRateBps: toBps(form.bonus_rate),
         usefulLifeYears: Number(form.useful_life_years) || 0,
@@ -127,6 +129,12 @@ export function ProposalGenerator({
           </Field>
           <Field label="Land (total)" hint="Not depreciable — carried in the investment total only.">
             <MoneyInput value={form.land_cost} onChange={set("land_cost")} placeholder="80000" />
+          </Field>
+          <Field
+            label="Down payment (cash)"
+            hint="Leave blank for an all-cash deal. The balance is seller-financed at 0% over 720 months."
+          >
+            <MoneyInput value={form.down_payment} onChange={set("down_payment")} placeholder="155000" />
           </Field>
           <Field label="Monthly rent per unit">
             <MoneyInput value={form.monthly_rent} onChange={set("monthly_rent")} placeholder="1650" />
@@ -176,8 +184,43 @@ export function ProposalGenerator({
             <Line label="Depreciable basis" value={fmtMoney(preview.depreciableBasisCents)} />
             <Line label="First-year deduction" value={fmtMoney(preview.yearOneDeductionCents)} strong />
             <Line label="Est. first-year tax benefit" value={fmtMoney(preview.yearOneTaxSavingsCents)} strong />
-            <Line label="Net first-year outlay" value={fmtMoney(preview.netYearOneOutlayCents)} />
+            {preview.financedCents > 0 && (
+              <>
+                <Line label="Cash down" value={fmtMoney(preview.downPaymentCents)} />
+                <Line label="Seller-financed" value={fmtMoney(preview.financedCents)} />
+                <Line
+                  label="Note payment"
+                  value={`${fmtMoney(preview.monthlyNoteCents)} / mo \u00d7 720`}
+                />
+                <Line
+                  label="Deduction per $1 of cash"
+                  value={
+                    preview.deductionLeverageBps === null
+                      ? "\u2014"
+                      : `${(preview.deductionLeverageBps / 10_000).toFixed(1)} : 1`
+                  }
+                  strong
+                />
+              </>
+            )}
+            {/* Negative means the tax benefit exceeded the cash in — the deck's
+                "net tax savings". Say which it is rather than showing a minus. */}
+            <Line
+              label={
+                preview.netYearOneOutlayCents < 0
+                  ? "Net first-year gain"
+                  : "Net first-year outlay"
+              }
+              value={fmtMoney(Math.abs(preview.netYearOneOutlayCents))}
+              strong
+            />
             <Line label="Projected NOI" value={`${fmtMoney(preview.annualNoiCents)} / yr`} />
+            {preview.financedCents > 0 && (
+              <Line
+                label="After debt service"
+                value={`${fmtMoney(preview.annualCashFlowCents)} / yr`}
+              />
+            )}
             <Line label="Cash-on-cash" value={fmtPct(preview.cashOnCashBps)} />
             <Line
               label="Payback"

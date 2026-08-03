@@ -92,6 +92,8 @@ export interface GenerateInput {
   site_work?: unknown;
   soft_costs?: unknown;
   land_cost?: unknown;
+  /** Cash deposit; the balance is seller-financed on ./deal's terms. */
+  down_payment?: unknown;
   marginal_rate?: unknown;
   bonus_rate?: unknown;
   useful_life_years?: unknown;
@@ -247,6 +249,7 @@ export async function generateProposal(
     siteWorkCents: cents(input.site_work) ?? 0,
     softCostsCents: cents(input.soft_costs) ?? 0,
     landCostCents: cents(input.land_cost) ?? 0,
+    downPaymentCents: cents(input.down_payment) ?? 0,
     marginalRateBps,
     bonusRateBps: bps(input.bonus_rate) ?? DEFAULT_BONUS_RATE_BPS(),
     usefulLifeYears: num(input.useful_life_years) ?? DEFAULT_USEFUL_LIFE_YEARS(),
@@ -319,6 +322,7 @@ export async function generateProposal(
     site_work_cents: cents(input.site_work) ?? 0,
     soft_costs_cents: cents(input.soft_costs) ?? 0,
     land_cost_cents: economics.landCostCents,
+    down_payment_cents: economics.downPaymentCents,
     marginal_rate_bps: economics.marginalRateBps,
     bonus_rate_bps: economics.bonusRateBps,
     useful_life_years: economics.usefulLifeYears,
@@ -330,7 +334,13 @@ export async function generateProposal(
     year_one_deduction_cents: economics.yearOneDeductionCents,
     year_one_tax_savings_cents: economics.yearOneTaxSavingsCents,
     net_year_one_outlay_cents: economics.netYearOneOutlayCents,
+    financed_cents: economics.financedCents,
+    monthly_note_cents: economics.monthlyNoteCents,
+    annual_debt_service_cents: economics.annualDebtServiceCents,
+    cash_invested_cents: economics.cashInvestedCents,
+    deduction_leverage_bps: economics.deductionLeverageBps,
     annual_noi_cents: economics.annualNoiCents,
+    annual_cash_flow_cents: economics.annualCashFlowCents,
     cash_on_cash_bps: economics.cashOnCashBps,
     payback_years: economics.paybackYears,
     body_md: renderBody(generated, economics, client.name),

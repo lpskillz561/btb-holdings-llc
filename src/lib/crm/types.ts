@@ -289,6 +289,8 @@ export interface CrmProposal {
   site_work_cents: number;
   soft_costs_cents: number;
   land_cost_cents: number;
+  /** Cash deposit; the balance is seller-financed. Zero means an all-cash deal. */
+  down_payment_cents: number;
   marginal_rate_bps: number;
   bonus_rate_bps: number;
   useful_life_years: number;
@@ -301,8 +303,16 @@ export interface CrmProposal {
   depreciable_basis_cents: number;
   year_one_deduction_cents: number;
   year_one_tax_savings_cents: number;
+  /** Cash out of pocket less the tax benefit. NEGATIVE means ahead in year one. */
   net_year_one_outlay_cents: number;
+  financed_cents: number;
+  monthly_note_cents: number;
+  annual_debt_service_cents: number;
+  cash_invested_cents: number;
+  /** Deduction per dollar of cash, in bps. 100000 is "10 to 1". */
+  deduction_leverage_bps: number | null;
   annual_noi_cents: number;
+  annual_cash_flow_cents: number;
   cash_on_cash_bps: number | null;
   payback_years: number | null;
 

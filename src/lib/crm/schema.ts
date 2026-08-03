@@ -191,6 +191,9 @@ const TABLES: TableDef[] = [
       ["site_work_cents", "BIGINT NOT NULL DEFAULT 0"],
       ["soft_costs_cents", "BIGINT NOT NULL DEFAULT 0"],
       ["land_cost_cents", "BIGINT NOT NULL DEFAULT 0"],
+      // Seller financing. Defaulted to zero so every proposal frozen before
+      // financing existed keeps reading as the all-cash deal it was.
+      ["down_payment_cents", "BIGINT NOT NULL DEFAULT 0"],
       ["marginal_rate_bps", "INTEGER NOT NULL DEFAULT 3700"],
       ["bonus_rate_bps", "INTEGER NOT NULL DEFAULT 10000"],
       // Fractional on purpose: residential rental real property is 27.5 years.
@@ -204,7 +207,14 @@ const TABLES: TableDef[] = [
       ["year_one_deduction_cents", "BIGINT NOT NULL DEFAULT 0"],
       ["year_one_tax_savings_cents", "BIGINT NOT NULL DEFAULT 0"],
       ["net_year_one_outlay_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["financed_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["monthly_note_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["annual_debt_service_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["cash_invested_cents", "BIGINT NOT NULL DEFAULT 0"],
+      // Deduction per dollar of cash: 100000 bps is the "10 to 1".
+      ["deduction_leverage_bps", "INTEGER"],
       ["annual_noi_cents", "BIGINT NOT NULL DEFAULT 0"],
+      ["annual_cash_flow_cents", "BIGINT NOT NULL DEFAULT 0"],
       ["cash_on_cash_bps", "INTEGER"],
       ["payback_years", "DOUBLE PRECISION"],
       ["body_md", "TEXT NOT NULL DEFAULT ''"],
