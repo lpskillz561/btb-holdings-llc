@@ -157,13 +157,32 @@ only its hash.
 
 ### AI
 
-Three surfaces — proposal drafting, land-fit assessment, and a client advisor —
-all routed through `buildSystemPrompt` in `src/lib/crm/ai.ts`, which loads the
-client's marginal rate, entity type, write-off target, land criteria, holdings
-and cost position into the prompt. That context is what makes the answer
-specific rather than generic; route any new AI surface through it. Without
-`OPENAI_API_KEY` these features are disabled with an explanatory notice, not an
-error.
+Four surfaces — proposal drafting, land-fit assessment, the client advisor, and
+an **Ask AI** panel that rides on every `/crm` page — all routed through
+`buildScopedPrompt` in `src/lib/crm/ai.ts`. Every prompt is three layers:
+
+1. `BASE_PROMPT` — who the model is and how it writes. Short.
+2. **`src/lib/crm/knowledge/SKILL.md`** — the house knowledge base: the trust /
+   series-LLC structure, the authorities behind the tax position, the deal
+   terms, the risks, and the hard rules. Transcribed from `docs/`, which is the
+   source of truth and is deliberately not in git.
+3. Record context — the client, proposal, contract or whole workspace the person
+   is actually looking at, rendered as already-formatted facts.
+
+The doctrine lives in exactly one place. Add to `SKILL.md`, never to a prompt
+string, and add any file to `src/lib/crm/knowledge/*.md` to extend it — they are
+concatenated in filename order. **A missing knowledge base is a hard failure by
+design** (`src/lib/crm/skill.ts`): the risk it guards against is not downtime, it
+is the model answering fluently from its own priors about "tiny home tax
+strategies" and describing a deal BTB does not sell.
+
+The Ask AI panel is mounted from `app/crm/layout.tsx`, so it survives navigation,
+and it scopes itself from the URL — a client card asks about that client, a
+proposal about that proposal, a list page about the whole book. It never renders
+on a `/print` route.
+
+Without `OPENAI_API_KEY` these features are disabled with an explanatory notice,
+not an error.
 
 ---
 

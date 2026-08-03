@@ -38,6 +38,16 @@ export function fmtPct(
   return `${(bps / 100).toFixed(opts.digits ?? 1)}%`;
 }
 
+/**
+ * Deduction leverage, in basis points, as the ratio people actually say out
+ * loud: 100000 → "10.0:1". Not a percentage — "1000%" is the same number and
+ * nobody describes this deal that way.
+ */
+export function fmtLeverage(bps: number | null | undefined, blank = "—"): string {
+  if (bps === null || bps === undefined || !Number.isFinite(bps)) return blank;
+  return `${(bps / 10_000).toFixed(1)}:1`;
+}
+
 /** "2026-03-14" → "Mar 14, 2026". Passes through anything unparseable. */
 export function fmtDate(value: string | null | undefined): string {
   if (!value) return "—";

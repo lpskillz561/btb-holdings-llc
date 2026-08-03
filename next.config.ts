@@ -7,6 +7,16 @@ import type { NextConfig } from "next";
 // not part of this app.
 const nextConfig: NextConfig = {
   output: "standalone",
+
+  // The AI knowledge base (src/lib/crm/knowledge/*.md) is read from disk at
+  // runtime by lib/crm/skill.ts, and nothing imports it, so Next's tracer has
+  // no way to know it is needed — a standalone build would ship without it and
+  // every AI surface would fail on first use. Traced files keep their path
+  // relative to the project root, which is what `process.cwd()` resolves to
+  // inside the container, so the loader's join() finds them unchanged.
+  outputFileTracingIncludes: {
+    "/api/crm/**": ["./src/lib/crm/knowledge/**/*.md"],
+  },
 };
 
 export default nextConfig;

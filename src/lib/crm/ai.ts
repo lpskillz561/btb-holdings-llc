@@ -2,24 +2,39 @@
 // (`OPENAI_API_KEY` / `OPENAI_MODEL`, structured outputs via json_schema),
 // pointed at client records instead of parcels.
 //
-// What makes it worth having is `buildClientContext`: the model is told this
-// client's marginal rate, entity type, write-off target, land criteria and what
-// they already own, so it gives a specific answer instead of a generic one.
-// Route new AI surfaces through `buildSystemPrompt` rather than writing a bare
-// prompt, or they lose that.
+// Every prompt is assembled from three layers, in this order:
+//
+//   1. BASE_PROMPT below — who the model is and how it writes. Short.
+//   2. ./knowledge/SKILL.md — the doctrine: the structure, the authorities, the
+//      deal terms, the risks, the hard rules. Transcribed from `docs/`, which is
+//      the source of truth and is not in git. See ./skill.ts.
+//   3. Record context — the client, proposal, contract or workspace the person
+//      is actually looking at, rendered as formatted facts.
+//
+// The doctrine lives in ONE place on purpose. It used to be inlined here, which
+// meant two copies of the tax case that could disagree — and one of them taught
+// the 7-day §469 test, so every generated proposal described a deal BTB does not
+// sell. Add to SKILL.md, not to a prompt string.
+//
+// Route new AI surfaces through `buildSystemPrompt` / `buildScopedPrompt` rather
+// than writing a bare prompt, or they lose all three layers.
 //
 // The hard rule, enforced by construction rather than by asking nicely: the
 // model never computes money. Figures are calculated in ./economics, frozen
 // onto the row, and handed to the model as given facts.
 
 import OpenAI from "openai";
-import { fmtAcres, fmtMoney, fmtPct } from "./format";
+import { fmtAcres, fmtLeverage, fmtMoney, fmtPct } from "./format";
 import { query, queryOne } from "./db";
-import { clientCostBasis, type CostBasis } from "./clients";
+import { clientCostBasis, getCrmSummary, type CostBasis } from "./clients";
+import { getBookSummary, listParksWithCapacity } from "./portfolio";
+import { loadSkill } from "./skill";
+import { site } from "@/lib/site";
 import {
   LABELS,
   type CrmClient,
   type CrmContact,
+  type CrmContract,
   type CrmProperty,
   type CrmProposal,
   type CrmUnit,
@@ -44,30 +59,26 @@ export function getOpenAI(): OpenAI {
 export const MODEL = process.env.OPENAI_MODEL || "gpt-4o";
 
 /**
- * The house view. Everything the model says about the tax case flows from this,
- * so the guardrails live here and not in each individual prompt.
+ * Who the model is. The doctrine is NOT here — it is in ./knowledge/SKILL.md,
+ * which is appended below this and is the single place the tax case, the deal
+ * terms and the hard rules are stated. Keep this layer to role and register.
  */
-export const BASE_PROMPT = `You are the in-house advisor for Ziora Capital Holdings' tiny-home programme. Ziora sources land, places manufactured tiny homes on it, and places those units in service as income-producing rental assets for high-income clients who are looking for a legitimate depreciation deduction.
+export const BASE_PROMPT = `You are the in-house advisor for ${site.name}'s tiny-home programme. ${site.description}
 
-How to think about this business:
-- The product is a REAL ASSET that produces REAL INCOME. The deduction follows from owning depreciable business property and placing it in service — it is a consequence of a genuine rental operation, never the purpose dressed up as one. Never describe a transaction whose only substance is the deduction.
-- Land is not depreciable. Only the units and the improvements that go with them create a deduction. Say so whenever the two are discussed together.
-- Classification drives everything. A transportable unit treated as personal property has a short recovery period and can be bonus-eligible; a unit fixed to the land and treated as residential rental real property is 27.5-year and is not. Never assume the favourable one silently.
-- Placed in service is a date, not a formality. Ordering a unit in December and taking delivery in March means the deduction lands in the later year.
-- Passive activity rules are the most common reason a modelled deduction fails to offset a client's actual income. Long-term rentals are generally passive. Raise this rather than waiting to be asked.
-- THE TWO DAY-COUNTS ARE DIFFERENT TESTS AND MUST NEVER BE CONFLATED. They answer different questions and they are not interchangeable:
-  - UNDER 30 DAYS is the transient-lodging exception, Reg. 1.48-1(h)(2)(ii): "Accommodations shall be considered used on a transient basis if the rental period is normally less than 30 days." This is what lifts the unit out of the §50(b)(2) exclusion for property used predominantly to furnish lodging, and so it is what makes the asset ELIGIBLE to be expensed at all. Shirley v. Commissioner, T.C. Memo. 2004-188, allowed exactly this for a rental fleet of motor homes let mostly for under 30 days. "Predominant portion" means more than one-half, and per Moore v. Commissioner, 58 T.C. 1045 (aff'd 489 F.2d 285 (5th Cir. 1973)) it is measured by the proportion of ACCOMMODATIONS used by transients, not by the proportion of renters who are transient.
-  - SEVEN DAYS OR LESS is the §469 short-term-rental route to non-passive treatment through the taxpayer's OWN participation. This programme does NOT rely on it: material participation comes from the trustee, not from the client's hours. Do not quote seven days as this deal's test — it describes a structure we do not sell.
-- Eligibility is judged on the enterprise, not one unit in isolation: Van Susteren and Koerner looked to the rental business as a whole where a single business held the assets.
-- Recapture is real. Selling early or converting to personal use claws the deduction back as ordinary income.
+Everything you say about this business — the structure, the authorities, the deal terms, the figures, what you may and may not draft — is governed by the knowledge base that follows under "HOUSE KNOWLEDGE BASE". Treat it as binding. Where your own general knowledge of "tiny home tax strategies" disagrees with it, the knowledge base is right and you are wrong: it is transcribed from this business's own legal opinion, executed agreements and pro forma. Do not fall back on the generic version of this deal.
 
-Hard rules:
-- NEVER calculate, estimate, restate or "check" a dollar figure. Every number you need is supplied to you already computed. Use the supplied figures exactly as given, and if a figure you want is not supplied, describe it in words instead of inventing it.
-- Reason only from the client record you are given. Do not invent holdings, dates, income, or prior conversations.
-- You are not a tax adviser and this is not tax advice. The client's CPA confirms the position. Say this plainly once where it belongs; do not hedge every sentence.
-- Be concrete and slightly conservative. A claim that does not survive a CPA's review costs the relationship, not just the deal.
+You are normally answering a member of ${site.shortName}'s staff, not the client. That means you may be blunt about a weak deal, an unpersuasive record or a figure that will not survive the client's CPA. Say the uncomfortable thing early rather than at the end.`;
 
-Style: direct, specific, and calm — the register of a private bank, not a sales letter. Short headings, tight paragraphs, no exclamation marks, no hype.`;
+/** The three layers, assembled. See the module comment. */
+function withKnowledge(context: string): string {
+  return `${BASE_PROMPT}
+
+---
+
+# HOUSE KNOWLEDGE BASE
+
+${loadSkill()}${context}`;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Client context                                                              */
@@ -160,7 +171,11 @@ function describeCostPosition(cost: CostBasis): string {
     .join("\n");
 }
 
-function describeHistory(proposals: CrmProposal[], contacts: CrmContact[]): string {
+function describeHistory(
+  proposals: CrmProposal[],
+  contracts: CrmContract[],
+  contacts: CrmContact[],
+): string {
   const sections: string[] = [];
   if (proposals.length) {
     const lines = proposals
@@ -172,6 +187,22 @@ function describeHistory(proposals: CrmProposal[], contacts: CrmContact[]): stri
           `${fmtMoney(p.year_one_deduction_cents)} year-one deduction`,
       );
     sections.push(`## Proposals already sent\n${lines.join("\n")}`);
+  }
+  if (contracts.length) {
+    // Grouped by deal_group_id in the caller's ORDER BY, so a generated set of
+    // three reads as three lines together. Whether a set is COMPLETE matters:
+    // Purchase, Finance and Management are cross-referenced and one alone is
+    // not executable.
+    const lines = contracts.map(
+      (k) =>
+        `- "${k.title}" [${LABELS.contractType[k.type]}, ${LABELS.contractStatus[k.status]}] — ` +
+        `${fmtMoney(k.value_cents)}` +
+        `${k.signed_at ? `, signed ${k.signed_at}` : ", NOT SIGNED"}` +
+        `${k.effective_date ? `, effective ${k.effective_date}` : ""}` +
+        `${k.monthly_payment_cents != null ? `, note ${fmtMoney(k.monthly_payment_cents)}/month` : ""}` +
+        `${k.deal_group_id ? ` (set ${k.deal_group_id.slice(0, 8)})` : ""}`,
+    );
+    sections.push(`## Contracts on this account\n${lines.join("\n")}`);
   }
   if (contacts.length) {
     const lines = contacts.map(
@@ -188,7 +219,11 @@ export async function buildClientContext(clientId: string): Promise<string> {
   const client = await queryOne<CrmClient>(`SELECT * FROM crm_clients WHERE id = $1`, [clientId]);
   if (!client) return "";
 
-  const [contacts, properties, units, proposals, cost] = await Promise.all([
+  // Archived rows are excluded here for the same reason they leave every list
+  // and every total: a withdrawn proposal is not part of what this account is,
+  // and an advisor that reasons from one is reasoning about a deal nobody is
+  // doing. The row is still there; it is just not context.
+  const [contacts, properties, units, proposals, contracts, cost] = await Promise.all([
     query<CrmContact>(`SELECT * FROM crm_contacts WHERE client_id = $1 ORDER BY created_at`, [
       clientId,
     ]),
@@ -197,7 +232,13 @@ export async function buildClientContext(clientId: string): Promise<string> {
     ]),
     query<CrmUnit>(`SELECT * FROM crm_units WHERE client_id = $1 ORDER BY created_at`, [clientId]),
     query<CrmProposal>(
-      `SELECT * FROM crm_proposals WHERE client_id = $1 ORDER BY created_at DESC LIMIT 6`,
+      `SELECT * FROM crm_proposals WHERE client_id = $1 AND archived_at IS NULL
+       ORDER BY created_at DESC LIMIT 6`,
+      [clientId],
+    ),
+    query<CrmContract>(
+      `SELECT * FROM crm_contracts WHERE client_id = $1 AND archived_at IS NULL
+       ORDER BY deal_group_id NULLS LAST, created_at DESC LIMIT 12`,
       [clientId],
     ),
     clientCostBasis(clientId),
@@ -208,14 +249,253 @@ export async function buildClientContext(clientId: string): Promise<string> {
     describeLandCriteria(client),
     describeHoldings(properties, units),
     describeCostPosition(cost),
-    describeHistory(proposals, contacts),
+    describeHistory(proposals, contracts, contacts),
   ].filter(Boolean);
 
   return `\n\n---\n\nContext for this client:\n\n${sections.join("\n\n")}`;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Workspace, proposal and contract context                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The whole book, for a question that no single record can answer — "which
+ * contracts are unsigned", "how much capacity is left", "what is the pipeline
+ * worth". This is what the assistant gets on a list page.
+ *
+ * Every figure here is aggregated in SQL and formatted before the model sees it,
+ * for the same reason proposal economics are frozen: the model reports, it never
+ * computes. Note the money aggregates in ./portfolio and ./clients are cast
+ * ::bigint — sum(bigint) is NUMERIC and arrives as a string otherwise.
+ */
+export async function buildWorkspaceContext(): Promise<string> {
+  const [summary, book, parks, proposals, contracts] = await Promise.all([
+    getCrmSummary(),
+    getBookSummary(),
+    listParksWithCapacity(),
+    query<CrmProposal & { client_name: string }>(
+      `SELECT p.*, c.name AS client_name FROM crm_proposals p
+       JOIN crm_clients c ON c.id = p.client_id
+       WHERE p.archived_at IS NULL ORDER BY p.updated_at DESC LIMIT 12`,
+    ),
+    query<CrmContract & { client_name: string }>(
+      `SELECT k.*, c.name AS client_name FROM crm_contracts k
+       JOIN crm_clients c ON c.id = k.client_id
+       WHERE k.archived_at IS NULL ORDER BY k.updated_at DESC LIMIT 12`,
+    ),
+  ]);
+
+  const pipeline = Object.entries(summary.by_status)
+    .filter(([, n]) => n > 0)
+    .map(([status, n]) => `${LABELS.clientStatus[status as keyof typeof LABELS.clientStatus]}: ${n}`)
+    .join(", ");
+
+  const sections = [
+    [
+      `## The book right now`,
+      `- Clients: ${summary.clients_total}${pipeline ? ` (${pipeline})` : ""}`,
+      `- Open proposals (draft or sent): ${fmtMoney(summary.open_proposal_value_cents)}`,
+      `- Accepted proposals: ${fmtMoney(summary.accepted_proposal_value_cents)}`,
+      `- Signed or active contracts: ${fmtMoney(summary.active_contract_value_cents)}`,
+      `- Deduction delivered on accepted proposals: ${fmtMoney(summary.writeoff_delivered_cents)}`,
+      `- Units: ${summary.units_in_service} in service of ${summary.units_total}`,
+      `- Cash: ${fmtMoney(summary.finance.income_cents)} received, ${fmtMoney(summary.finance.expense_cents)} paid out, ` +
+        `${fmtMoney(summary.finance.outstanding_cents)} outstanding, ` +
+        `${fmtMoney(summary.finance.annual_rent_run_rate_cents)} annual rent run rate`,
+      `(Asset cost and cash movement are different things and are never added together.)`,
+    ].join("\n"),
+
+    [
+      `## BTB's own land and capacity`,
+      `- Parks: ${book.parks}, ${fmtAcres(book.acres)}`,
+      `- Pads: ${book.pads_total} total — ${book.pads_occupied} occupied, ${book.pads_available} available, ${book.pads_pipeline} planned or building`,
+      `- Homes on BTB's own book (no client): ${book.btb_units} (${book.btb_units_in_service} in service)`,
+      `- Client-owned homes on BTB pads: ${book.client_units} (${book.client_units_in_service} in service)`,
+      `- Land basis (never depreciable, INTERNAL — never quote to a client): ${fmtMoney(book.land_basis_cents)}`,
+    ].join("\n"),
+
+    parks.length
+      ? `## Parks\n${parks
+          .slice(0, 20)
+          .map(
+            (p) =>
+              `- ${p.name} [${LABELS.parkStatus[p.status]}]` +
+              `${p.state ? ` — ${[p.city, p.state].filter(Boolean).join(", ")}` : ""}` +
+              `, ${p.available_pads} of ${p.pad_count} pads available` +
+              `${p.sections_remaining != null ? `, ${p.sections_remaining} section(s) of stated capacity still sellable` : ""}`,
+          )
+          .join("\n")}`
+      : "",
+
+    proposals.length
+      ? `## Recent proposals (archived rows excluded)\n${proposals
+          .map(
+            (p) =>
+              `- ${p.client_name} — "${p.title}" [${LABELS.proposalStatus[p.status]}], ` +
+              `${p.unit_count} unit(s), ${fmtMoney(p.total_investment_cents)} invested, ` +
+              `${fmtMoney(p.year_one_deduction_cents)} year-one deduction, ` +
+              `${fmtMoney(p.cash_invested_cents)} cash in`,
+          )
+          .join("\n")}`
+      : "",
+
+    contracts.length
+      ? `## Recent contracts (archived rows excluded)\n${contracts
+          .map(
+            (k) =>
+              `- ${k.client_name} — "${k.title}" [${LABELS.contractType[k.type]}, ${LABELS.contractStatus[k.status]}], ` +
+              `${fmtMoney(k.value_cents)}` +
+              `${k.signed_at ? `, signed ${k.signed_at}` : ", UNSIGNED"}` +
+              `${k.deal_group_id ? `, part of generated set ${k.deal_group_id.slice(0, 8)}` : ""}`,
+          )
+          .join("\n")}`
+      : "",
+  ].filter(Boolean);
+
+  return `\n\n---\n\nContext for the whole workspace:\n\n${sections.join("\n\n")}`;
+}
+
+/** One proposal, with the client it belongs to. Every figure is frozen on the row. */
+export async function buildProposalContext(proposalId: string): Promise<string> {
+  const proposal = await queryOne<CrmProposal>(`SELECT * FROM crm_proposals WHERE id = $1`, [
+    proposalId,
+  ]);
+  if (!proposal) return "";
+
+  const lines = [
+    `## The proposal on screen`,
+    `Title: ${proposal.title}`,
+    `Status: ${LABELS.proposalStatus[proposal.status]}${proposal.archived_at ? " — ARCHIVED" : ""}`,
+    `Units: ${proposal.unit_count}`,
+    `Total investment: ${fmtMoney(proposal.total_investment_cents)}`,
+    `Depreciable basis: ${fmtMoney(proposal.depreciable_basis_cents)}`,
+    `Year-one deduction: ${fmtMoney(proposal.year_one_deduction_cents)}`,
+    `Year-one tax saving at ${fmtPct(proposal.marginal_rate_bps)}: ${fmtMoney(proposal.year_one_tax_savings_cents)}`,
+    `Cash invested (the deposit): ${fmtMoney(proposal.cash_invested_cents)}`,
+    `Seller-financed: ${fmtMoney(proposal.financed_cents)} at ${fmtMoney(proposal.monthly_note_cents)}/month`,
+    `Annual debt service: ${fmtMoney(proposal.annual_debt_service_cents)}`,
+    `Net year-one outlay: ${fmtMoney(proposal.net_year_one_outlay_cents)} (a negative figure means ahead in year one)`,
+    proposal.deduction_leverage_bps != null &&
+      `Deduction per dollar of cash: ${fmtLeverage(proposal.deduction_leverage_bps)}`,
+    `Annual NOI: ${fmtMoney(proposal.annual_noi_cents)}; annual cash flow: ${fmtMoney(proposal.annual_cash_flow_cents)}`,
+    `Occupancy assumed: ${fmtPct(proposal.occupancy_bps)}; operating expenses: ${fmtPct(proposal.opex_bps)}`,
+    proposal.valid_until && `Valid until: ${proposal.valid_until}`,
+    ``,
+    `These figures were computed in lib/crm/economics.ts and frozen on the row when the`,
+    `proposal was created. They are given facts. Do not recompute, reconcile or adjust them.`,
+  ].filter(Boolean);
+
+  return `\n\n---\n\n${lines.join("\n")}${await buildClientContext(proposal.client_id)}`;
+}
+
+/** One contract, with its sibling documents and the client it belongs to. */
+export async function buildContractContext(contractId: string): Promise<string> {
+  const contract = await queryOne<CrmContract>(`SELECT * FROM crm_contracts WHERE id = $1`, [
+    contractId,
+  ]);
+  if (!contract) return "";
+
+  // The execution set is one deal. A contract shown alone reads as complete when
+  // it is not — Purchase, Finance and Management are cross-referenced.
+  const siblings = contract.deal_group_id
+    ? await query<CrmContract>(
+        `SELECT * FROM crm_contracts WHERE deal_group_id = $1 AND id <> $2 ORDER BY type`,
+        [contract.deal_group_id, contract.id],
+      )
+    : [];
+
+  const lines = [
+    `## The contract on screen`,
+    `Title: ${contract.title}`,
+    `Type: ${LABELS.contractType[contract.type]}`,
+    `Status: ${LABELS.contractStatus[contract.status]}${contract.archived_at ? " — ARCHIVED" : ""}`,
+    `Value: ${fmtMoney(contract.value_cents)}`,
+    contract.counterparty && `Counterparty: ${contract.counterparty}`,
+    contract.effective_date && `Effective: ${contract.effective_date}`,
+    contract.signed_at ? `Signed: ${contract.signed_at}` : `NOT YET SIGNED`,
+    contract.buyer_legal_name && `Buyer of record: ${contract.buyer_legal_name}`,
+    contract.trust_name && `Trust: ${contract.trust_name}`,
+    contract.unit_vin && `Unit VIN: ${contract.unit_vin}`,
+    contract.purchase_price_cents != null &&
+      `Purchase price: ${fmtMoney(contract.purchase_price_cents)}`,
+    contract.down_payment_cents != null &&
+      `Down payment: ${fmtMoney(contract.down_payment_cents)}`,
+    contract.financed_cents != null && `Financed: ${fmtMoney(contract.financed_cents)}`,
+    contract.note_rate_bps != null &&
+      contract.note_term_months != null &&
+      `Note: ${fmtPct(contract.note_rate_bps)} over ${contract.note_term_months} monthly payments`,
+    contract.monthly_payment_cents != null &&
+      `Monthly payment: ${fmtMoney(contract.monthly_payment_cents)}`,
+    contract.revenue_split_bps != null &&
+      `Revenue split to the Owner, after operating expenses: ${fmtPct(contract.revenue_split_bps)}`,
+    siblings.length
+      ? `Other documents in this execution set: ${siblings
+          .map((s) => `${LABELS.contractType[s.type]} [${LABELS.contractStatus[s.status]}]`)
+          .join("; ")}`
+      : contract.deal_group_id
+        ? `This is the only document in its set, which should not happen — the three are generated together.`
+        : `Not part of a generated set.`,
+    ``,
+    `These terms are frozen on the row. You may explain what a clause means and you may`,
+    `draft a cover letter. You may NOT draft, reword or "tidy" a term — the legal text is a`,
+    `template in lib/crm/contract-templates.ts, and rephrasing a clause changes the deal.`,
+  ].filter(Boolean);
+
+  return `\n\n---\n\n${lines.join("\n")}${await buildClientContext(contract.client_id)}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Prompt assembly                                                             */
+/* -------------------------------------------------------------------------- */
+
+/** What the person asking is looking at. Drives which record context is loaded. */
+export type PromptScope =
+  | { type: "global" }
+  | { type: "client"; id: string }
+  | { type: "proposal"; id: string }
+  | { type: "contract"; id: string };
+
+async function contextFor(scope: PromptScope): Promise<string> {
+  switch (scope.type) {
+    case "client":
+      return buildClientContext(scope.id);
+    case "proposal":
+      return buildProposalContext(scope.id);
+    case "contract":
+      return buildContractContext(scope.id);
+    case "global":
+      return buildWorkspaceContext();
+  }
+}
+
+/**
+ * Base prompt + house knowledge + whatever the person is looking at.
+ *
+ * A record context that fails to load is not fatal — the knowledge base is what
+ * keeps an answer correct about the deal, and a question about the programme
+ * itself deserves an answer even if one query is unhappy. A MISSING knowledge
+ * base is fatal, by design; see ./skill.ts.
+ */
+export async function buildScopedPrompt(scope: PromptScope): Promise<string> {
+  let context = "";
+  try {
+    context = await contextFor(scope);
+  } catch (err) {
+    console.error(`[crm/ai] ${scope.type} context failed to load`, err);
+    context = `\n\n---\n\nThe record context for this ${scope.type} could not be loaded. Say so if the question depends on it rather than answering from memory.`;
+  }
+  return withKnowledge(context);
+}
+
+/**
+ * The client-or-nothing form the existing surfaces use (proposal drafting,
+ * land-fit scoring). Passing no client gives the knowledge base with no record
+ * context, which is what land scoring wants when it is not scoped to anyone.
+ */
 export async function buildSystemPrompt(clientId?: string | null): Promise<string> {
-  return BASE_PROMPT + (clientId ? await buildClientContext(clientId) : "");
+  if (!clientId) return withKnowledge("");
+  return buildScopedPrompt({ type: "client", id: clientId });
 }
 
 /* -------------------------------------------------------------------------- */

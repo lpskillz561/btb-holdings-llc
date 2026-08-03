@@ -220,7 +220,15 @@ export type SavedParcelStatus = (typeof SAVED_PARCEL_STATUSES)[number];
 export const TODO_STATUSES = ["todo", "doing", "done"] as const;
 export type TodoStatus = (typeof TODO_STATUSES)[number];
 
-export const AI_SCOPES = ["global", "client"] as const;
+/**
+ * What a conversation is about. `global` is the whole workspace — the assistant
+ * opened on a list page, where the question is "which contracts are unsigned",
+ * not "how is this account doing". The rest are one record.
+ *
+ * There is no CHECK on `crm_conversations.scope_type`, so widening this is a
+ * code change only; an older row keeps whatever it was written with.
+ */
+export const AI_SCOPES = ["global", "client", "proposal", "contract"] as const;
 export type AiScope = (typeof AI_SCOPES)[number];
 
 /* -------------------------------------------------------------------------- */
@@ -320,6 +328,14 @@ export interface CrmProposal {
   valid_until: string | null;
   created_by: string | null;
   sent_at: string | null;
+
+  /**
+   * Withdrawn, not deleted. Deliberately NOT a status value — see ./archive.ts.
+   * Optional here because most callers never select it; the column always exists.
+   */
+  archived_at?: string | null;
+  archived_by?: string | null;
+
   created_at: string;
   updated_at: string;
 }
@@ -358,6 +374,10 @@ export interface CrmContract {
   collateral_location: string | null;
   body_md: string | null;
   generated_at: string | null;
+
+  /** As on CrmProposal — archived, never deleted. See ./archive.ts. */
+  archived_at?: string | null;
+  archived_by?: string | null;
 
   created_at: string;
   updated_at: string;

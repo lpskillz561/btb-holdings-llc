@@ -164,6 +164,44 @@ and `BASE_PROMPT` in `ai.ts` spells the two tests out — it used to teach the
   `h1`/`h2`/`h3` to one weight, which suits the AI panels they were written for
   and makes a contract unnavigable.
 
+### The house knowledge base — `src/lib/crm/knowledge/SKILL.md`
+
+**Everything above is in the prompt now, and it is in exactly one file.** Every
+AI surface — proposal drafting, land fit, the client advisor and the Ask AI panel
+on every `/crm` page — is assembled by `buildScopedPrompt` in `ai.ts` as
+`BASE_PROMPT` + `SKILL.md` + record context. `BASE_PROMPT` is now only role and
+register; the doctrine moved out of it.
+
+That split is the point. The tax case used to be stated twice — once in
+`BASE_PROMPT` and once in `docs/` — and the copy in the code taught the **7-day**
+§469 test, so every generated proposal described a deal we do not sell. Two
+copies that can disagree is the bug. **Add to `SKILL.md`, never to a prompt
+string.** Any `.md` in that directory is loaded, in filename order.
+
+- **`docs/` is not deployed, and `SKILL.md` is the substitute.** The PDFs and
+  DOCX are excluded from git and from the tarball, so the server has never seen
+  them. `SKILL.md` carries what they say. When the two disagree, `docs/` wins and
+  `SKILL.md` is wrong — fix it there.
+- **`loadSkill()` THROWS when the knowledge is missing**, deliberately. The
+  failure it guards is not an outage; it is the model answering confidently from
+  its own priors about "tiny home tax strategies" — a 7-day deal, a non-recourse
+  note, land the client owns — in prose that goes to a taxpayer and their CPA.
+- **`next.config.ts` must keep `outputFileTracingIncludes`.** Nothing imports the
+  `.md`, so Next's tracer cannot see it and a standalone build would ship without
+  it. Verify after a build: `find .next/standalone -path "*knowledge*" -name "*.md"`.
+- `SKILL.md` also records where the source documents contradict *themselves* —
+  the pro forma's 70% / 20 nights, its $1,562 against Schedule A's $1,520.83, the
+  deck's FULL PURCHASE column, the Management Agreement's "12 months … 2025 to
+  2030". The model is told to name those rather than launder them.
+- **A conversation is scoped on the row** (`crm_conversations.scope_type` /
+  `scope_id`: global, client, proposal, contract) and the prompt is rebuilt from
+  the *thread's* scope every turn, not the caller's — reopening a client thread
+  from a list page must still answer about that client. There is no `CHECK` on
+  that column, so widening `AI_SCOPES` is a code change only.
+- There is **no `/crm/contracts/[id]` page**, only `/print`, so the contract
+  scope is wired but unreachable from a URL today. Contracts are still fully
+  answerable: they are in both the client and the workspace context.
+
 ## Two looks, on purpose
 
 **Internal screens are Salesforce Lightning. Client documents are not.**

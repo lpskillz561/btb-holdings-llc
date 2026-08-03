@@ -1,28 +1,51 @@
-// The client-scoped AI advisor.
+// The AI advisor, in whatever the person is looking at.
 //
 // Same model and key as the rest of the site; what differs is that the system
-// prompt is rebuilt from the client's record on EVERY turn rather than being
-// baked into the conversation when it started. Records change mid-conversation
-// — a unit gets placed in service, a proposal is accepted — and an advisor
-// answering from a stale snapshot of the account is worse than no advisor.
+// prompt is rebuilt from the record on EVERY turn rather than being baked into
+// the conversation when it started. Records change mid-conversation — a unit
+// gets placed in service, a proposal is accepted — and an advisor answering
+// from a stale snapshot of the account is worse than no advisor.
+//
+// A conversation is scoped: to one client, one proposal, one contract, or to
+// the workspace as a whole. The scope is stored on the row rather than passed
+// per turn, so reopening a thread from the sidebar reloads the same context it
+// was answering with. The workspace assistant that rides on every /crm page
+// picks its scope from the URL — see components/crm/AskAi.tsx.
 
 import { CrmError, newId, nowIso, query, queryOne } from "./db";
-import { MODEL, buildSystemPrompt, getOpenAI, isAiConfigured } from "./ai";
-import type { CrmConversation, CrmMessage } from "./types";
+import { MODEL, buildScopedPrompt, getOpenAI, isAiConfigured, type PromptScope } from "./ai";
+import { AI_SCOPES, type AiScope, type CrmConversation, type CrmMessage } from "./types";
 
 /** Turns of history replayed to the model. Older turns stay in the DB and in the UI. */
 const HISTORY_LIMIT = 24;
 
-export async function listConversations(clientId: string | null): Promise<CrmConversation[]> {
-  return clientId
+export function isAiScope(value: unknown): value is AiScope {
+  return typeof value === "string" && (AI_SCOPES as readonly string[]).includes(value);
+}
+
+/**
+ * A scope as it arrives from a request, normalised.
+ *
+ * Anything record-scoped without an id collapses to `global` rather than
+ * erroring: the assistant is open on every page, and a thread the model can
+ * still answer generally is better than a panel that refuses to talk.
+ */
+export function toPromptScope(scopeType: unknown, scopeId: unknown): PromptScope {
+  const id = typeof scopeId === "string" && scopeId.trim() ? scopeId.trim() : null;
+  if (!isAiScope(scopeType) || scopeType === "global" || !id) return { type: "global" };
+  return { type: scopeType, id };
+}
+
+export async function listConversations(scope: PromptScope): Promise<CrmConversation[]> {
+  return scope.type === "global"
     ? query<CrmConversation>(
-        `SELECT * FROM crm_conversations WHERE scope_type = 'client' AND scope_id = $1
-         ORDER BY updated_at DESC LIMIT 50`,
-        [clientId],
-      )
-    : query<CrmConversation>(
         `SELECT * FROM crm_conversations WHERE scope_type = 'global'
          ORDER BY updated_at DESC LIMIT 50`,
+      )
+    : query<CrmConversation>(
+        `SELECT * FROM crm_conversations WHERE scope_type = $1 AND scope_id = $2
+         ORDER BY updated_at DESC LIMIT 50`,
+        [scope.type, scope.id],
       );
 }
 
@@ -34,7 +57,7 @@ export async function getMessages(conversationId: string): Promise<CrmMessage[]>
 }
 
 async function createConversation(
-  clientId: string | null,
+  scope: PromptScope,
   firstMessage: string,
 ): Promise<CrmConversation> {
   const id = newId();
@@ -44,7 +67,7 @@ async function createConversation(
   const row = await queryOne<CrmConversation>(
     `INSERT INTO crm_conversations (id, scope_type, scope_id, title, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $5) RETURNING *`,
-    [id, clientId ? "client" : "global", clientId, title, ts],
+    [id, scope.type, scope.type === "global" ? null : scope.id, title, ts],
   );
   if (!row) throw new CrmError("Could not start the conversation.", 500);
   return row;
@@ -77,7 +100,7 @@ export interface AdvisorReply {
  * rather than starting from nothing.
  */
 export async function sendAdvisorMessage(args: {
-  clientId: string | null;
+  scope: PromptScope;
   conversationId: string | null;
   content: string;
 }): Promise<AdvisorReply> {
@@ -98,14 +121,16 @@ export async function sendAdvisorMessage(args: {
     );
     if (!conversation) throw new CrmError("Conversation not found.", 404);
   } else {
-    conversation = await createConversation(args.clientId, content);
+    conversation = await createConversation(args.scope, content);
   }
 
   await addMessage(conversation.id, "user", content);
 
   const history = await getMessages(conversation.id);
-  const system = await buildSystemPrompt(
-    conversation.scope_type === "client" ? conversation.scope_id : null,
+  // The thread's OWN scope, not the caller's. Reopening a client thread from a
+  // list page must still answer about that client.
+  const system = await buildScopedPrompt(
+    toPromptScope(conversation.scope_type, conversation.scope_id),
   );
 
   // No `temperature` — see structuredChat in ./ai: newer models 400 on any
@@ -117,7 +142,7 @@ export async function sendAdvisorMessage(args: {
         role: "system",
         content: `${system}
 
-You are answering the Ziora team member who owns this relationship — an internal audience, not the client. Be candid about weaknesses in the deal.
+---
 
 Format in Markdown: short headings, tight bullets, tables where a comparison genuinely helps. Do not calculate dollar figures; work from the ones in the record above and describe anything else in words. If something you need isn't in the record, ask one pointed question rather than guessing at length.`,
       },

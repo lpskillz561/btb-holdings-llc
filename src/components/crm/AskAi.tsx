@@ -1,0 +1,428 @@
+"use client";
+
+/**
+ * The assistant that rides on every /crm page.
+ *
+ * Mounted from app/crm/layout.tsx, which is what makes it persistent: a layout
+ * is not re-rendered when a child segment changes, so the panel stays open and
+ * the thread stays on screen while you click from Overview to a client card to
+ * a contract. Move this into a page and every navigation closes it.
+ *
+ * The scope comes from the URL, so the assistant is looking at whatever you are:
+ * a client card asks about that client, a proposal about that proposal, a list
+ * page about the whole book. The server resolves the scope into record context
+ * on every turn — see lib/crm/ai.ts — so nothing here needs to know what a
+ * proposal contains.
+ *
+ * Every answer is grounded in src/lib/crm/knowledge/SKILL.md, which is prepended
+ * to the system prompt of this and every other AI surface.
+ */
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Markdown } from "@/components/Markdown";
+import { fmtAgo } from "@/lib/crm/format";
+import type { CrmConversation, CrmMessage } from "@/lib/crm/types";
+import { apiGet, apiPost, qs } from "./api";
+import { ErrorNote } from "./ui";
+
+type ScopeType = "global" | "client" | "proposal" | "contract";
+
+interface Scope {
+  type: ScopeType;
+  id: string | null;
+  label: string;
+  starters: string[];
+}
+
+const GLOBAL_STARTERS = [
+  "Which contracts are still unsigned?",
+  "Where is the pipeline concentrated right now?",
+  "How much pad capacity is left, and where?",
+  "Explain the structure the way I'd say it to a CPA.",
+];
+
+/**
+ * URL → scope. A detail route is `/crm/<section>/<id>`; anything shorter, or a
+ * section without a record, is the workspace.
+ *
+ * The `contracts` branch is wired but not reachable today: there is no
+ * `/crm/contracts/[id]` page, only `/crm/contracts/[id]/print`, and the panel
+ * never renders on a print route. Contracts are still fully answerable — they
+ * are part of both the client context and the workspace context in lib/crm/ai.ts
+ * — and this branch starts working the day a contract detail page exists.
+ */
+function scopeFrom(pathname: string): Scope {
+  const [, , section, id] = pathname.split("/");
+  const record = id && id !== "new" ? id : null;
+
+  if (record && section === "clients") {
+    return {
+      type: "client",
+      id: record,
+      label: "This client",
+      starters: [
+        "What's the strongest case I can honestly make to this client?",
+        "What will their CPA push back on first?",
+        "What's missing from this account before I can send a proposal?",
+        "Given what they own already, what should we propose next?",
+      ],
+    };
+  }
+  if (record && section === "proposals") {
+    return {
+      type: "proposal",
+      id: record,
+      label: "This proposal",
+      starters: [
+        "Walk me through these numbers the way the client will hear them.",
+        "What will their CPA question in this proposal?",
+        "Is the deduction leverage here in line with the rest of the book?",
+        "What has to happen before this becomes a contract set?",
+      ],
+    };
+  }
+  if (record && section === "contracts") {
+    return {
+      type: "contract",
+      id: record,
+      label: "This contract",
+      starters: [
+        "Explain this document's key terms in plain English.",
+        "Is this execution set complete?",
+        "What happens if the rent doesn't cover the note?",
+        "What does the client actually own when this is signed?",
+      ],
+    };
+  }
+  return { type: "global", id: null, label: "Whole workspace", starters: GLOBAL_STARTERS };
+}
+
+export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
+  const pathname = usePathname();
+  const scope = scopeFrom(pathname);
+  const scopeKey = `${scope.type}:${scope.id ?? ""}`;
+
+  const [open, setOpen] = useState(false);
+  const [conversations, setConversations] = useState<CrmConversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<CrmMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const [showThreads, setShowThreads] = useState(false);
+  const endRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Cmd/Ctrl+K anywhere in the CRM. Bound on the window rather than a field so
+  // it works without the panel having focus, which is the whole point of it.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpen((v) => !v);
+      } else if (e.key === "Escape") {
+        setOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // A new record is a new subject. Drop the thread rather than carrying one
+  // client's conversation onto another client's card.
+  useEffect(() => {
+    setActiveId(null);
+    setMessages([]);
+    setError("");
+    setShowThreads(false);
+    setConversations([]);
+    if (!aiEnabled || !open) return;
+    let cancelled = false;
+    apiGet<CrmConversation[]>(
+      `/api/crm/advisor${qs({ scope_type: scope.type, scope_id: scope.id })}`,
+    )
+      .then((rows) => {
+        if (!cancelled) setConversations(rows);
+      })
+      .catch(() => {
+        // A failed history load must not block asking a new question.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scopeKey, open, aiEnabled, scope.type, scope.id]);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, sending]);
+
+  const send = useCallback(
+    async (content: string) => {
+      const text = content.trim();
+      if (!text || sending) return;
+      setSending(true);
+      setError("");
+      setInput("");
+
+      // Shown immediately. The server persists the question before it calls the
+      // model, so this optimistic row always matches what was stored.
+      const optimistic: CrmMessage = {
+        id: `pending-${Date.now()}`,
+        conversation_id: activeId ?? "",
+        role: "user",
+        content: text,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((current) => [...current, optimistic]);
+
+      try {
+        const reply = await apiPost<{ conversation: CrmConversation; messages: CrmMessage[] }>(
+          "/api/crm/advisor",
+          {
+            scope_type: scope.type,
+            scope_id: scope.id,
+            conversation_id: activeId,
+            content: text,
+          },
+        );
+        setMessages(reply.messages);
+        setActiveId(reply.conversation.id);
+        setConversations((current) =>
+          current.some((c) => c.id === reply.conversation.id)
+            ? current.map((c) => (c.id === reply.conversation.id ? reply.conversation : c))
+            : [reply.conversation, ...current],
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "The assistant could not answer.");
+        setMessages((current) => current.filter((m) => m.id !== optimistic.id));
+        setInput(text);
+      } finally {
+        setSending(false);
+      }
+    },
+    [activeId, scope.id, scope.type, sending],
+  );
+
+  async function openThread(id: string) {
+    setShowThreads(false);
+    setActiveId(id);
+    setMessages(await apiGet<CrmMessage[]>(`/api/crm/advisor${qs({ conversation_id: id })}`));
+  }
+
+  // The print routes are the client's document, not a screen of ours. Same rule
+  // as CrmChrome — nothing of the application's furniture belongs on them.
+  if (pathname.endsWith("/print")) return null;
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Ask the advisor (⌘K)"
+        className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-sf-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-navy-950/20 transition hover:bg-sf-600"
+      >
+        <AskIcon />
+        Ask AI
+      </button>
+    );
+  }
+
+  return (
+    <>
+      {/* Dimmer. Deliberately click-through-free: an accidental click outside
+          shouldn't discard a half-typed question, so it closes on purpose. */}
+      <div
+        aria-hidden
+        onClick={() => setOpen(false)}
+        className="fixed inset-0 z-40 bg-navy-950/20"
+      />
+
+      <aside
+        role="dialog"
+        aria-label="Ask the advisor"
+        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-ink-200 bg-white shadow-2xl"
+      >
+        <header className="flex items-center justify-between gap-3 border-b border-ink-200 bg-navy-950 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-paper-50">Ask AI</p>
+            <p className="truncate text-xs text-paper-50/60">
+              {scope.label} · answers from the house knowledge base
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowThreads((v) => !v)}
+              className="rounded-md px-2 py-1 text-xs text-paper-50/70 transition hover:bg-white/10 hover:text-gold-400"
+            >
+              History
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveId(null);
+                setMessages([]);
+                setShowThreads(false);
+              }}
+              className="rounded-md px-2 py-1 text-xs text-paper-50/70 transition hover:bg-white/10 hover:text-gold-400"
+            >
+              New
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Close"
+              className="rounded-md px-2 py-1 text-lg leading-none text-paper-50/70 transition hover:bg-white/10 hover:text-paper-50"
+            >
+              ×
+            </button>
+          </div>
+        </header>
+
+        {showThreads ? (
+          <div className="max-h-56 overflow-y-auto border-b border-ink-200 bg-ink-100">
+            {conversations.length === 0 ? (
+              <p className="px-4 py-3 text-sm text-ink-500">No earlier threads here.</p>
+            ) : (
+              <ul>
+                {conversations.map((conversation) => (
+                  <li key={conversation.id}>
+                    <button
+                      type="button"
+                      onClick={() => void openThread(conversation.id)}
+                      className={`w-full px-4 py-2 text-left text-sm transition hover:bg-white ${
+                        conversation.id === activeId ? "bg-white font-medium" : ""
+                      }`}
+                    >
+                      <span className="line-clamp-1 text-ink-800">{conversation.title}</span>
+                      <span className="text-xs text-ink-500">{fmtAgo(conversation.updated_at)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          {!aiEnabled ? (
+            <p className="text-sm text-ink-600">
+              The assistant is unavailable — <code>OPENAI_API_KEY</code> is not set on the web
+              service. Add it to the environment and redeploy to enable this, proposal drafting
+              and land-fit assessment.
+            </p>
+          ) : messages.length === 0 && !sending ? (
+            <div>
+              <p className="text-sm text-ink-600">
+                Ask about clients, proposals, contracts, land or the structure itself. Answers are
+                grounded in the programme&rsquo;s own legal opinion, executed agreements and pro
+                forma — and the assistant never calculates a figure, it reports the ones on the
+                record.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {scope.starters.map((starter) => (
+                  <button
+                    key={starter}
+                    type="button"
+                    onClick={() => void send(starter)}
+                    className="rounded-full border border-ink-200 px-3 py-1.5 text-left text-xs text-ink-700 transition hover:border-sf-500 hover:text-sf-600"
+                  >
+                    {starter}
+                  </button>
+                ))}
+              </div>
+              {scope.type !== "global" ? (
+                <p className="mt-4 text-xs text-ink-500">
+                  Scoped to the record you are on.{" "}
+                  <Link href="/crm" className="text-sf-600 underline">
+                    Go to Overview
+                  </Link>{" "}
+                  to ask about the whole book instead.
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
+              >
+                <div
+                  className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+                    message.role === "user"
+                      ? "bg-sf-500 text-white"
+                      : "bg-ink-100 text-ink-800"
+                  }`}
+                >
+                  {message.role === "user" ? (
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  ) : (
+                    <Markdown>{message.content}</Markdown>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+          {sending && (
+            <p className="text-sm text-ink-500" role="status">
+              Thinking…
+            </p>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        <div className="border-t border-ink-200 p-3">
+          <ErrorNote>{error}</ErrorNote>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void send(input);
+            }}
+            className="mt-2 flex gap-2"
+          >
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter sends; Shift+Enter is a newline, as everywhere else.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void send(input);
+                }
+              }}
+              rows={2}
+              disabled={!aiEnabled}
+              placeholder="Ask about clients, proposals, contracts…"
+              className="field flex-1 resize-none"
+            />
+            <button
+              type="submit"
+              className="sf-btn-brand self-end"
+              disabled={!aiEnabled || sending || !input.trim()}
+            >
+              Send
+            </button>
+          </form>
+          <p className="mt-2 text-[0.7rem] text-ink-500">
+            Internal tool. Not tax advice — the client&rsquo;s CPA confirms the position.
+          </p>
+        </div>
+      </aside>
+    </>
+  );
+}
+
+function AskIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden className="h-4 w-4" fill="currentColor">
+      <path d="M10 2a8 8 0 0 0-6.9 12.03L2 18l4.1-1.06A8 8 0 1 0 10 2Zm0 3.4c1.6 0 2.8 1 2.8 2.4 0 1.1-.6 1.7-1.5 2.3-.6.4-.8.7-.8 1.2v.3H8.8v-.4c0-1 .4-1.6 1.3-2.2.7-.5 1-.8 1-1.3 0-.6-.5-1-1.2-1s-1.2.4-1.3 1.1H7C7.1 6.4 8.3 5.4 10 5.4Zm-.6 7.3h1.4v1.4H9.4v-1.4Z" />
+    </svg>
+  );
+}

@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { AskAi } from "@/components/crm/AskAi";
 import { CrmChrome } from "@/components/crm/CrmChrome";
 import { NavProgress } from "@/components/crm/NavProgress";
 import { getCrmPageUser, isSuperUser } from "@/lib/crm/access";
+import { isAiConfigured } from "@/lib/crm/ai";
 
 /**
  * The internal application shell.
@@ -24,6 +26,12 @@ import { getCrmPageUser, isSuperUser } from "@/lib/crm/access";
  *    until the next one is ready, and `NavProgress` is what says so meanwhile.
  *    See that file before adding one back.
  *
+ * `AskAi` is here for the same reason as the chrome, and it is the stronger
+ * case: a conversation is not something to discard because someone opened
+ * another tab. Mounted from the layout it survives every navigation, and it
+ * re-scopes itself from the URL so the assistant is always looking at whatever
+ * the person is looking at.
+ *
  * The print routes (/crm/*\/print) are nested here too and are deliberately
  * unaffected — `CrmChrome` renders nothing for them, they set their own type,
  * and the @media print rules drop the background, so a client document still
@@ -44,6 +52,7 @@ export default async function CrmLayout({ children }: { children: ReactNode }) {
         </>
       ) : null}
       {children}
+      {user ? <AskAi aiEnabled={isAiConfigured()} /> : null}
     </div>
   );
 }
