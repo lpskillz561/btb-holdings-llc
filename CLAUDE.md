@@ -480,6 +480,19 @@ reconnaissance.
 Account `761540266321`, region `us-east-1`, profile `ziora`. **Never accept
 pasted access keys** — use the configured CLI profile.
 
+**`ziora` is an ALIAS of `default` on this machine**, not a separate identity:
+both sections hold the same long-lived key for IAM user `jarrett`. It exists
+because every command in this file, `README.md`, `docs/AWS-MIGRATION.md` and
+`infra/etl/README.md` is written `--profile ziora`, and only `default` was
+configured — so all nine of them failed with "config profile could not be
+found". `source_profile = default` does **not** work for this: without a
+`role_arn` there is nothing to assume, and the CLI reports `NoCredentials`
+rather than falling back.
+
+The cost is that the key is in **two places**. Rotating it means writing both
+`[default]` and `[ziora]`, and missing the second is silent until the next
+deploy fails to authenticate.
+
 Live at **https://btbholdingsllc.com**. `btb-crm-core` (VPC, subnets, security
 groups, Aurora 17.10 Serverless v2) and `btb-crm-app` (instance role, EC2 ARM,
 ALB, listeners, Route53) are both up; the ACM cert is issued. See
