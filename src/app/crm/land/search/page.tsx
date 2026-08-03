@@ -13,6 +13,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RecordHeader } from "@/components/crm/RecordHeader";
+import { AssessSite } from "@/components/crm/AssessSite";
 import { Badge, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { fmtAcres, fmtMoney, fmtMoneyShort, fmtNum } from "@/lib/crm/format";
@@ -240,7 +241,7 @@ export default async function LandSearchPage({
                 <EmptyState>Nothing in this county matched those filters.</EmptyState>
               ) : (
                 <div className="sf-card">
-                  <Table head={["Parcel", "Acres", "Assessed", "Pads it fits", "Land per pad", "Owner"]}>
+                  <Table head={["Parcel", "Acres", "Assessed", "Pads it fits", "Land per pad", "Owner", ""]}>
                     {results.rows.slice(0, 25).map((row) => {
                       const fit = siteFit(
                         row.acres,
@@ -265,6 +266,14 @@ export default async function LandSearchPage({
                               : fmtMoney(fit.landCostPerPadCents)}
                           </Td>
                           <Td className="text-ink-600">{row.owner ?? "—"}</Td>
+                          <Td className="align-top">
+                            {row.parcelId ? (
+                              <AssessSite
+                                parcelKey={row.parcelId}
+                                label={row.oneLine ?? row.parcelId}
+                              />
+                            ) : null}
+                          </Td>
                         </tr>
                       );
                     })}

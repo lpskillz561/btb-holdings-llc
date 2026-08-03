@@ -12,6 +12,12 @@ import { lookupProperty, searchArea, type AreaSearchResult, type SortKey } from 
 import { CrmError, logActivity, newId, nowIso, query, queryOne, str } from "./db";
 import { buildSystemPrompt, isAiConfigured, structuredChat } from "./ai";
 import { fmtAcres, fmtMoney } from "./format";
+import {
+  MIN_VIABLE_PADS,
+  PAD_FOOTPRINT_SQFT,
+  USABLE_SHARE_BPS,
+  siteFit,
+} from "./siteScore";
 import { getClient } from "./clients";
 import type { CrmClient, CrmSavedParcel } from "./types";
 
@@ -319,4 +325,128 @@ export async function assessParcelFit(
     ]);
   }
   return fit;
+}
+
+/* -------------------------------------------------------------------------- */
+/* BTB's own land — is this a park site?                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The same read, asked the other question.
+ *
+ * `assessParcelFit` above judges a parcel against ONE CLIENT's criteria, and
+ * needs the parcel already shortlisted for them. Under the current model the
+ * client never buys ground — BTB does — so the global land search needs a
+ * different question entirely: would this make a park? Different facts,
+ * different brief, same hard limits on what an assessment roll can tell you.
+ *
+ * Deliberately NOT cached. The client version caches on the saved row because a
+ * shortlist gets re-opened; this one is a button someone presses on a specific
+ * row they are already looking at, so a cache would be a table to maintain for
+ * a cost nobody is paying twice.
+ */
+const SITE_BRIEF = `Assess this parcel as a site for BTB to BUY and develop into a tiny-home park.
+
+BTB owns the land. Clients buy only the home, which stands on a numbered pad BTB provides and manages. So the question is not "is this good land" in the abstract — it is whether this parcel would carry enough pads, at a land cost per pad that leaves the programme's economics intact.
+
+Judge it on:
+- The pad capacity and land-cost-per-pad figures supplied below. They are ALREADY CALCULATED — use them exactly and never recompute or restate a dollar figure.
+- Whether the parcel clears the minimum viable pad count, and by how much. A site one pad over the line is not the same as one with room to phase.
+- Whether the land classification and assessed value are consistent with genuinely unimproved ground rather than something already built on.
+- Shape and scale risk you can reason about in words: a very large acreage at a low value per acre may be remote or unusable, and a small high-value lot may be priced as development land already.
+
+Hard limits on what you can see: county assessment-roll data only. You do NOT have zoning, permitted use, utility availability, road access, flood zone, topography, wetlands, deed restrictions, short-term-rental rules, or whether the owner will sell. Those decide whether a park is possible at all, so route every one of them to dataGaps and nextSteps rather than assuming them. An assessed value is not a market price and not an asking price.
+
+Be willing to say "Poor fit". A search that likes everything tells nobody anything.`;
+
+/** Split "FL:64:1234-56" into its parts. Returns null on anything malformed. */
+function splitParcelKey(key: string): { state: string; coNo: number; parcelId: string } | null {
+  const parts = String(key ?? "").split(":");
+  if (parts.length < 3) return null;
+  const [state, coNo, ...rest] = parts;
+  const n = Number(coNo);
+  if (!state || !Number.isFinite(n)) return null;
+  // Rejoin the remainder: a parcel id may itself contain a colon.
+  return { state: state.toUpperCase(), coNo: n, parcelId: rest.join(":") };
+}
+
+interface ParcelRow {
+  state: string;
+  county: string | null;
+  parcel_id: string;
+  one_line: string | null;
+  owner_name: string | null;
+  use_label: string | null;
+  is_land: boolean | null;
+  acres: number | null;
+  jv: number | null;
+  lnd_val: number | null;
+}
+
+export async function assessParkSite(parcelKey: string): Promise<ParcelFit> {
+  if (!isAiConfigured()) {
+    throw new CrmError(
+      "AI assessment is unavailable: OPENAI_API_KEY is not set on the web service.",
+      503,
+    );
+  }
+
+  const key = splitParcelKey(parcelKey);
+  if (!key) throw new CrmError("That parcel reference is not valid.", 400);
+
+  // Looked up server-side rather than trusted from the browser: the figures the
+  // model reasons from must come from the database, not from a form field.
+  const parcel = await queryOne<ParcelRow>(
+    `SELECT state, county, parcel_id, one_line, owner_name, use_label, is_land, acres, jv, lnd_val
+       FROM parcels WHERE state = $1 AND co_no = $2 AND parcel_id = $3 LIMIT 1`,
+    [key.state, key.coNo, key.parcelId],
+  );
+  if (!parcel) throw new CrmError("That parcel is not in the database.", 404);
+
+  // `parcels` is the ETL's table and its numerics come back as STRINGS —
+  // node-postgres renders NUMERIC that way (same trap as the money aggregates
+  // in CLAUDE.md). Skipping this coercion is not a formatting bug: siteFit
+  // tests `typeof acres === "number"`, so a 640-acre parcel silently scored
+  // ZERO pads and the model confidently advised rejecting it. lib/parcels.ts
+  // coerces for exactly this reason.
+  const toNum = (v: unknown): number | null => {
+    if (v === null || v === undefined) return null;
+    const n = typeof v === "number" ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const acres = toNum(parcel.acres);
+  const jv = toNum(parcel.jv);
+  const lndVal = toNum(parcel.lnd_val);
+
+  // Assessment-roll money is whole dollars; the CRM is cents.
+  const assessedCents = jv != null ? Math.round(jv * 100) : null;
+  const landValueCents = lndVal != null ? Math.round(lndVal * 100) : null;
+  const fit = siteFit(acres, landValueCents ?? assessedCents);
+
+  const facts = [
+    `Parcel: ${parcel.one_line ?? parcel.parcel_id}`,
+    `County: ${parcel.county ?? "unknown"}, ${parcel.state}`,
+    `Owner of record: ${parcel.owner_name ?? "not recorded"}`,
+    `Assessment classification: ${parcel.use_label ?? "not recorded"}${parcel.is_land ? " (flagged as land)" : ""}`,
+    `Lot size: ${fmtAcres(acres)}`,
+    `Assessed total: ${assessedCents == null ? "not recorded" : fmtMoney(assessedCents)}`,
+    `Assessed land value: ${landValueCents == null ? "not recorded" : fmtMoney(landValueCents)}`,
+    "",
+    "## Pad economics — ALREADY CALCULATED. Use exactly these; never recompute.",
+    `- Usable area assumed: ${USABLE_SHARE_BPS() / 100}% of the lot`,
+    `- Pad footprint assumed: ${PAD_FOOTPRINT_SQFT().toLocaleString()} sq ft including access and setback`,
+    `- Pads this parcel would carry: ${fit.padsThatFit}`,
+    `- Minimum pad count considered viable: ${MIN_VIABLE_PADS()}`,
+    `- Clears that minimum: ${fit.viable ? "yes" : "no"}`,
+    `- Land cost per pad: ${fit.landCostPerPadCents == null ? "cannot be computed — no assessed value" : fmtMoney(fit.landCostPerPadCents)}`,
+  ].join("\n");
+
+  const system = await buildSystemPrompt(null);
+  return structuredChat<ParcelFit>(
+    [
+      { role: "system", content: system },
+      { role: "user", content: `${SITE_BRIEF}\n\n## The parcel\n${facts}` },
+    ],
+    FIT_SCHEMA,
+  );
 }
