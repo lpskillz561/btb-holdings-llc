@@ -25,11 +25,22 @@ import {
   rankCounties,
   siteFit,
 } from "@/lib/crm/siteScore";
-import { STATE_NAMES, listStates, searchArea } from "@/lib/parcels";
+import { SORT_OPTIONS, STATE_NAMES, isSortKey, listStates, searchArea, type SortKey } from "@/lib/parcels";
 
 export const metadata: Metadata = {
   title: "Land search",
   robots: { index: false, follow: false },
+};
+
+const SORT_LABELS: Record<SortKey, string> = {
+  acres_desc: "Lot size: largest first",
+  acres_asc: "Lot size: smallest first",
+  assessed_desc: "Assessed value: high to low",
+  assessed_asc: "Assessed value: low to high",
+  sale_desc: "Last sale price: high to low",
+  sale_asc: "Last sale price: low to high",
+  sold_newest: "Last sold: newest first",
+  sold_oldest: "Last sold: oldest first",
 };
 
 export const dynamic = "force-dynamic";
@@ -42,6 +53,8 @@ export default async function LandSearchPage({
     minAcres?: string;
     maxPrice?: string;
     county?: string;
+    sort?: string;
+    page?: string;
   }>;
 }) {
   const user = await getCrmPageUser();
@@ -52,6 +65,10 @@ export default async function LandSearchPage({
   const minAcres = Number(sp.minAcres) > 0 ? Number(sp.minAcres) : 5;
   const maxPrice = Number(sp.maxPrice) > 0 ? Number(sp.maxPrice) : undefined;
   const wantCounty = (sp.county ?? "").trim();
+  // Largest-first is the useful default when you are hunting for room to build,
+  // but assessed value is what someone screening on price wants.
+  const sort: SortKey = isSortKey(sp.sort) ? sp.sort : "acres_desc";
+  const page = Math.max(1, Number(sp.page) || 1);
 
   const availability = await parcelsAvailable();
 
@@ -92,23 +109,40 @@ export default async function LandSearchPage({
       ? counties.find((c) => c.county.toLowerCase() === wantCounty.toLowerCase())
       : undefined) ?? counties[0];
   const results = focus
-    ? await searchArea(`${focus.county}, ${focus.state}`, 1, {
+    ? await searchArea(`${focus.county}, ${focus.state}`, page, {
         landOnly: true,
         minAcres,
         maxPrice,
-        sort: "acres_desc",
+        sort,
       }).catch(() => null)
     : null;
 
-  /** Preserve the current filters when linking to another county. */
-  const countyHref = (county: string) => {
+  /**
+   * Every link on this page rebuilds the whole query.
+   *
+   * Paging that dropped the county, or a county link that dropped the sort,
+   * would silently change the search someone is reading — so state lives in one
+   * builder rather than being reassembled per link.
+   */
+  const hrefWith = (over: Record<string, string | number | undefined>) => {
     const qs = new URLSearchParams();
-    if (state) qs.set("state", state);
-    if (sp.minAcres) qs.set("minAcres", String(minAcres));
-    if (maxPrice) qs.set("maxPrice", String(maxPrice));
-    qs.set("county", county);
-    return `/crm/land/search?${qs.toString()}`;
+    const base: Record<string, string | number | undefined> = {
+      state: state ?? undefined,
+      minAcres: sp.minAcres ? minAcres : undefined,
+      maxPrice: maxPrice,
+      county: wantCounty || undefined,
+      sort: sort !== "acres_desc" ? sort : undefined,
+      page: page > 1 ? page : undefined,
+      ...over,
+    };
+    for (const [k, v] of Object.entries(base)) {
+      if (v !== undefined && v !== "" && v !== null) qs.set(k, String(v));
+    }
+    const q = qs.toString();
+    return q ? `/crm/land/search?${q}` : "/crm/land/search";
   };
+  // Changing the county or the sort starts the results again from page one.
+  const countyHref = (county: string) => hrefWith({ county, page: undefined });
 
   return (
     <>
@@ -160,8 +194,35 @@ export default async function LandSearchPage({
               <input id="maxPrice" name="maxPrice" type="number" min="0" step="1000"
                      defaultValue={maxPrice ?? ""} placeholder="any" className="sf-input w-40" />
             </div>
+            <div>
+              <label className="sf-label" htmlFor="sort">Sort by</label>
+              <select id="sort" name="sort" defaultValue={sort} className="sf-input">
+                {(Object.keys(SORT_OPTIONS) as SortKey[]).map((key) => (
+                  <option key={key} value={key}>
+                    {SORT_LABELS[key]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {/* Keep the open county when the filters change; a new search should
+                not silently throw you back to the top-ranked one. */}
+            {wantCounty && <input type="hidden" name="county" value={wantCounty} />}
             <button type="submit" className="sf-btn-brand">Search</button>
           </form>
+
+          {/* The manual half of land sourcing. Someone finds a listing on Zillow
+              that no assessment roll knows is for sale — this says where it goes,
+              because a feature nobody can find is one nobody uses. */}
+          <p className="rounded border border-sf-200 bg-sf-50 px-4 py-3 text-sm text-ink-700">
+            <strong className="text-ink-900">Found something on Zillow?</strong> This searches the
+            assessment roll, which knows what exists but not what is for sale. Paste a Zillow,
+            LandWatch or agent link into{" "}
+            <Link href="/crm/land/prospects" className="font-semibold text-sf-600 hover:underline">
+              Saved listings
+            </Link>{" "}
+            to keep it with the rest of the pipeline, where everyone signed in can see it and weigh
+            in.
+          </p>
 
           {/* ---- the suggestion ---- */}
           <div>
@@ -234,15 +295,16 @@ export default async function LandSearchPage({
                 Candidate parcels in {focus.county}, {focus.state}
               </h2>
               <p className="mb-3 mt-1 text-sm text-ink-600">
-                Land-only parcels of at least {minAcres} acres, largest first.{" "}
-                {fmtNum(results.total)} match.
+                Land-only parcels of at least {minAcres} acres, {SORT_LABELS[sort].toLowerCase()}.{" "}
+                {fmtNum(results.total)} match — showing {fmtNum((page - 1) * results.pageSize + 1)}
+                –{fmtNum((page - 1) * results.pageSize + results.rows.length)}.
               </p>
               {results.rows.length === 0 ? (
                 <EmptyState>Nothing in this county matched those filters.</EmptyState>
               ) : (
                 <div className="sf-card">
                   <Table head={["Parcel", "Acres", "Assessed", "Pads it fits", "Land per pad", "Owner", ""]}>
-                    {results.rows.slice(0, 25).map((row) => {
+                    {results.rows.map((row) => {
                       const fit = siteFit(
                         row.acres,
                         row.assessedTotal ? row.assessedTotal * 100 : null,
@@ -278,6 +340,26 @@ export default async function LandSearchPage({
                       );
                     })}
                   </Table>
+                </div>
+              )}
+
+              {(page > 1 || results.hasNext) && (
+                <div className="mt-3 flex items-center justify-between">
+                  {page > 1 ? (
+                    <Link href={hrefWith({ page: page - 1 })} className="sf-btn-neutral">
+                      ← Previous
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+                  <span className="sf-meta">Page {fmtNum(page)}</span>
+                  {results.hasNext ? (
+                    <Link href={hrefWith({ page: page + 1 })} className="sf-btn-neutral">
+                      Next →
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
                 </div>
               )}
             </div>
