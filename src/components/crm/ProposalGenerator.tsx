@@ -25,6 +25,8 @@ import {
 } from "./ui";
 
 export interface ProposalDefaults {
+  /** Deposit as a share of the price, in bps. 1000 = 10%. */
+  depositBps: number;
   marginalRateBps: number;
   bonusRateBps: number;
   usefulLifeYears: number;
@@ -62,9 +64,8 @@ export function ProposalGenerator({
       : "",
     site_work: "",
     soft_costs: "",
-    land_cost: "",
     down_payment: client.target_writeoff_cents
-      ? String(Math.round(client.target_writeoff_cents / 10 / 100))
+      ? String(Math.round((client.target_writeoff_cents * defaults.depositBps) / 10_000 / 100))
       : "",
     monthly_rent: "",
     unit_use: "long_term_rental" as UnitUse,
@@ -100,9 +101,11 @@ export function ProposalGenerator({
         const investment =
           (Number(next.unit_count.replace(/[,\s]/g, "")) || 0) * dollars(next.unit_cost) +
           dollars(next.site_work) +
-          dollars(next.soft_costs) +
-          dollars(next.land_cost);
-        next.down_payment = investment > 0 ? String(Math.round(investment / 10)) : "";
+          dollars(next.soft_costs);
+        next.down_payment =
+          investment > 0
+            ? String(Math.round((investment * defaults.depositBps) / 10_000))
+            : "";
       }
       return next;
     });
@@ -115,7 +118,7 @@ export function ProposalGenerator({
         unitCostCents: toCents(form.unit_cost),
         siteWorkCents: toCents(form.site_work),
         softCostsCents: toCents(form.soft_costs),
-        landCostCents: toCents(form.land_cost),
+        landCostCents: 0,
         downPaymentCents: toCents(form.down_payment),
         marginalRateBps: toBps(form.marginal_rate),
         bonusRateBps: toBps(form.bonus_rate),
@@ -162,12 +165,9 @@ export function ProposalGenerator({
           <Field label="Soft costs (total)" hint="Permits, engineering, transport. Depreciable.">
             <MoneyInput value={form.soft_costs} onChange={set("soft_costs")} placeholder="12000" />
           </Field>
-          <Field label="Land (total)" hint="Not depreciable — carried in the investment total only.">
-            <MoneyInput value={form.land_cost} onChange={set("land_cost")} placeholder="80000" />
-          </Field>
           <Field
             label="Down payment (cash)"
-            hint="Defaults to 10% of their target write-off. The balance is seller-financed at 0% over 720 months; clear it for an all-cash deal."
+            hint={`Tracks ${defaults.depositBps / 100}% of the investment. The balance is seller-financed at 0% over 720 months; clear it for an all-cash deal.`}
           >
             <MoneyInput value={form.down_payment} onChange={set("down_payment")} placeholder="155000" />
           </Field>

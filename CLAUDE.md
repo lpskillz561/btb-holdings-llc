@@ -44,8 +44,8 @@ inconsistent — it is headed "70% occupancy" and then bills 20 nights, which is
 
 ## The deal — `docs/` is the source of truth
 
-**Read `docs/` before writing anything client-facing.** Six documents define the
-business; the code predates them and is more generic than they are. Where the
+**Read `docs/` before writing anything client-facing.** Eight documents define
+the business; the code predates them and is more generic than they are. Where the
 two disagree, **the documents win**.
 
 **They are NOT in git** — `.gitignore` excludes `docs/*.pdf` and `docs/*.docx`
@@ -61,6 +61,8 @@ owner. The table below is the index of what should be there.
 | `MgmtAgmt_SAMPLE DRAFT.docx` | Management and revenue share. The 50/50 split and the 30-day cap. |
 | `PRO FORMA FOR RV300.pdf` | The monthly income model actually shown to buyers. |
 | `Frank Aragona Trust…pdf` | The case the material-participation leg depends on. |
+| `TC_Memo_2004-188.pdf` | *Shirley* — the transient-lodging case. Adopts Reg. 1.48-1(h)(2)(ii)'s "normally less than 30 days", and *Moore* for "predominant portion" meaning the proportion of **accommodations**, not of renters. Taxpayer won. |
+| `Tiny Home Tax Strategy.pdf` | The T3 sales deck. Qualification criteria, the three purchase tiers, and the §461(l) cap. **Sales material, not authority** — and its FULL PURCHASE column is arithmetically wrong ($415k − $135k is $280k, not the $275k shown; its note payment is $1,548.61, not $1,541). The other two tiers are exact. |
 
 ### The structure
 
@@ -120,8 +122,9 @@ to the owner**. Note the debt payment comes off the top, *before* the split.
 *eligible* at all. The familiar **7-day** short-term-rental figure is the §469
 material-participation route — which this structure does **not** rely on,
 because it establishes participation through the *trustee* instead. The
-`short_term_rental` caveat in `lib/crm/economics.ts` still says "seven days or
-less"; against this structure that is the wrong test and should say 30.
+`economics.ts` caveat and `MAX_AVERAGE_RENTAL_DAYS` in `deal.ts` both say 30 now,
+and `BASE_PROMPT` in `ai.ts` spells the two tests out — it used to teach the
+7-day one, so every generated proposal described a deal we do not sell.
 
 ### Rules that follow
 
@@ -276,6 +279,46 @@ request time that `tsc` and `next build` cannot see. Match the convention.
 duplicate pad label used to surface as a 500 "Something went wrong", which is
 indistinguishable from an outage and useless to someone who typed "A-01" twice.
 `23505` → 409, `23514`/`23503`/`23502` → 400.
+
+**The deal is sized from the write-off, and it is FINANCED.** A client says they
+need to shelter $1m, so the unit is priced at $1m, the deposit is
+`CRM_DEFAULT_DEPOSIT_BPS` (10%) of the investment and the balance is a 0% note
+over 720 months — imported from `deal.ts`, never restated, so a proposal and the
+note it becomes cannot disagree. The deduction is on the full basis while only
+the deposit is cash: that is the 10:1. **The deposit tracks the price** until
+someone types their own; freezing it is exactly how the ratio drifts while the
+form still looks right. **Zero deposit means UNFINANCED, not 100% financed** —
+getting that backwards quoted "cash down $0, seller-financed $102,000".
+
+**The sources disagree on the deposit, and 10% is a business decision.** The
+strategy deck says "13% Down" and "~9 plus X" leverage; its own three tiers are
+10.8%, 12% and 11%; the executed agreements in `docs/` are $155,000 on
+$1,250,000 = 12.4% and 8.06:1. The business has settled on **10%**. It is
+configuration, not a constant, so reconciling it later is an SSM write.
+
+**LAND NEVER REACHES A CLIENT.** BTB owns the ground; the client buys only the
+home on a pad. The proposal generator has no land input at all — it was never
+depreciable, so carrying it only inflated the investment against an unchanged
+deduction. What the land cost *us* is split across the sections a park was
+stated to carry (`planned_pad_count`) and shown on the park page and client card
+marked internal. **Divide by the STATED capacity, not the pads that exist**, or
+every client's share lurches as pads are built.
+
+**Two caveats are load-bearing and must not be dropped.** A deduction many times
+the cash only works because the note is **recourse** — §465 would otherwise limit
+it to the deposit and the leverage collapses. And **§461(l)** caps business loss
+against other income (~$313k/$626k for 2025, ~$325k/$650k for 2026), with the
+excess carried forward; the deck names this itself, so a first-year benefit
+quoted without it is a figure the deck already qualifies. The lender **forbears**
+when rent misses the note — the owner does *not* fund the gap; saying otherwise
+describes a different deal.
+
+**Archive, never delete, for proposals and contracts.** `archived_at` /
+`archived_by`, deliberately NOT a status value: status says where a document
+stands, and folding "archived" in would erase that a withdrawn proposal had been
+*accepted*. Archived rows leave every list **and every total** — and filtering
+only the page queries is not enough, because the REST collections are the same
+data by another door (`listProposals`, and `archivable` in `resource.ts`).
 
 **Proposal economics are computed in code and frozen on the row.** The model
 gets them as given facts and never calculates. The economics columns are not

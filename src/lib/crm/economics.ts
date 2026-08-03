@@ -41,6 +41,20 @@ export const DEFAULT_BONUS_RATE_BPS = () => envInt("CRM_BONUS_DEPRECIATION_RATE_
 export const DEFAULT_MARGINAL_RATE_BPS = () => envInt("CRM_DEFAULT_MARGINAL_RATE_BPS", 3_700);
 
 /**
+ * Deposit as a share of the price, in basis points. 1000 = 10%.
+ *
+ * Configuration, not a constant, for the same reason every other assumption
+ * here is: it is a figure a CPA will check, and the sources disagree. The
+ * strategy deck says "13% Down" and "~9 plus X" leverage; its own three tiers
+ * are 10.8%, 12% and 11%; the executed agreements in docs/ are $155,000 on
+ * $1,250,000, which is 12.4% and 8.06:1. The business has settled on 10%, which
+ * is what produces the 10:1 the pitch leads with — but the day that is
+ * reconciled with the paperwork, it should be an SSM write and a redeploy, not
+ * a number someone has to find inside a React component.
+ */
+export const DEFAULT_DEPOSIT_BPS = () => envInt("CRM_DEFAULT_DEPOSIT_BPS", 1_000);
+
+/**
  * Recovery period in years. 5 suits a transportable unit treated as personal
  * property; residential rental real property is 27.5 and is NOT bonus-eligible
  * as such — which is exactly why the classification drives the whole case.
@@ -67,7 +81,18 @@ export interface EconomicsInput {
   /** Totals across the whole placement, not per unit. */
   siteWorkCents: number;
   softCostsCents: number;
-  /** Land is never depreciable — carried for the investment total only. */
+  /**
+   * Land. Under the current model this is ALWAYS ZERO on a new proposal.
+   *
+   * BTB owns the ground and the client buys only the home standing on a pad, so
+   * land never enters what a client is quoted — and it was never depreciable
+   * anyway, so carrying it only ever inflated the investment total against an
+   * unchanged deduction. What the land actually cost us is allocated per section
+   * in lib/crm/portfolio.ts and is internal.
+   *
+   * The field survives so proposals frozen under the old model keep rendering
+   * the figures they were sent with.
+   */
   landCostCents: number;
   /**
    * Cash deposit. The balance is seller-financed on ./deal's terms.

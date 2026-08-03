@@ -7,6 +7,7 @@ import { getClientDetail } from "@/lib/crm/clients";
 import { CrmError } from "@/lib/crm/db";
 import {
   DEFAULT_BONUS_RATE_BPS,
+  DEFAULT_DEPOSIT_BPS,
   DEFAULT_MARGINAL_RATE_BPS,
   DEFAULT_OCCUPANCY_BPS,
   DEFAULT_OPEX_BPS,
@@ -40,6 +41,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
   // client's own rate when recorded), resolved here so the browser never has to
   // read server config to show the right starting values.
   const proposalDefaults = {
+    depositBps: DEFAULT_DEPOSIT_BPS(),
     marginalRateBps: detail.client.marginal_rate_bps ?? DEFAULT_MARGINAL_RATE_BPS(),
     bonusRateBps: DEFAULT_BONUS_RATE_BPS(),
     usefulLifeYears: DEFAULT_USEFUL_LIFE_YEARS(),

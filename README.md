@@ -27,6 +27,12 @@ where that stands.
 | **Our land** | `/crm/land` | The parks **BTB** owns, the pads on them, and how much capacity is earning |
 | **Holdings** | `/crm/holdings` | Every home across every client — and which are *not yet in service* |
 | **Financials** | `/crm/financials` | Cash in and out, per-client profitability, recent transactions |
+| **Archive** | `/crm/archive` | Proposals and contracts withdrawn from the board, and the only way to restore them |
+
+The Overview also carries the **shared kanban board** — one list the whole
+office works from, with cards anyone can add, assign, annotate and drag between
+To do, In progress and Done. It is fenced off from the reporting around it
+because it is the only block on that page anybody edits.
 
 Each client card carries **Overview** (record, people, tax profile, land
 criteria, cost position, activity), **Proposals**, **Contracts**, **Holdings**,
@@ -95,11 +101,36 @@ their CPA, whose job is checking figures. The economics columns are therefore
 something different you generate a new proposal. The old one survives as a
 truthful record of what was offered.
 
+**The deal is sized from the write-off and it is financed.** A client says they
+need to shelter $1,000,000, so the unit is priced at $1,000,000, the deposit
+defaults to `CRM_DEFAULT_DEPOSIT_BPS` (10%) of the investment, and the balance
+is a 0% note over 720 months on the same terms `src/lib/crm/deal.ts` writes into
+the contract — imported, not restated, so a proposal and the note it becomes
+cannot disagree. The deduction is taken on the full basis while only the deposit
+is cash, which is the 10:1 the strategy leads with. The deposit tracks the price
+until someone types their own; freezing it is how the ratio silently drifts.
+
+**Land is never quoted to a client.** BTB owns the ground and the client buys
+only the home standing on a pad, so the proposal has no land input at all. What
+the land cost *us* is split across the sections a park was stated to carry and
+shown on the park page and the client card, marked internal — see
+`src/lib/crm/portfolio.ts`.
+
 The model is honest about what breaks the case, because the code is: land is
 excluded from the depreciable basis; a unit recorded as *personal use* deducts
-nothing; and the passive-activity rules, the placed-in-service date, the
-personal-property vs. 27.5-year classification and depreciation recapture are
-appended to every proposal as conditions rather than assumed away.
+nothing; a deduction many times the cash depends on the note being **recourse**,
+because §465 would otherwise limit it to the deposit; §461(l) caps how much
+business loss can offset other income in one year (~$313k/$626k for 2025, rising
+in 2026) with the excess carried forward; and the passive-activity rules, the
+placed-in-service date, the personal-property vs. 27.5-year classification and
+depreciation recapture are appended to every proposal as conditions rather than
+assumed away.
+
+**Mistakes are archived, not deleted.** A proposal or contract entered against
+the wrong client can be withdrawn from `/crm/proposals` or `/crm/contracts`; it
+leaves every list *and* every total, and comes back from `/crm/archive`.
+`archived_at` is deliberately not a status value, so a withdrawn proposal still
+remembers it had been accepted.
 
 Delivery is **print-to-PDF** at `/crm/proposals/[id]/print` — the document
 alone, site chrome dropped by the `@media print` rules in `globals.css`.
@@ -171,7 +202,9 @@ There is no test suite. Verify by exercising the running app — and note that
 | `CRM_BONUS_DEPRECIATION_RATE_BPS` | no | Default `10000` (100%). Confirm per deal. |
 | `CRM_DEFAULT_MARGINAL_RATE_BPS` | no | Default `3700` |
 | `CRM_DEFAULT_USEFUL_LIFE_YEARS` | no | Default `5` |
-| `CRM_DEFAULT_OCCUPANCY_BPS` / `CRM_DEFAULT_OPEX_BPS` | no | `8500` / `3500` |
+| `CRM_DEFAULT_OCCUPANCY_BPS` / `CRM_DEFAULT_OPEX_BPS` | no | `7000` / `3500` |
+| `CRM_DEFAULT_DEPOSIT_BPS` | no | Default `1000` (10%). The deposit that produces 10:1. The strategy deck says 13% and the executed agreements are 12.4% — reconcile there, change it here. |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | for AI | SecureString in SSM. Model defaults to `gpt-4o`; production runs `gpt-5.6-luna`. **Verify a model id before setting it** — a wrong one is accepted by SSM and by the deploy, and fails at request time on all three AI surfaces. |
 
 ---
 
@@ -244,6 +277,17 @@ cross-architecture toolchain. Shipping a new build is an upload plus a re-run of
 configuration lives in SSM Parameter Store under `/btb-crm/`, SecureString for
 the secrets, read by the instance role at deploy time.
 
-Still to do: the `pg_dump` of `parcels` into Aurora, the nightly backup, and
-n8n. See [`docs/AWS-MIGRATION.md`](docs/AWS-MIGRATION.md) for the commands and
-the current state.
+**Parcel data is loaded**: 11,974,053 rows — Florida 11,090,226 across all 67
+counties and Montana 883,827 across all 56, scraped fresh by the ETL rather than
+copied from the Mini. Two systemd timers on the instance keep it current
+(`btb-etl-parcels.timer` monthly for every state, `btb-etl-auctions.timer`
+nightly); the Mini and its n8n dispatch are out of that path entirely.
+
+**The ETL is not in this repo.** It lives in `ziora-capital-holdings/etl/`,
+because it also feeds the Mini's own research tool — so a commit there changes
+what this production database ingests. See
+[`infra/etl/README.md`](infra/etl/README.md).
+
+Still to do: the nightly `pg_dump` backup, and North Carolina and Colorado have
+never been imported. See [`docs/AWS-MIGRATION.md`](docs/AWS-MIGRATION.md) for
+the commands and the current state.
