@@ -50,8 +50,25 @@ two disagree, **the documents win**.
 
 **They are NOT in git** — `.gitignore` excludes `docs/*.pdf` and `docs/*.docx`
 because they are client legal and tax material, and the deploy tarball excludes
-`docs/` for the same reason. A fresh clone will not have them; get them from the
-owner. The table below is the index of what should be there.
+`docs/` for the same reason. A fresh clone will not have them. The table below is
+the index of what should be there.
+
+**Restore them from S3:**
+
+```bash
+aws s3 cp s3://btb-docs-761540266321/docs/ ./docs/ --recursive --profile ziora
+```
+
+That bucket exists only to hold these, and is deliberately separate from
+`btb-crm-deploy-761540266321`: the EC2 instance role can read the deploy bucket,
+and there is no reason for the web server to be able to read the client's legal
+file. Public access is blocked on all four settings, versioning is on, AES256 at
+rest, and no bucket policy. Verified: an anonymous GET returns 403.
+
+**Do NOT put them in `ziora-assets`.** That bucket is world-readable by design —
+public access block off on all four settings and a policy granting `s3:GetObject`
+to `Principal: "*"` — because it serves the marketing site. It is one plausible
+`aws s3 cp` away from publishing the memorandum and the executed agreements.
 
 | Document | What it fixes |
 |---|---|
