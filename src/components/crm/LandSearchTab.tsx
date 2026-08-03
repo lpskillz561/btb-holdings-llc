@@ -384,6 +384,17 @@ export function LandSearchTab({
                           <span className="mt-0.5 block text-xs text-navy-900/45">
                             {[row.owner, row.propType].filter(Boolean).join(" · ")}
                           </span>
+                          {/* Only when we actually have it. A blank would read
+                              as "no zoning restriction", which is the opposite
+                              of what an absent row means. */}
+                          {row.zoning && (
+                            <span
+                              className="mt-1 inline-block rounded bg-paper-200 px-1.5 py-0.5 text-[0.7rem] font-medium text-navy-900/70"
+                              title={`Zoning per ${row.zoningJurisdiction ?? "the county"}, read ${row.zoningAt ?? "—"}. Confirm with a written determination.`}
+                            >
+                              {row.zoning}
+                            </span>
+                          )}
                         </Td>
                         <Td className="whitespace-nowrap">{fmtAcres(row.acres)}</Td>
                         <Td className="whitespace-nowrap">

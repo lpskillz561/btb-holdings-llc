@@ -304,7 +304,7 @@ export default async function LandSearchPage({
                 <EmptyState>Nothing in this county matched those filters.</EmptyState>
               ) : (
                 <div className="sf-card">
-                  <Table head={["Parcel", "Acres", "Assessed", "Pads it fits", "Land per pad", "Owner", ""]}>
+                  <Table head={["Parcel", "Zoning", "Acres", "Assessed", "Pads it fits", "Land per pad", "Owner", ""]}>
                     {results.rows.map((row) => {
                       const fit = siteFit(
                         row.acres,
@@ -329,6 +329,21 @@ export default async function LandSearchPage({
                               </a>
                             ) : (
                               <span className="text-ink-900">{row.oneLine ?? row.parcelId}</span>
+                            )}
+                          </Td>
+                          <Td className="whitespace-nowrap">
+                            {row.zoning ? (
+                              // The county's own string, prefix intact — the
+                              // prefix names the jurisdiction whose rules apply.
+                              <span title={`${row.zoningJurisdiction ?? "county"} · read ${row.zoningAt ?? "—"}`}>
+                                {row.zoning}
+                              </span>
+                            ) : (
+                              // NOT "unzoned". No adapter covers that county, or
+                              // the sync has not reached this parcel yet.
+                              <span className="text-ink-400" title="Not looked up — this is not a finding">
+                                —
+                              </span>
                             )}
                           </Td>
                           <Td>{fmtAcres(row.acres)}</Td>

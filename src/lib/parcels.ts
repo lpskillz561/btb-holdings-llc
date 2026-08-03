@@ -76,9 +76,46 @@ export interface PropertyReport {
   notes: string[];
 }
 
+/**
+ * Whether `parcel_zoning` exists, cached for the process.
+ *
+ * The table is created by the ETL's zoning job, not by this app's
+ * `ensureAppSchema` — it belongs to the importer and this app only reads it. A
+ * `to_regclass` probe is one cheap query and it is cached because the answer
+ * only changes when a deploy or an ETL run happens, either of which restarts or
+ * outlives the process.
+ */
+let zoningTablePresent: boolean | null = null;
+async function zoningTableExists(): Promise<boolean> {
+  if (zoningTablePresent !== null) return zoningTablePresent;
+  try {
+    const { rows } = await getPool().query<{ present: boolean }>(
+      "SELECT to_regclass('public.parcel_zoning') IS NOT NULL AS present",
+    );
+    zoningTablePresent = rows[0]?.present === true;
+  } catch {
+    // Never let a probe take land search down; without zoning it still works.
+    zoningTablePresent = false;
+  }
+  return zoningTablePresent;
+}
+
 export interface AreaRow {
   parcelId?: string; // "co_no:parcel_id" — key for detail/assess lookups
   oneLine?: string;
+  /**
+   * The zoning district, exactly as the county publishes it — prefix and all
+   * (`ORG-A-1`, `WG-C-2`). The prefix is the jurisdiction whose rulebook
+   * applies, which is why it is not stripped.
+   *
+   * **Absent for most parcels**, and absent is not "unzoned": it means no
+   * adapter covers that county, or the job has not reached that parcel. Never
+   * render a blank as though it were a finding.
+   */
+  zoning?: string;
+  zoningJurisdiction?: string;
+  /** When that code was read from the county. Zoning changes; this is a snapshot. */
+  zoningAt?: string;
   owner?: string;
   propType?: string;
   lastDeedDate?: string;
@@ -366,6 +403,17 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
   const needCount = knownTotal === undefined;
   let auctionsSynced = true;
 
+  // `parcel_zoning` is written by a separate ETL job on its own timer, so this
+  // app must work whether or not it exists yet. Probed once per search rather
+  // than assumed: a hard reference would turn every land search into a 500 on a
+  // database where the zoning job has never run, which includes a fresh one.
+  const hasZoning = await zoningTableExists();
+  const zoningSelect = hasZoning ? ", z.zoning_code, z.jurisdiction, z.fetched_at AS zoning_at" : "";
+  const zoningJoin = hasZoning
+    ? `LEFT JOIN parcel_zoning z
+         ON z.state = p.state AND z.co_no = p.co_no AND z.parcel_id = p.parcel_id`
+    : "";
+
   // The COUNT and the page of rows are independent — run them concurrently so the
   // request waits for one round-trip, not two. COUNT is skipped when we already
   // know the total from a prior page.
@@ -373,10 +421,16 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
     ? `SELECT count(*)::int n FROM (SELECT 1 FROM parcels p ${lateral} WHERE ${filterWhere}) t`
     : `SELECT count(*)::int n FROM parcels p WHERE ${where}`;
   const countParams = filterByAuction ? [...params, ...lateralParams] : params;
+  // Zoning is a LEFT JOIN to a table the ETL fills separately, and it must stay
+  // left: `parcel_zoning` covers only the counties with an adapter and only the
+  // parcels that job has reached, so an inner join would silently drop every
+  // other parcel from land search. `to_regclass` guards a database where that
+  // table does not exist at all — see zoningJoin below.
   const rowsSql = `SELECT p.state, p.co_no, p.parcel_id, p.one_line, p.owner_name, p.use_label, p.is_land,
             p.jv, p.lnd_val, p.acres, p.lnd_sqft, p.asmnt_yr, p.sale_prc, p.sale_date,
             au.auction_type, au.status AS auction_status, au.sale_date AS auction_date, au.opening_bid
-     FROM parcels p ${lateral}
+            ${zoningSelect}
+     FROM parcels p ${lateral} ${zoningJoin}
      WHERE ${filterWhere}
      ORDER BY ${orderBy}
      LIMIT ${fetchLimit} OFFSET ${offset}`;
@@ -442,6 +496,9 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
       owner: str(r.owner_name),
       propType: str(r.use_label),
       land: r.is_land === true,
+      zoning: str(r.zoning_code),
+      zoningJurisdiction: str(r.jurisdiction),
+      zoningAt: isoDate(r.zoning_at),
       lastDeedDate: date,
       lastDeedAmount: amount,
       lastDeedType: amount || date ? "Sale" : undefined,

@@ -267,7 +267,8 @@ Judge it on:
 - Siting reality: acreage, land classification, and whether the assessment record suggests unimproved land.
 - What would have to be true for this to work — access, utilities, septic/well, zoning and short-term-rental rules — none of which is in the assessment roll, so route them to dataGaps and nextSteps rather than assuming them.
 
-Hard limits on what you can see: this is county assessment-roll data only. You do NOT have zoning, permitted use, utility availability, road access, flood zone, topography, deed restrictions, or whether the owner will sell. Never assert any of those. An assessed value is not a market price and not an asking price.
+Hard limits on what you can see: county assessment-roll data, plus a zoning district code for SOME parcels. You do NOT have permitted use, utility availability, road access, flood zone, topography, deed restrictions, or whether the owner will sell. Never assert any of those. An assessed value is not a market price and not an asking price.
+About the zoning field, when it is present: it is the district the county records, nothing more. It does NOT establish that any use is permitted — districts carry conditions, overlays and special-exception routes that are not in this data, and a Planned Development's permitted uses live in its approved plan document. When zoning is ABSENT that means nobody has looked it up for this parcel; it does not mean unzoned or unrestricted. Say which of the two you are looking at, and put a written zoning determination in nextSteps either way.
 
 Be willing to say "Poor fit". A shortlist that says yes to everything is worthless.`;
 
@@ -366,7 +367,8 @@ Judge it on:
 - Whether the land classification and assessed value are consistent with genuinely unimproved ground rather than something already built on.
 - Shape and scale risk you can reason about in words: a very large acreage at a low value per acre may be remote or unusable, and a small high-value lot may be priced as development land already.
 
-Hard limits on what you can see: county assessment-roll data only. You do NOT have zoning, permitted use, utility availability, road access, flood zone, topography, wetlands, deed restrictions, short-term-rental rules, or whether the owner will sell. Those decide whether a park is possible at all, so route every one of them to dataGaps and nextSteps rather than assuming them. An assessed value is not a market price and not an asking price.
+Hard limits on what you can see: county assessment-roll data, plus a zoning district code for SOME parcels. You do NOT have permitted use, utility availability, road access, flood zone, topography, wetlands, deed restrictions, short-term-rental rules, or whether the owner will sell. Those decide whether a park is possible at all, so route every one of them to dataGaps and nextSteps rather than assuming them. An assessed value is not a market price and not an asking price.
+About the zoning field, when it is present: it is the district the county records, and it does NOT establish that an RV or tiny-home park is permitted there. There is often no RV district at all — in Orange County, Florida the established RV parks sit in agricultural and commercial districts — so a district code neither qualifies nor disqualifies a site on its own. For a Planned Development the permitted uses are in the approved plan, not in this field. When zoning is ABSENT it means nobody has looked it up, not that the parcel is unrestricted. Either way, a written zoning determination for the specific parcel belongs in nextSteps.
 
 Be willing to say "Poor fit". A search that likes everything tells nobody anything.`;
 
