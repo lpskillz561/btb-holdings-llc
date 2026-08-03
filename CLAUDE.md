@@ -327,19 +327,34 @@ so. Ship it with the tarball step in `infra/etl/README.md`, and treat an ETL
 change as a change to this app. `etl/import.mjs` in the notes below means
 `ziora-capital-holdings/etl/import.mjs`.
 
-EC2 now schedules it itself; the three n8n workflows were only ever a scheduler
-that SSHes in, runs one command and checks the exit code. Two systemd timers on the instance do
-the same job with no second machine and no long-lived access key:
-`btb-etl-parcels.timer` (monthly, matching how assessment rolls are republished)
-and `btb-etl-auctions.timer` (nightly, since auctions move daily). The Mini is
-now optional.
+**EC2 schedules it itself, and the Mini is OUT of this path entirely.** Two
+systemd timers do the whole job with no second machine and no long-lived access
+key: `btb-etl-parcels.timer` (monthly, matching how assessment rolls are
+republished) and `btb-etl-auctions.timer` (nightly, since auctions move daily).
+The n8n dispatch path is gone — the workflows, `run-etl-on-ec2.sh` and the
+`btb-n8n-mini` IAM user with its access key are all deleted. The key had never
+been used. `BtbRunEtl` is kept as a narrow manual-dispatch primitive; with no
+principal holding a key to it, an unused document is not a standing risk. The
+Mini still serves the marketing site, `/app` and the research tool, which is why
+the ETL is still shared — see `infra/etl/README.md`.
 
-**The ETL can also be dispatched from the Mini's n8n over SSM.** Aurora is
-private and the Mini cannot reach it, so n8n keeps the schedule and the app
-instance does the work — see `infra/etl/README.md`. Dispatch uses a narrow
-custom SSM document (`BtbRunEtl`) rather than `AWS-RunShellScript`, because the
-Mini holds a long-lived access key and that key should buy "run the importer",
-not "root shell on the app server".
+**The parcel timer runs `btb-etl@ALL.service`, not one state.** It used to name
+`btb-etl@MT.service`, so the monthly refresh silently covered Montana alone —
+Florida, North Carolina and Colorado would have gone stale forever while the
+timer reported success. A per-state unit that is *also* the scheduled unit is a
+trap: it looks fine and does a fraction of the work.
+
+**FDOR rotates the Florida roll folder, so it must not be pinned.** The portal
+keeps only the current roll under `.../NAL`; `2025F` is gone and `2026P` is
+there now. A pinned `ROLL_YEAR`/`ROLL_TYPE` is a bug with a one-year fuse and a
+quiet one — the SharePoint API still answers 200, the listing is just empty,
+discovery returns zero files and the import dies with "No rows loaded" that
+explains nothing. Unset, `discoverNalFiles` now takes the newest populated roll
+and logs which one it used. **Also: the county number in the filename is
+optional.** FDOR ships `Broward Preliminary NAL 2026.zip` with no number, and a
+regex requiring one silently dropped Florida's second-largest county — 754,549
+parcels, 66 files of 67, no warning. It cannot corrupt anything, because a
+parcel's `co_no` comes from the CSV's own column, not the filename.
 
 Things about that deployment that are not visible from the code:
 
@@ -423,8 +438,10 @@ Things about that deployment that are not visible from the code:
 - The source Postgres on the Mini (12 GB, includes client tax profiles) **has no
   backup**. Whatever happens with AWS, that gap is real today. The S3 bucket,
   lifecycle rule and instance permission for it now exist; the cron job does not.
-- Aurora holds only the CRM's own tables so far. `parcels` and `auctions` have
-  not been dumped across, so land search returns nothing there.
+- `parcels` is loaded and land search works: **11,974,053 rows** — Florida
+  11,090,226 (all 67 counties, roll 2026P) and Montana 883,827 (all 56). Scraped
+  fresh by the ETL rather than dumped from the Mini. `auctions` has not been
+  built yet, and NC and CO have never been imported.
 - `OPENAI_API_KEY` is not set in SSM, so the three AI surfaces show their
   disabled notice. It is runtime-only — setting it needs a redeploy, not a
   rebuild.

@@ -1,110 +1,95 @@
-# Pointing the Mini's n8n at Aurora
+# The parcel and auction ETL
 
-The parcel ETL lives in `ziora-capital-holdings/etl/` and used to write to the
-Mini's local Postgres. It now writes to Aurora — but **not from the Mini**.
-
-## Why it runs on EC2 rather than here
-
-Aurora sits in private subnets, is not publicly accessible, and accepts
-connections only from the app instance's security group. Reaching it from the
-Mini would mean either exposing the database to the internet or holding a tunnel
-open for hours while 19.5M rows cross a home uplink.
-
-So n8n keeps doing what it already does — run on a schedule and execute a
-command over SSH to the Mini — and that command now *dispatches* the ETL to the
-app instance instead of running it locally. The data never leaves AWS.
+The importer runs **entirely on the app instance, on its own schedule**. There is
+no second machine in the loop, no SSH hop, and no long-lived AWS access key.
 
 ```
-n8n (Mini)  ──ssh──▶  run-etl-on-ec2.sh (Mini)  ──ssm──▶  EC2  ──▶  Aurora
-   schedule              dispatch + wait             /opt/btb/run-etl.sh
+systemd timer (EC2)  ──▶  /opt/btb/run-etl.sh  ──▶  node import.mjs  ──▶  Aurora
 ```
 
-## What already exists in AWS
+## Where the code lives
 
-| Thing | What it is |
-|---|---|
-| `BtbRunEtl` | SSM document. **Only** invokes `/opt/btb/run-etl.sh`, with `job` from a fixed list and `state` matched against a strict pattern. |
-| `/opt/btb/run-etl.sh` | On the instance. Pulls `s3://btb-crm-deploy-761540266321/etl/etl.tar.gz`, installs, and runs the job against the app's own `DATABASE_URL`. |
-| `btb-n8n-mini` | IAM user. May send **only** the `BtbRunEtl` document to **only** the app instance, and read the result. Nothing else. |
+**Not in this repo.** It lives in `ziora-capital-holdings/etl/`, because it has
+two consumers: this app's Aurora, and the Mini's own research tool, which reads
+`parcels` out of the Mini's local Postgres. Copying it here would fork it.
 
-The narrow document is the point. The Mini holds a long-lived access key; if it
-leaks, the blast radius is "someone can run the parcel importer", not "someone
-has a root shell on the app server". `AWS-RunShellScript` would have given away
-the latter.
+The catch is that the coupling is invisible from this side — a commit in that
+repo changes what this production database ingests. Treat an ETL change as a
+change to this app, and ship it with the tarball step below.
 
-## Setting up the Mini
+## The schedule
 
-1. **Install the AWS CLI** (v2) if it isn't there.
-
-2. **Add the credentials** issued for `btb-n8n-mini`:
-
-   ```bash
-   aws configure --profile btb-n8n
-   # access key / secret as supplied, region us-east-1, output json
-   ```
-
-3. **Copy the dispatcher** and make it executable:
-
-   ```bash
-   install -m 755 run-etl-on-ec2.sh /usr/local/bin/run-etl-on-ec2.sh
-   ```
-
-4. **Confirm it works** before touching n8n:
-
-   ```bash
-   AWS_PROFILE=btb-n8n BTB_INSTANCE_ID=i-03cf7050d5d33c713 \
-     run-etl-on-ec2.sh reindex
-   ```
-
-   It should print the index report and exit 0.
-
-## Changing the workflows
-
-Only the SSH node's **command** changes. The schedule, the exit-code check and
-the failure alert all stay as they are.
-
-| Workflow | Old command | New command |
+| Timer | When | Runs |
 |---|---|---|
-| `n8n-fl-parcel-refresh` | `cd … && STATE=ALL docker compose run --rm etl` | `AWS_PROFILE=btb-n8n BTB_INSTANCE_ID=i-03cf7050d5d33c713 /usr/local/bin/run-etl-on-ec2.sh parcels ALL` |
-| `n8n-auction-sync` | `cd … && AUCTION_STATE=ALL docker compose run --rm auctions` | `… run-etl-on-ec2.sh auctions ALL` |
-| `n8n-parcel-trigger` | conditional on `$json.state` | `… run-etl-on-ec2.sh parcels {{ $json.state }}` |
+| `btb-etl-parcels.timer` | Monthly, 1st at 07:00 UTC | `btb-etl@ALL.service` — every registered state |
+| `btb-etl-auctions.timer` | Nightly, 09:00 UTC | `btb-etl-auctions.service` — `auctions ALL` |
 
-The dispatcher **waits for completion and exits non-zero on failure**, which is
-what keeps the existing "fail on non-zero exit" branch meaningful. A plain
-`aws ssm send-command` returns the moment the job is queued, so every run would
-have looked successful — including the broken ones.
+Both are `Persistent=true`, so a missed run fires on the next boot rather than
+being skipped.
+
+**The parcel timer names `ALL`, and that matters.** It used to name a single
+state (`btb-etl@MT.service`), which meant the monthly refresh quietly covered
+Montana and nothing else while reporting success — Florida, North Carolina and
+Colorado would have gone stale indefinitely. `import.mjs` loops the registered
+states inside one process, which also keeps the one-import-at-a-time rule
+without depending on the `flock`.
+
+Run one state by hand:
+
+```bash
+aws ssm send-command --instance-ids i-03cf7050d5d33c713 \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["systemctl start --no-block btb-etl@FL.service"]' \
+  --profile ziora
+```
+
+Use **systemd**, not a bare `run-etl.sh`: a `systemctl start --no-block` survives
+the SSM session ending, and a long import will outlive it.
+
+## Watching a run
+
+```bash
+journalctl -u btb-etl@FL.service -f      # on the instance
+pgrep -af "node import.mjs"              # the truth about whether it is alive
+```
+
+`systemctl is-active --quiet` is **false** for a running `oneshot` — a long
+`Type=oneshot` sits in `activating` for its whole life. Watch the process, not
+the unit state. If a run looks wedged, the signature is in `pg_stat_activity`:
+a `COPY` sitting in `Client/ClientRead` with an hours-old `xact_start`.
 
 ## Shipping a new ETL
 
-The ETL is not vendored into this repo; it ships as its own artifact so the two
-copies cannot drift.
+The ETL is not vendored here; it ships as its own artifact so the two copies
+cannot drift. `run-etl.sh` re-downloads on every run, so the next scheduled job
+picks it up.
 
 ```bash
 cd ~/Documents/Ziora/ziora-capital-holdings/etl
-tar --exclude=./node_modules --exclude='./n8n-*.json' -czf /tmp/etl.tar.gz -C . .
+tar --exclude=./node_modules -czf /tmp/etl.tar.gz -C . .
 aws s3 cp /tmp/etl.tar.gz s3://btb-crm-deploy-761540266321/etl/etl.tar.gz --profile ziora
 ```
 
-`run-etl.sh` re-downloads on every run, so the next scheduled job picks it up.
+## What was removed, and why
 
-## Known state
+The Mini used to hold the schedule: n8n ran on a cron, SSH'd into itself, and a
+dispatcher script (`run-etl-on-ec2.sh`) called a narrow SSM document (`BtbRunEtl`)
+to make EC2 do the actual work. That existed because Aurora is private and the
+Mini could not reach it.
 
-`reindex` has been run end to end against Aurora and connects cleanly. It
-reports `relation "parcels" does not exist`, which is correct — **no parcel data
-has been loaded yet**. The first real job is a full `parcels` import:
+Two systemd timers on the instance do the same job with no second machine, so
+the dispatch path is gone:
 
-```bash
-AWS_PROFILE=btb-n8n BTB_INSTANCE_ID=i-03cf7050d5d33c713 \
-  run-etl-on-ec2.sh parcels FL
-```
+- `run-etl-on-ec2.sh` — deleted.
+- The three `n8n-*.json` workflow exports — deleted from the ETL repo.
+- The `btb-n8n-mini` IAM user, its inline policy and its access key — **deleted
+  from AWS**. It had never been used: `get-access-key-last-used` reported no
+  `LastUsedDate` at all, so the credential was issued and never exercised.
 
-Expect it to run for a long time and to re-hit the county sources, since this is
-a fresh scrape rather than a copy of the Mini's database.
+`BtbRunEtl` is deliberately **kept**. It is a narrow dispatch primitive — it can
+only invoke `/opt/btb/run-etl.sh` with a job from a fixed list — and with no
+principal holding a key to it, an unused document carries no standing risk.
 
-### The gotcha this cost
-
-`/opt/btb/app.env` is written for the **container**, where the RDS CA bundle is
-bind-mounted at `/etc/ssl/rds-ca.pem`. The ETL runs on the **host**, where that
-path does not exist. `run-etl.sh` rewrites `sslrootcert` to `/opt/btb/rds-ca.pem`
-before running; without it every job dies with `ENOENT` on the certificate
-before opening a single connection.
+> If n8n on the Mini still has those three workflows **enabled**, disable them
+> there. Deleting the exports from git does not touch a running n8n, and their
+> AWS credential no longer exists, so they will now fail on every fire.

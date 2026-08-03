@@ -393,14 +393,21 @@ Resources:
               # Parcels monthly: assessment rolls are republished on that cadence,
               # so nightly would re-scrape counties to produce identical rows and
               # hammer the sources for nothing.
+              #
+              # ALL, not MT. This used to name a single state, which meant the
+              # monthly refresh quietly covered Montana and nothing else -
+              # Florida, North Carolina and Colorado would have gone stale
+              # forever while the timer reported success. import.mjs loops the
+              # registered states in one process, which also keeps the
+              # one-import-at-a-time rule without relying on the flock.
               cat > /etc/systemd/system/btb-etl-parcels.timer <<'UNIT'
               [Unit]
-              Description=Monthly parcel refresh
+              Description=Monthly parcel refresh (all states)
 
               [Timer]
               OnCalendar=*-*-01 07:00:00 UTC
               Persistent=true
-              Unit=btb-etl@MT.service
+              Unit=btb-etl@ALL.service
 
               [Install]
               WantedBy=timers.target
