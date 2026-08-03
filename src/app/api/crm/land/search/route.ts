@@ -3,7 +3,7 @@
 // first search from the client card is already the right search.
 
 import { NextResponse } from "next/server";
-import { isSortKey } from "@/lib/parcels";
+import { isSortKey, isUseKind, type UseKind } from "@/lib/parcels";
 import { getClient } from "@/lib/crm/clients";
 import { searchLandForClient } from "@/lib/crm/land";
 import { withCrm } from "@/lib/crm/rest";
@@ -34,6 +34,9 @@ export const GET = withCrm(async (req) => {
     page: Number.isFinite(page) ? page : 1,
     // Explicit "0" turns the vacant-land default off; absent leaves it on.
     landOnly: sp.has("land") ? sp.get("land") === "1" : undefined,
+    // An unrecognised value falls back to "any" rather than 400ing: a stale
+    // bookmarked URL should widen the search, not break the page.
+    useKind: isUseKind(sp.get("use")) ? (sp.get("use") as UseKind) : undefined,
     minAcres: parseNumber(sp.get("minac")) ?? null,
     maxAcres: parseNumber(sp.get("maxac")) ?? null,
     minPrice: parseNumber(sp.get("min")) ?? null,

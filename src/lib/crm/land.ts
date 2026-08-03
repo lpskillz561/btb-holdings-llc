@@ -8,7 +8,13 @@
 // Nothing here re-implements parcel search. It narrows it, records the answer,
 // and asks the model a question only this client's record makes answerable.
 
-import { lookupProperty, searchArea, type AreaSearchResult, type SortKey } from "@/lib/parcels";
+import {
+  lookupProperty,
+  searchArea,
+  type AreaSearchResult,
+  type SortKey,
+  type UseKind,
+} from "@/lib/parcels";
 import { CrmError, logActivity, newId, nowIso, query, queryOne, str } from "./db";
 import { buildSystemPrompt, isAiConfigured, structuredChat } from "./ai";
 import { fmtAcres, fmtMoney } from "./format";
@@ -29,6 +35,8 @@ export interface ClientLandSearchParams {
   area?: string | null;
   page?: number;
   landOnly?: boolean;
+  /** Current-use preset over the FL DOR code. Not zoning — see USE_KINDS. */
+  useKind?: UseKind;
   minAcres?: number | null;
   maxAcres?: number | null;
   minPrice?: number | null;
@@ -66,7 +74,10 @@ export async function searchLandForClient(
 
   return searchArea(area, params.page ?? 1, {
     // Vacant land by default: a parcel with a house on it isn't a tiny-home site.
+    // A current-use preset overrides this inside searchArea, because an existing
+    // park is improved property.
     landOnly: params.landOnly ?? true,
+    useKind: params.useKind,
     minAcres: params.minAcres ?? client.target_min_acres ?? undefined,
     maxAcres: params.maxAcres ?? client.target_max_acres ?? undefined,
     minPrice: params.minPrice ?? undefined,

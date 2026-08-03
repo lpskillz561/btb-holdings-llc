@@ -12,6 +12,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { AreaRow, AreaSearchResult } from "@/lib/parcels";
+// From parcelUse, NOT parcels: this is a client component and lib/parcels.ts
+// imports getPool, which must never reach the browser bundle.
+import { USE_KINDS, type UseKind } from "@/lib/parcelUse";
 import { fmtAcres, fmtDate, fmtMoney } from "@/lib/crm/format";
 import { LABELS, SAVED_PARCEL_STATUSES, type CrmClient, type CrmSavedParcel } from "@/lib/crm/types";
 import type { ParcelFit } from "@/lib/crm/land";
@@ -39,6 +42,7 @@ export function LandSearchTab({
     client.target_max_price_cents != null ? String(client.target_max_price_cents / 100) : "",
   );
   const [landOnly, setLandOnly] = useState(true);
+  const [useKind, setUseKind] = useState<UseKind>("any");
   const [page, setPage] = useState(1);
 
   const [result, setResult] = useState<AreaSearchResult | null>(null);
@@ -61,6 +65,7 @@ export function LandSearchTab({
             area,
             page: nextPage,
             land: landOnly ? "1" : "0",
+            use: useKind === "any" ? undefined : useKind,
             minac: minAcres,
             maxac: maxAcres,
             max: maxPrice,
@@ -76,7 +81,7 @@ export function LandSearchTab({
         setLoading(false);
       }
     },
-    [client.id, area, landOnly, minAcres, maxAcres, maxPrice, result?.total],
+    [client.id, area, landOnly, useKind, minAcres, maxAcres, maxPrice, result?.total],
   );
 
   // Seed the cached AI reads so a shortlist opened fresh shows what was already
@@ -287,9 +292,35 @@ export function LandSearchTab({
               <span className="field-label">Max assessed value</span>
               <input className="field" inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="150000" />
             </label>
+            <label className="block">
+              <span className="field-label">Current use</span>
+              <select
+                className="field"
+                value={useKind}
+                onChange={(e) => setUseKind(e.target.value as UseKind)}
+              >
+                {Object.entries(USE_KINDS).map(([key, { label }]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="flex items-center gap-2 self-end pb-2.5 text-sm text-navy-900/80">
-              <input type="checkbox" checked={landOnly} onChange={(e) => setLandOnly(e.target.checked)} className="h-4 w-4" />
+              <input
+                type="checkbox"
+                checked={landOnly}
+                onChange={(e) => setLandOnly(e.target.checked)}
+                disabled={useKind !== "any"}
+                className="h-4 w-4"
+              />
+              {/* Disabled rather than silently overridden: an operating park is
+                  improved, so leaving this tickable would offer a combination
+                  that can only ever return nothing. */}
               Vacant land only
+              {useKind !== "any" && (
+                <span className="text-xs text-navy-900/50">(n/a for a use filter)</span>
+              )}
             </label>
             <div className="self-end">
               <button type="submit" className="sf-btn-brand w-full" disabled={loading}>

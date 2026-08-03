@@ -9,6 +9,7 @@
 // Foreclosure/REO filters and the auction flags on rows.
 
 import { getPool } from "@/lib/db";
+import { USE_KINDS, isUseKind, type UseKind } from "@/lib/parcelUse";
 
 /** Thrown for bad input or DB failure; carries an HTTP status. */
 export class ParcelError extends Error {
@@ -113,6 +114,10 @@ export interface StateOption {
   count: number;
 }
 
+// Current-use presets. Defined in lib/parcelUse.ts, which has no database
+// import, so client components can read the labels without pulling `pg` in.
+export { USE_KINDS, isUseKind, type UseKind } from "@/lib/parcelUse";
+
 export interface AreaSearchResult {
   area: string;
   query: string;
@@ -124,6 +129,7 @@ export interface AreaSearchResult {
   taxDeedOnly: boolean;
   reoOnly: boolean;
   landOnly: boolean;
+  useKind?: UseKind;
   minPrice?: number;
   maxPrice?: number;
   minAcres?: number;
@@ -197,6 +203,12 @@ interface AreaOpts {
   taxDeedOnly?: boolean;
   reoOnly?: boolean;
   landOnly?: boolean;
+  /**
+   * Current-use preset (see USE_KINDS). Overrides `landOnly` when set to
+   * anything but "any" — an operating RV park is improved property, so the two
+   * together can only ever return nothing.
+   */
+  useKind?: UseKind;
   /** Assessed-value floor / ceiling (USD). Filters on p.jv. */
   minPrice?: number;
   maxPrice?: number;
@@ -220,7 +232,13 @@ function cleanPrice(v?: number): number | undefined {
 
 /** List parcels across a ZIP or city. */
 export async function searchArea(area: string, page: number, opts: AreaOpts = {}): Promise<AreaSearchResult> {
-  const { taxDeedOnly = false, reoOnly = false, landOnly = false } = opts;
+  const { taxDeedOnly = false, reoOnly = false } = opts;
+  const useKind: UseKind = isUseKind(opts.useKind) ? opts.useKind : "any";
+  const useCodes = USE_KINDS[useKind].codes;
+  // An operating park is improved, so "vacant land only" AND a use preset is a
+  // guaranteed empty result. The explicit choice wins and the note says so —
+  // silently returning zero here reads as "there are none", which is a lie.
+  const landOnly = useCodes.length > 0 ? false : (opts.landOnly ?? false);
   const sort: SortKey = isSortKey(opts.sort) ? opts.sort : DEFAULT_SORT;
   let minPrice = cleanPrice(opts.minPrice);
   let maxPrice = cleanPrice(opts.maxPrice);
@@ -246,12 +264,16 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
   const params: unknown[] = [];
   let label: string;
   let by: "postalcode" | "radius" | "state";
+  // The state, when the query states one. Used only to warn that a use preset
+  // reads a Florida-only column; a bare ZIP leaves it unknown, which is fine.
+  let searchState: string | undefined;
   const stateCode = trimmed.toUpperCase();
   if (/^[A-Za-z]{2}$/.test(trimmed) && STATE_NAMES[stateCode]) {
     by = "state";
     params.push(stateCode);
     where = "p.state = $1";
     label = STATE_NAMES[stateCode];
+    searchState = stateCode;
   } else if (/^\d{5}$/.test(trimmed)) {
     by = "postalcode";
     params.push(trimmed);
@@ -275,9 +297,16 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
       params.push(suffix);
       where += ` AND p.state = $${params.length}`;
       label = `${namePart}, ${suffix}`;
+      searchState = suffix;
     }
   }
   if (landOnly) where += " AND p.is_land";
+  // Current use. Same param-ordering rule as the price/acre filters: pushed
+  // before the lateral join so its `params.length + N` offsets stay correct.
+  if (useCodes.length > 0) {
+    params.push(useCodes);
+    where += ` AND p.dor_uc = ANY($${params.length})`;
+  }
   // Price range on assessed (just/market) value. Pushed onto `params` before the
   // lateral join, so its `params.length + N` offsets stay correct.
   if (minPrice !== undefined) {
@@ -369,7 +398,8 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
       if (filterByAuction) {
         return {
           area: label, query: area, by, total: 0, page: safePage, pageSize: PAGE_SIZE,
-          distressedOnly: filterByAuction, taxDeedOnly, reoOnly, landOnly, minPrice, maxPrice, minAcres, maxAcres, sort,
+          distressedOnly: filterByAuction, taxDeedOnly, reoOnly, landOnly, useKind,
+          minPrice, maxPrice, minAcres, maxAcres, sort,
           scanned: 0, hasNext: false, rows: [],
           notes: [AUCTIONS_NOT_SYNCED],
         };
@@ -435,6 +465,31 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
   if (landOnly) {
     notes.push(`Land filter: ${total.toLocaleString()} vacant-land, agricultural, or unimproved parcels in ${label}.`);
   }
+  if (useCodes.length > 0) {
+    notes.push(
+      `Current use "${USE_KINDS[useKind].label}": ${total.toLocaleString()} parcel(s) in ${label}. ` +
+        "This is the assessor's record of how the parcel is USED — it is not zoning, and it does not establish " +
+        "that RV or transient use is permitted. Confirm with a written zoning determination for the parcel.",
+    );
+    if (opts.landOnly) {
+      notes.push(
+        "Vacant-land filter ignored: an operating park is improved property, so the two filters together would " +
+          "match nothing.",
+      );
+    }
+    if (searchState && searchState !== "FL") {
+      notes.push(
+        `Use filters read the Florida DOR use code, which is only populated for Florida parcels — expect no ` +
+          `matches in ${label}.`,
+      );
+    }
+    if (useKind === "mh_park" || useKind === "park_like") {
+      notes.push(
+        "Mobile-home parks are typically zoned for PERMANENT residency. The structure depends on transient use " +
+          "(normally under 30 days), so treat these as leads to check rather than as sites that already fit.",
+      );
+    }
+  }
   if (minPrice !== undefined || maxPrice !== undefined) {
     const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`;
     const range =
@@ -467,7 +522,8 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
 
   return {
     area: label, query: area, by, total, page: safePage, pageSize: PAGE_SIZE,
-    distressedOnly: filterByAuction, taxDeedOnly, reoOnly, landOnly, minPrice, maxPrice, minAcres, maxAcres, sort,
+    distressedOnly: filterByAuction, taxDeedOnly, reoOnly, landOnly, useKind,
+    minPrice, maxPrice, minAcres, maxAcres, sort,
     scanned: rows.length, hasNext, rows, notes,
   };
 }
