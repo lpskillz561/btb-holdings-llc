@@ -35,11 +35,16 @@ export interface BoardUser {
   name: string | null;
 }
 
-/** Column accent. Done is grey on purpose: finished work should recede. */
-const COLUMN_TONE: Record<TodoStatus, string> = {
-  todo: "border-t-ink-400",
-  doing: "border-t-sf-500",
-  done: "border-t-ink-300",
+/**
+ * Column accent: To do blue, In progress grey, Done green.
+ *
+ * The rule carries the heading too, so the colour is legible to anyone reading
+ * the words rather than only to whoever can tell two greys apart at a glance.
+ */
+const COLUMN_TONE: Record<TodoStatus, { rule: string; heading: string }> = {
+  todo: { rule: "border-t-sf-500", heading: "text-sf-600" },
+  doing: { rule: "border-t-ink-400", heading: "text-ink-600" },
+  done: { rule: "border-t-ok-500", heading: "text-ok-700" },
 };
 
 /** "David Belousov" -> DB; an email with no name -> its first two letters. */
@@ -173,12 +178,14 @@ export function TodoBoard({
               onDragLeave={() => setOverColumn((c) => (c === status ? null : c))}
               onDrop={() => onDrop(status)}
               aria-label={`${LABELS.todoStatus[status]} column`}
-              className={`rounded border border-t-4 border-ink-200 ${COLUMN_TONE[status]} bg-ink-100/60 p-2 transition ${
+              className={`rounded border border-t-4 border-ink-200 ${COLUMN_TONE[status].rule} bg-ink-100/60 p-2 transition ${
                 overColumn === status ? "bg-sf-50 ring-2 ring-sf-200" : ""
               }`}
             >
               <h3 className="flex items-baseline justify-between px-1 pb-2 pt-1">
-                <span className="text-sm font-bold text-ink-900">{LABELS.todoStatus[status]}</span>
+                <span className={`text-sm font-bold ${COLUMN_TONE[status].heading}`}>
+                  {LABELS.todoStatus[status]}
+                </span>
                 <span className="sf-meta">{cards.length}</span>
               </h3>
 

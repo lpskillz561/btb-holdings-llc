@@ -118,9 +118,15 @@ export default async function CrmPage() {
             </div>
           </div>
 
-          {/* Above the client board on purpose: it is the thing the office is
-              meant to read first when the dashboard opens. */}
-          <TodoBoard initial={todos} users={boardUsers} />
+          {/* Fenced off from the rest of the dashboard on purpose.
+              Everything around it is REPORTING — figures the CRM computed about
+              the book. This is the one block that is the team talking to itself
+              and the only one anybody edits, so it gets rules top and bottom and
+              its own white ground to sit on rather than blending into the run of
+              cards above and below it. */}
+          <div className="-mx-6 border-y-2 border-ink-300 bg-white px-6 py-8 lg:-mx-8 lg:px-8">
+            <TodoBoard initial={todos} users={boardUsers} />
+          </div>
 
           <div>
             <h2 className="mb-4 text-lg font-semibold text-ink-900">Clients</h2>
