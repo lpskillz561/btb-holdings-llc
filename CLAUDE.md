@@ -205,12 +205,20 @@ Chrome is installed, no download needed), log in, click the thing, assert on the
 resulting URL *and* the console. Wait **≥4s** before concluding a click did
 nothing; 2.5s produced a false negative.
 
-**A gated page returns HTTP 200, not 404.** `getCrmPageUser()` → `notFound()`
-works — an unauthorised visitor sees the 404 page and no data reaches them — but
-these routes are `force-dynamic`, so the response headers are flushed before
-`notFound()` is reached and the status stays **200** while the not-found UI
-streams in. Asserting on the status code alone concludes the page is wide open
-when it is not. Assert on the rendered body.
+**A gated page now returns a real 404 — this changed.** It used to answer 200
+while the not-found UI streamed in, because `loading.tsx` put a Suspense
+boundary above the page and the headers were flushed before `notFound()` was
+reached. Deleting that boundary (see the `next/link` note below) removed the
+early flush, so the status is set properly. Measured against production with a
+forged session for an address not in `CRM_ADMINS`: `/crm`, `/crm/proposals`,
+`/crm/contracts`, `/crm/land` and `/crm/admin` all answer **404**, and a
+CRM user who is not a superuser gets 200 on the first four and 404 on
+`/crm/admin`.
+
+Still **assert on the rendered body as well**. The status is now meaningful, but
+the page `<title>` is emitted even on the not-found page — an assertion that
+greps for "Client CRM" passes against a *blocked* response and reads as a
+security hole that isn't there. Match on body copy that only the real page has.
 
 **Do not use a fixed sleep after a deploy — wait on the destination.** The first
 navigation against a freshly restarted container took **~9 seconds**, and a
@@ -442,8 +450,12 @@ Things about that deployment that are not visible from the code:
   11,090,226 (all 67 counties, roll 2026P) and Montana 883,827 (all 56). Scraped
   fresh by the ETL rather than dumped from the Mini. `auctions` has not been
   built yet, and NC and CO have never been imported.
-- `OPENAI_API_KEY` is not set in SSM, so the three AI surfaces show their
-  disabled notice. It is runtime-only — setting it needs a redeploy, not a
-  rebuild.
+- The AI surfaces are **live**. `OPENAI_API_KEY` is in SSM as a SecureString and
+  `OPENAI_MODEL` is `gpt-5.6-luna`; the advisor was exercised end to end against
+  a real client record. Both are runtime-only, so changing either is an SSM
+  write plus a redeploy, not a rebuild. **Verify a new model before setting it**
+  — `GET /v1/models/<id>` with the key, then one `json_schema` completion. A
+  wrong name is accepted by SSM and by the deploy, and only fails at request
+  time, on all three surfaces at once.
 - No test suite. The closest thing is the browser pass described above, which
   currently lives outside the repo.
