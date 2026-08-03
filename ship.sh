@@ -72,7 +72,11 @@ script = (
   'install -m 0755 /tmp/units/run-etl.sh /opt/btb/run-etl.sh && '
   'install -m 0644 /tmp/units/*.service /tmp/units/*.timer /etc/systemd/system/ && '
   'systemctl daemon-reload && '
-  'systemctl enable --now btb-etl-parcels.timer btb-etl-auctions.timer && '
+  # Enable EVERY timer just installed, derived from the files themselves. This
+  # list used to be hardcoded, so adding btb-etl-zoning.timer installed the unit
+  # and left it disabled - a timer that exists, fires never and reports nothing,
+  # the same failure shape as the parcel timer that once ran a single state.
+  'for t in /tmp/units/*.timer; do systemctl enable --now "$(basename "$t")"; done && '
   'rm -rf /tmp/units /tmp/units.tgz && '
   'systemctl list-timers "btb-*" --all --no-pager'
 )
