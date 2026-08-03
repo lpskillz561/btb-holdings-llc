@@ -51,6 +51,10 @@ case "$JOB" in
     DATABASE_URL="$DATABASE_URL" STATE="$STATE" node import.mjs ;;
   auctions)
     DATABASE_URL="$DATABASE_URL" AUCTION_STATE="$STATE" node auctions.mjs ;;
+  zoning)
+    # STATE carries the county key here ("orange-fl"), not a state code - the
+    # unit is templated on one argument and zoning is published per county.
+    DATABASE_URL="$DATABASE_URL" ZONING_COUNTY="$STATE" node zoning.mjs ;;
   reindex)
     DATABASE_URL="$DATABASE_URL" node reindex.mjs ;;
   *)

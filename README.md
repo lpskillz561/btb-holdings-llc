@@ -13,6 +13,9 @@ See `CLAUDE.md` for the traps. Two pipelines share this directory:
 - **Auction sync** (`auctions.mjs`) — upcoming **tax deed & foreclosure sales**
   into the `auctions` table, joinable to `parcels` by normalized parcel number.
   Refreshed nightly (the lists change daily). See "Auction sync" below.
+- **Zoning sync** (`zoning.mjs`) — the zoning district a parcel sits in, from
+  county GIS, into `parcel_zoning`. Refreshed nightly, but only for parcels that
+  are missing it or stale. See "Zoning" below.
 
 ## What it does
 
@@ -109,6 +112,7 @@ second machine and no long-lived access key; the n8n dispatch path and the
 |---|---|---|
 | `btb-etl-parcels.timer` | monthly, 1st at 07:00 UTC | `btb-etl@ALL.service` |
 | `btb-etl-auctions.timer` | nightly at 09:00 UTC | `btb-etl-auctions.service` |
+| `btb-etl-zoning.timer` | nightly at 10:00 UTC | `btb-etl-zoning@orange-fl.service` |
 
 Monthly for parcels because that is roughly how often assessment rolls are
 republished; nightly for auctions because those lists change daily. Both are
@@ -202,3 +206,77 @@ drive it have been deleted.
   foreclosure deeds; counties outside the covered sources are unflagged.
 - **No live for-sale listings** (RentCast's old role). This dataset is
   off-market parcels by design.
+
+## Zoning
+
+`zoning.mjs` fills `parcel_zoning`, which the CRM joins to `parcels` at read
+time.
+
+**It is a separate table, not a column on `parcels`.** `import.mjs` refreshes a
+state with `DELETE FROM parcels WHERE state = $1` followed by a re-insert, so a
+zoning column there would be silently blanked every month — no error, right row
+count, column quietly null again.
+
+**Zoning is not `dor_uc`.** `dor_uc` is what the property appraiser records a
+parcel as being *used* as. Zoning is what the jurisdiction *permits*. They
+disagree constantly and only the second governs what may be built.
+
+### What it does and does not answer
+
+Orange County has **no RV district**. Of its 65 district codes none names RVs,
+and the established RV parks sit in agricultural and commercial ones:
+
+| Park | Zoning |
+|---|---|
+| WDW Fort Wilderness | `BAY-E` |
+| Winter Garden RV Park | `WG-C-2` |
+| Christmas RV Park | `ORG-A-2` |
+| Lost Lake RV Park | `ORG-A-1` |
+
+So zoning **narrows a search**; it does not establish that a use is permitted.
+For the 2,204 `P-D` (Planned Development) parcels the permitted use is not in
+the GIS attribute at all — it is in that PD's approved plan document. A written
+zoning determination is still the answer.
+
+### The parcel-id trap
+
+The county and the FDOR roll encode the same parcel differently: the county
+writes `SS-TT-RR-…`, the roll writes `TT-RR-SS-…`. Same fifteen digits, first
+and third pairs exchanged, and the swap is its own inverse.
+
+**The danger is not a miss, it is a hit.** The two encodings share an id space —
+`312428000000005` is a real parcel in both datasets and a *different* one in
+each. So joining without the swap does not fail loudly; it attaches a
+neighbouring parcel's zoning to a land decision. Every row is therefore
+address-checked (`addressesAgree`) before it is written, and a run that produces
+more mismatches than matches says so.
+
+### Selecting what to ask for
+
+The county service answers in **10–20 seconds per request** at any offset or
+page size, so crawling all 496,798 county records is ~2,500 requests and about
+thirteen hours. The job is driven by *our* parcels instead: shortlisted ones
+first, then land above `ZONING_MIN_ACRES` (default 2), skipping anything fetched
+within `ZONING_MAX_AGE_DAYS` (default 90), capped at `LIMIT` (default 5,000).
+
+```bash
+DATABASE_URL=… node zoning.mjs                                  # the default sweep
+DATABASE_URL=… ZONING_MIN_ACRES=5 LIMIT=500 node zoning.mjs     # narrower
+DATABASE_URL=… ZONING_WHERE="p.dor_uc IN ('028','036')" node zoning.mjs
+```
+
+### The WAF
+
+There is an IIS filter in front of the county service that returns **403 with an
+HTML body** — not an ArcGIS error — for query shapes it dislikes. Confirmed by
+bisecting: `ZONING_CODE <> ''` and `PARCEL > 'x'` are both refused, while
+`1=1`, `IS NOT NULL`, `IN (…)`, `orderByFields` and `resultOffset` are fine.
+That is why blank codes are filtered in code and why there is no keyset
+pagination.
+
+### Adding a county
+
+`COUNTIES` in `zoning.mjs` maps a key to an adapter. A new one needs: the
+service URL, the field carrying the code, and — the part that actually takes the
+time — the id relationship between that county's parcel number and the roll's.
+Prove it by looking one known address up in both before writing any rows.

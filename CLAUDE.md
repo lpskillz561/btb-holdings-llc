@@ -8,18 +8,16 @@ the app's deploy.
 Read `README.md` for what it does. This file is what is not obvious from the
 code and has already cost time.
 
-## Where this came from, and what changed
+## This repo is self-contained
 
-It used to live inside `ziora-capital-holdings/etl/` and was shared by two
-consumers: this production Aurora database, and a research tool on a Mac Mini
-reading its own local Postgres. That coupling was invisible from both sides — a
-commit in that repo silently changed what production ingested, with nothing in
-either place to say so.
+**There is exactly one importer feeding BTB and it is this one.** It has no
+parent, no upstream and no sibling checkout. Do not add a submodule, a symlink
+or a shared directory to another project, and do not vendor this into the CRM
+app: an importer that writes production data from two places is two things to
+keep in step, and the one that drifts is the one nobody is watching.
 
-**That link is cut.** This is now the only copy that feeds BTB. If the Mini's
-research tool still needs an importer it keeps its own; the two are free to
-diverge, which is the point. Do not re-introduce a shared checkout, a submodule,
-or a symlink.
+The only thing outside this repo that it touches is the `parcels` table it
+writes, which the CRM reads. That contract is at the bottom of this file.
 
 ## How it runs
 
@@ -29,6 +27,7 @@ Nothing here runs on a laptop against production. The instance runs it:
 |---|---|---|
 | `btb-etl-parcels.timer` | monthly, 1st at 07:00 UTC | `btb-etl@ALL.service` |
 | `btb-etl-auctions.timer` | nightly at 09:00 UTC | `btb-etl-auctions.service` |
+| `btb-etl-zoning.timer` | nightly at 10:00 UTC | `btb-etl-zoning@orange-fl.service` |
 
 Both are `Persistent=true`, so a run missed while the box was down fires at
 boot. `deploy/` holds the units and `run-etl.sh`; `./ship.sh --units` installs
@@ -121,8 +120,27 @@ parcels.ts` in the app selects them by name — so removing or renaming one is a
 breaking change to a separate repo. Add freely; rename with a search over there
 first.
 
-**There is no zoning column and never has been.** `dor_uc` is the Florida DOR
-*use* code — what a parcel is used AS, per the assessor. Zoning is what a
-jurisdiction PERMITS, is published per county and per municipality, and is in
-neither the NAL roll nor FDOR's statewide cadastral. If zoning is added it is a
-new source, not a new column on an existing one.
+**Zoning is a SEPARATE TABLE and must stay one.** `parcels` is refreshed by
+`DELETE FROM parcels WHERE state = $1` and a re-insert, so a zoning column on it
+would be blanked by every monthly run with no error, the right row count, and a
+quietly null column. It lives in `parcel_zoning` (`lib/zoning.mjs`), keyed on the
+same `(state, co_no, parcel_id)` the CRM already joins on.
+
+**Zoning is not `dor_uc`.** `dor_uc` is what the assessor records a parcel as
+being USED as; zoning is what the jurisdiction PERMITS. Neither the NAL roll nor
+FDOR's statewide cadastral carries zoning at all — it is published per county,
+which is why it is a per-county adapter.
+
+**The parcel-id encodings collide, and that is the real hazard.** Orange County
+writes `SS-TT-RR-…`, the roll writes `TT-RR-SS-…`; `swapParcelId` converts and
+is its own inverse. But `312428000000005` is a real parcel in BOTH datasets and
+a different one in each, so an unswapped join does not fail — it silently
+attaches a neighbour's zoning to a million-dollar decision. Every row is
+address-checked before it is written. Do not relax that guard to raise the match
+rate.
+
+**The county service is slow and sits behind a WAF.** 10-20 seconds per request
+whatever you ask, so the job is driven by our parcels rather than by crawling
+theirs (thirteen hours). `ZONING_CODE <> ''` and `PARCEL > 'x'` both draw a
+**403 with an HTML body** from the filter in front of it; `IN (...)`,
+`IS NOT NULL`, `orderByFields` and `resultOffset` are fine.
