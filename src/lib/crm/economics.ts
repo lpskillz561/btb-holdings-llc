@@ -308,11 +308,23 @@ function buildCaveats(
       "The financed balance is a real obligation for the full term regardless of how the unit performs. The deduction arrives once; the note payment recurs.",
     );
     if (ctx.annualCashFlowCents < 0) {
+      // NOT "the owner funds the shortfall" — that was wrong for this deal. The
+      // strategy deck in docs/ is explicit that the lender forbears in months
+      // without the income to pay, which is a materially different promise and
+      // one of the four objections the structure was built to answer.
       caveats.push(
-        "At the occupancy and rent modelled, income does not cover the note payment. The shortfall is funded by the owner, and a proposal that does not say so is not one a CPA will accept.",
+        "At the occupancy and rent modelled, income does not cover the note payment. Under this structure the lender forbears in months lacking the income to pay rather than the owner funding the gap — but forbearance defers the obligation, it does not cancel it, and the note still runs for its full term.",
       );
     }
   }
+
+  // The cap that decides whether a headline deduction is usable THIS YEAR, and
+  // the most likely reason a client's actual refund disappoints. Named in the
+  // strategy deck itself, so quoting a first-year benefit without it is quoting
+  // a number the deck already qualifies.
+  caveats.push(
+    "Section 461(l) limits how much business loss can offset non-business income in one year — roughly $313,000 single / $626,000 married filing jointly for 2025, rising to about $325,000 / $650,000 for 2026. A deduction larger than that threshold does not vanish, but the excess is carried forward as a net operating loss rather than sheltering this year's income. Where the modelled deduction exceeds the client's cap, the first-year tax benefit shown here is the gross figure and their CPA must apply the limitation to it.",
+  );
 
   if (!ctx.deductible) {
     caveats.push(

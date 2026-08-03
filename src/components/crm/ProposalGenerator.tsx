@@ -34,6 +34,8 @@ export interface ProposalDefaults {
 
 /** Whole dollars typed by a human → cents, for the live preview only. */
 const toCents = (v: string) => Math.round((Number(v.replace(/[$,\s]/g, "")) || 0) * 100);
+/** Whole dollars typed by a human → a number, for re-deriving the deposit. */
+const dollars = (v: string) => Number(v.replace(/[$,\s]/g, "")) || 0;
 const toBps = (v: string) => Math.round((Number(v.replace(/[%\s]/g, "")) || 0) * 100);
 
 export function ProposalGenerator({
@@ -51,15 +53,16 @@ export function ProposalGenerator({
 }) {
   const [form, setForm] = useState({
     unit_count: "1",
-    unit_cost: "",
+    // The deal is SIZED FROM THE WRITE-OFF. A client says "I need to shelter
+    // $1,000,000", so the unit is priced at $1,000,000 and the deduction is
+    // taken on that basis — the price is the answer to their question, not a
+    // separate input someone has to reverse-engineer.
+    unit_cost: client.target_writeoff_cents
+      ? String(Math.round(client.target_writeoff_cents / 100))
+      : "",
     site_work: "",
     soft_costs: "",
     land_cost: "",
-    // Ten per cent of what they are trying to write off — the deposit that
-    // produces the 10:1 the strategy leads with, since the deduction is taken on
-    // the full basis while only this is cash. Blank when no target is recorded:
-    // guessing a deposit off nothing would be a number with no reasoning behind
-    // it, and this one ends up in a signed note.
     down_payment: client.target_writeoff_cents
       ? String(Math.round(client.target_writeoff_cents / 10 / 100))
       : "",
@@ -74,11 +77,36 @@ export function ProposalGenerator({
     valid_until: "",
     instructions: "",
   });
+  /**
+   * Whether someone has typed their own deposit.
+   *
+   * Until they do, the deposit TRACKS 10% of the investment. Freezing it at the
+   * initial 10% is what made the numbers stop adding up: raise the price and the
+   * deposit stayed put, so the 10:1 the whole pitch rests on quietly became
+   * something else while the form still looked right.
+   */
+  const [depositEdited, setDepositEdited] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const set = (key: keyof typeof form) => (e: { target: { value: string } }) =>
-    setForm((f) => ({ ...f, [key]: e.target.value }));
+  const set = (key: keyof typeof form) => (e: { target: { value: string } }) => {
+    if (key === "down_payment") setDepositEdited(true);
+    setForm((f) => {
+      const next = { ...f, [key]: e.target.value };
+      // Re-derive the deposit from whatever now drives the price, unless the
+      // user has taken it over. Ten per cent of the investment keeps the 10:1
+      // true no matter how the deal is re-sized.
+      if (!depositEdited && key !== "down_payment") {
+        const investment =
+          (Number(next.unit_count.replace(/[,\s]/g, "")) || 0) * dollars(next.unit_cost) +
+          dollars(next.site_work) +
+          dollars(next.soft_costs) +
+          dollars(next.land_cost);
+        next.down_payment = investment > 0 ? String(Math.round(investment / 10)) : "";
+      }
+      return next;
+    });
+  };
 
   const preview = useMemo(
     () =>
