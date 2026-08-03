@@ -178,7 +178,7 @@ export function TodoBoard({
   return (
     <div>
       <SectionHeading
-        title="Shared board"
+        title="To do"
         count={openCount}
         action={<span className="sf-meta">Everyone can see and edit this board</span>}
       />

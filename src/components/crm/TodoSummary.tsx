@@ -39,7 +39,7 @@ export function TodoSummary({ todos }: { todos: CrmTodo[] }) {
     <div className="sf-card">
       <div className="flex items-center justify-between gap-4 border-b border-ink-200 px-5 py-3">
         <h2 className="text-base font-semibold text-ink-900">
-          Shared board
+          To do
           {open.length > 0 && (
             <span className="ml-2 text-sm font-normal text-ink-600">{open.length} open</span>
           )}
