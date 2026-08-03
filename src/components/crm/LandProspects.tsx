@@ -8,9 +8,31 @@
 
 import { useState } from "react";
 import type { CrmParkComment, CrmPark } from "@/lib/crm/types";
-import { fmtAgo, fmtDate, fmtMoney } from "@/lib/crm/format";
-import { Badge, EmptyState, ErrorNote, TextArea, TextInput } from "./ui";
-import { apiPost } from "./api";
+import {
+  acresFromInput,
+  acresToInput,
+  centsToInput,
+  fmtAcres,
+  fmtAgo,
+  fmtDate,
+  fmtMoney,
+  type LotUnit,
+} from "@/lib/crm/format";
+import {
+  Badge,
+  Dialog,
+  EmptyState,
+  ErrorNote,
+  Field,
+  MoneyInput,
+  Select,
+  TextArea,
+  TextInput,
+} from "./ui";
+import { apiPatch, apiPost } from "./api";
+
+const LOT_UNITS: readonly LotUnit[] = ["acres", "sqft"];
+const LOT_UNIT_LABELS: Record<string, string> = { acres: "acres", sqft: "sq ft" };
 
 export interface ProspectRow extends CrmPark {
   comment_count: number;
@@ -21,6 +43,8 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
   const [rows, setRows] = useState(initial);
   const [url, setUrl] = useState("");
   const [price, setPrice] = useState("");
+  const [lot, setLot] = useState("");
+  const [lotUnit, setLotUnit] = useState<LotUnit>("acres");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -67,17 +91,24 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
       setError("That does not look like a link. Paste the full URL, including https://");
       return;
     }
+    const acres = acresFromInput(lot, lotUnit);
+    if (lot.trim() && acres === null) {
+      setError("Lot size must be a number.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
       const created = await apiPost<ProspectRow>("/api/crm/parks", {
         listing_url: link,
         asking_price_cents: price || null,
+        acres,
         status: "prospect",
       });
       setRows((r) => [{ ...created, comment_count: 0, last_comment_at: null }, ...r]);
       setUrl("");
       setPrice("");
+      setLot("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save that link.");
     } finally {
@@ -113,6 +144,26 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
               className="w-40"
             />
           </div>
+          <div>
+            <label className="sf-label" htmlFor="lot">Lot size</label>
+            <div className="flex gap-2">
+              <TextInput
+                id="lot"
+                value={lot}
+                onChange={(e) => setLot(e.currentTarget.value)}
+                placeholder="2.5"
+                className="w-24"
+              />
+              <Select
+                aria-label="Lot size unit"
+                options={LOT_UNITS}
+                labels={LOT_UNIT_LABELS}
+                value={lotUnit}
+                onChange={(e) => setLotUnit(e.currentTarget.value as LotUnit)}
+                className="w-24"
+              />
+            </div>
+          </div>
           <button type="button" className="sf-btn-brand" onClick={save} disabled={busy}>
             {busy ? "Saving…" : "Save listing"}
           </button>
@@ -129,7 +180,8 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
           </button>
           <p className="text-xs text-ink-600">
             Fills acreage, assessed value, county and parcel key from the imported assessor data.
-            Asking price is never touched — the county does not hold it.
+            Only blanks are filled: anything typed by hand survives, and the asking price is never
+            touched at all — the county does not hold it.
           </p>
           {fillNote ? <p className="w-full text-xs text-ink-700">{fillNote}</p> : null}
         </div>
@@ -151,6 +203,7 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
                 <th>Status</th>
                 <th>Saved</th>
                 <th>Discussion</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -167,6 +220,9 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
                       ),
                     )
                   }
+                  onSaved={(saved) =>
+                    setRows((rs) => rs.map((r) => (r.id === saved.id ? { ...r, ...saved } : r)))
+                  }
                 />
               ))}
             </tbody>
@@ -182,15 +238,18 @@ function ProspectRowView({
   open,
   onToggle,
   onCommented,
+  onSaved,
 }: {
   row: ProspectRow;
   open: boolean;
   onToggle: () => void;
   onCommented: (count: number, at: string) => void;
+  onSaved: (row: CrmPark) => void;
 }) {
   const [comments, setComments] = useState<CrmParkComment[] | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   async function toggle() {
     onToggle();
@@ -231,7 +290,7 @@ function ProspectRowView({
         </td>
         <td>{[row.city, row.county, row.state].filter(Boolean).join(", ") || "—"}</td>
         <td>{fmtMoney(row.asking_price_cents)}</td>
-        <td>{row.acres ?? "—"}</td>
+        <td>{fmtAcres(row.acres)}</td>
         <td>
           <Badge tone={row.status === "owned" || row.status === "operating" ? "green" : "neutral"}>
             {row.status}
@@ -246,10 +305,28 @@ function ProspectRowView({
             ) : null}
           </button>
         </td>
+        <td>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="sf-btn-neutral py-0.5 text-xs"
+          >
+            Edit
+          </button>
+          {/* Mounted only while open, so cancelling discards the draft rather
+              than leaving it to reappear the next time this row is edited. */}
+          {editing ? (
+            <ProspectEditDialog
+              row={row}
+              onClose={() => setEditing(false)}
+              onSaved={onSaved}
+            />
+          ) : null}
+        </td>
       </tr>
       {open ? (
         <tr>
-          <td colSpan={7} className="bg-ink-100">
+          <td colSpan={8} className="bg-ink-100">
             <div className="space-y-3 px-2 py-3">
               {comments === null ? (
                 <p className="text-sm text-ink-600">Loading…</p>
@@ -286,5 +363,113 @@ function ProspectRowView({
         </tr>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Correct what the link gave us.
+ *
+ * A pasted URL yields a name off the slug and nothing else, and the county
+ * backfill can only fill what the county holds — it has no asking price at all,
+ * and no acreage for a listing it could not match to exactly one parcel. So
+ * these are the fields a human has to be able to type, and typing them must
+ * stick: `backfillProspect` COALESCEs, so a later backfill leaves them alone.
+ *
+ * Lot size is entered in either unit because listings state it in either, and
+ * the conversion happens once, in format.ts. The column is acres.
+ */
+function ProspectEditDialog({
+  row,
+  onClose,
+  onSaved,
+}: {
+  row: ProspectRow;
+  onClose: () => void;
+  onSaved: (row: CrmPark) => void;
+}) {
+  const seeded = acresToInput(row.acres);
+  const [name, setName] = useState(row.name ?? "");
+  const [url, setUrl] = useState(row.listing_url ?? "");
+  const [price, setPrice] = useState(centsToInput(row.asking_price_cents));
+  const [lot, setLot] = useState(seeded.value);
+  const [lotUnit, setLotUnit] = useState<LotUnit>(seeded.unit);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    if (!name.trim()) {
+      setError("Give it a name — it is what the list shows.");
+      return;
+    }
+    if (url.trim() && !/^https?:\/\//i.test(url)) {
+      setError("That does not look like a link. Paste the full URL, including https://");
+      return;
+    }
+    const acres = acresFromInput(lot, lotUnit);
+    if (lot.trim() && acres === null) {
+      setError("Lot size must be a number.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      // Blank clears rather than being left alone: emptying a price that turned
+      // out to be wrong has to be possible, and PATCH reads explicit null as
+      // "clear". The API's own column names; the coercers do dollars → cents.
+      const saved = await apiPatch<CrmPark>(`/api/crm/parks/${row.id}`, {
+        name: name.trim(),
+        listing_url: url.trim() || null,
+        asking_price_cents: price.trim() || null,
+        acres,
+      });
+      onSaved(saved);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that change.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onClose={onClose} title="Edit listing">
+      <div className="space-y-5 text-left">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Name" span hint="Taken from the link's address when it was saved.">
+            <TextInput value={name} onChange={(e) => setName(e.currentTarget.value)} />
+          </Field>
+          <Field label="Listing URL" span>
+            <TextInput value={url} onChange={(e) => setUrl(e.currentTarget.value)} />
+          </Field>
+          <Field label="Asking price" hint="Not something the county records hold.">
+            <MoneyInput value={price} onChange={(e) => setPrice(e.currentTarget.value)} />
+          </Field>
+          <Field label="Lot size" hint="Stored as acres, whichever unit you type.">
+            <div className="flex gap-2">
+              <TextInput value={lot} onChange={(e) => setLot(e.currentTarget.value)} />
+              <Select
+                aria-label="Lot size unit"
+                options={LOT_UNITS}
+                labels={LOT_UNIT_LABELS}
+                value={lotUnit}
+                onChange={(e) => setLotUnit(e.currentTarget.value as LotUnit)}
+                className="w-28 shrink-0"
+              />
+            </div>
+          </Field>
+        </div>
+
+        <ErrorNote>{error}</ErrorNote>
+
+        <div className="flex items-center justify-end gap-3">
+          <button type="button" className="sf-btn-neutral" onClick={onClose} disabled={saving}>
+            Cancel
+          </button>
+          <button type="button" className="sf-btn-brand" onClick={save} disabled={saving}>
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </Dialog>
   );
 }

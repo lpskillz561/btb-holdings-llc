@@ -84,11 +84,48 @@ export function fmtAgo(value: string | null | undefined): string {
   return rtf.format(-Math.round(seconds / chosen[0]), chosen[1]);
 }
 
+export const SQFT_PER_ACRE = 43_560;
+
 /** Lot size: acres, dropping to square feet for small parcels. */
 export function fmtAcres(acres: number | null | undefined): string {
   if (acres === null || acres === undefined || !Number.isFinite(acres)) return "—";
   if (acres >= 0.1) return `${acres.toLocaleString("en-US", { maximumFractionDigits: 2 })} ac`;
-  return `${Math.round(acres * 43_560).toLocaleString()} sq ft`;
+  return `${Math.round(acres * SQFT_PER_ACRE).toLocaleString()} sq ft`;
+}
+
+/** The unit a lot size was typed in. Listings state both; the column holds acres. */
+export type LotUnit = "acres" | "sqft";
+
+/**
+ * A typed lot size, in whichever unit the listing stated it, → the `acres` the
+ * column holds. Blank or unparseable is null, which clears the column.
+ *
+ * Rounded at six places so 10,890 sq ft stores as 0.25 rather than
+ * 0.2500000000000001, which would then render back as a different number.
+ */
+export function acresFromInput(input: string | null | undefined, unit: LotUnit): number | null {
+  if (input === null || input === undefined) return null;
+  const cleaned = input.replace(/[,\s]/g, "").trim();
+  if (cleaned === "") return null;
+  const n = Number(cleaned);
+  if (!Number.isFinite(n)) return null;
+  return unit === "sqft" ? Math.round((n / SQFT_PER_ACRE) * 1e6) / 1e6 : n;
+}
+
+/**
+ * `acres` → what a lot-size input should show. Small parcels come back in
+ * square feet, because that is the unit the listing they came from used, and
+ * "0.23 ac" is not what the person editing is looking at in another tab.
+ */
+export function acresToInput(acres: number | null | undefined): {
+  value: string;
+  unit: LotUnit;
+} {
+  if (acres === null || acres === undefined || !Number.isFinite(acres)) {
+    return { value: "", unit: "acres" };
+  }
+  if (acres < 0.1) return { value: String(Math.round(acres * SQFT_PER_ACRE)), unit: "sqft" };
+  return { value: String(acres), unit: "acres" };
 }
 
 /** "1,250" or "—". */
