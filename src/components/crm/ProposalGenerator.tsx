@@ -55,7 +55,14 @@ export function ProposalGenerator({
     site_work: "",
     soft_costs: "",
     land_cost: "",
-    down_payment: "",
+    // Ten per cent of what they are trying to write off — the deposit that
+    // produces the 10:1 the strategy leads with, since the deduction is taken on
+    // the full basis while only this is cash. Blank when no target is recorded:
+    // guessing a deposit off nothing would be a number with no reasoning behind
+    // it, and this one ends up in a signed note.
+    down_payment: client.target_writeoff_cents
+      ? String(Math.round(client.target_writeoff_cents / 10 / 100))
+      : "",
     monthly_rent: "",
     unit_use: "long_term_rental" as UnitUse,
     marginal_rate: String(defaults.marginalRateBps / 100),
@@ -132,7 +139,7 @@ export function ProposalGenerator({
           </Field>
           <Field
             label="Down payment (cash)"
-            hint="Leave blank for an all-cash deal. The balance is seller-financed at 0% over 720 months."
+            hint="Defaults to 10% of their target write-off. The balance is seller-financed at 0% over 720 months; clear it for an all-cash deal."
           >
             <MoneyInput value={form.down_payment} onChange={set("down_payment")} placeholder="155000" />
           </Field>

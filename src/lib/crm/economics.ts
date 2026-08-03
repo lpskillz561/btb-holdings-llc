@@ -179,18 +179,22 @@ export function computeEconomics(input: EconomicsInput): Economics {
   // deduction many times the cash a real thing rather than a sales claim. Same
   // terms the contract engine writes (0%, 720 months), imported rather than
   // restated so a proposal and the note it becomes cannot disagree.
+  // A deposit of zero means NO FINANCING, not a hundred-percent-financed deal.
+  // Getting this backwards quoted "cash down $0, seller-financed $102,000" on a
+  // blank field whose own hint promised an all-cash deal — and with no cash in
+  // it, leverage and cash-on-cash both collapsed to "—".
   const downPaymentCents = Math.min(
     Math.max(0, Math.round(input.downPaymentCents ?? 0)),
     totalInvestmentCents,
   );
-  const financedCents = totalInvestmentCents - downPaymentCents;
+  const financedCents = downPaymentCents > 0 ? totalInvestmentCents - downPaymentCents : 0;
   const monthlyNoteCents =
     NOTE_TERM_MONTHS > 0 ? Math.round(financedCents / NOTE_TERM_MONTHS) : 0;
   const annualDebtServiceCents = monthlyNoteCents * 12;
 
   // With nothing financed the buyer's cash IS the whole investment, which is
   // exactly how this model behaved before financing existed.
-  const cashInvestedCents = financedCents > 0 ? downPaymentCents : totalInvestmentCents;
+  const cashInvestedCents = totalInvestmentCents - financedCents;
 
   // Cash out of pocket less the year-one tax benefit. NEGATIVE means the tax
   // saving exceeded the cash — the deck's "net tax savings" figure, and the
