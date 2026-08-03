@@ -64,8 +64,15 @@ Two steps, and no instance replacement:
 ```bash
 # --exclude=./docs is not tidiness. That directory holds client legal and tax
 # documents that have no business in a deploy artifact.
-tar --exclude=./.git --exclude=./node_modules --exclude=./.next \
-    --exclude=./docs --exclude=./tsconfig.tsbuildinfo \
+#
+# COPYFILE_DISABLE=1 is not tidiness either. macOS `tar` writes an AppleDouble
+# `._name` beside every file to carry extended attributes, and those land in the
+# image. `._SKILL.md` ends in `.md`, so the AI knowledge loader picked it up and
+# concatenated 163 bytes of binary into every system prompt — no error, no
+# warning, just a corrupted prompt. The loader now skips dotfiles as well, but
+# not shipping them is the first line of defence.
+COPYFILE_DISABLE=1 tar --exclude=./.git --exclude=./node_modules --exclude=./.next \
+    --exclude=./docs --exclude=./tsconfig.tsbuildinfo --exclude='._*' \
     -czf /tmp/app.tar.gz -C . .
 aws s3 cp /tmp/app.tar.gz s3://btb-crm-deploy-761540266321/source/app.tar.gz --profile ziora
 

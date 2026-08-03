@@ -52,7 +52,13 @@ export function loadSkill(): string {
   let files: string[];
   try {
     files = readdirSync(KNOWLEDGE_DIR)
-      .filter((name) => name.endsWith(".md"))
+      // Leading dots are excluded, and that is not defensive tidiness: the
+      // deploy tarball is built on macOS, where `tar` writes an AppleDouble
+      // `._SKILL.md` beside every file to carry extended attributes. It ends in
+      // `.md`, so a suffix test alone loads 163 bytes of binary into the system
+      // prompt of every AI surface — silently, since it fails no check. Shell
+      // globs skip dotfiles; readdirSync does not.
+      .filter((name) => name.endsWith(".md") && !name.startsWith("."))
       .sort();
   } catch (err) {
     throw new Error(
@@ -77,7 +83,9 @@ export function loadSkill(): string {
 export function skillStatus(): { ok: boolean; files: number; chars: number; error?: string } {
   try {
     const text = loadSkill();
-    const files = readdirSync(KNOWLEDGE_DIR).filter((n) => n.endsWith(".md")).length;
+    const files = readdirSync(KNOWLEDGE_DIR).filter(
+      (n) => n.endsWith(".md") && !n.startsWith("."),
+    ).length;
     return { ok: true, files, chars: text.length };
   } catch (err) {
     return { ok: false, files: 0, chars: 0, error: err instanceof Error ? err.message : String(err) };
