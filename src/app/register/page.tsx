@@ -16,7 +16,9 @@ function safeNext(next: string | undefined): string {
   if (next && (next.startsWith("/app") || next.startsWith("/crm"))) {
     return next;
   }
-  return "/crm";
+  // Registering does NOT grant CRM access. This used to be "/crm", so a new
+  // user finished the form and was shown a 404 — see app/welcome/page.tsx.
+  return "/welcome";
 }
 
 // Mirror the server-side registration policy so the UI matches (whether to show

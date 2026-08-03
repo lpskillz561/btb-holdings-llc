@@ -15,6 +15,7 @@
 import { randomBytes } from "node:crypto";
 import { envUserEmails, envUserExists } from "@/lib/credentials";
 import { hashPassword } from "@/lib/portalUsers";
+import { emailHasCrmAccess } from "./access";
 import { CrmError, logActivity, nowIso, query, queryOne } from "./db";
 
 export interface AdminUser {
@@ -27,16 +28,29 @@ export interface AdminUser {
   password_changed_at: string | null;
   /** True when this email ALSO exists as an env account, which wins at login. */
   env_account: boolean;
+  /**
+   * Whether this account can actually reach the CRM.
+   *
+   * Registering does not grant it — `CRM_ADMINS` does, and it is an environment
+   * variable, so an account can sign in perfectly well and 404 on every CRM
+   * page. Nothing on this screen used to say so, which meant the only way to
+   * discover a pending user was for them to report a broken site.
+   */
+  crm_access: boolean;
 }
 
 export async function listUsers(): Promise<AdminUser[]> {
-  const rows = await query<Omit<AdminUser, "env_account">>(
+  const rows = await query<Omit<AdminUser, "env_account" | "crm_access">>(
     `SELECT email, name, created_at, last_login_at,
             blocked_at, blocked_reason, password_changed_at
      FROM portal_users
      ORDER BY created_at DESC`,
   );
-  return rows.map((r) => ({ ...r, env_account: envUserExists(r.email) }));
+  return rows.map((r) => ({
+    ...r,
+    env_account: envUserExists(r.email),
+    crm_access: emailHasCrmAccess(r.email),
+  }));
 }
 
 const normalise = (email: string) => email.trim().toLowerCase();

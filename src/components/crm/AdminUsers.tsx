@@ -54,16 +54,25 @@ export function AdminUsers({
 
   const blocked = users.filter((u) => u.blocked_at).length;
   const envAccounts = users.filter((u) => u.env_account).length;
+  // Registered, unblocked, and still 404ing on every CRM page. Nothing else on
+  // this screen would tell you they exist.
+  const pending = users.filter((u) => !u.crm_access && !u.blocked_at).length;
 
   return (
     <div className="space-y-8">
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="Registered users" value={String(users.length)} />
         <StatTile label="Blocked" value={String(blocked)} tone={blocked > 0 ? "gold" : undefined} />
         <StatTile
           label="Can sign in"
           value={String(users.length - blocked)}
           hint="Plus any AUTH_USERS accounts"
+        />
+        <StatTile
+          label="Awaiting CRM access"
+          value={String(pending)}
+          tone={pending > 0 ? "gold" : undefined}
+          hint="Signed up, but not on CRM_ADMINS yet"
         />
       </div>
 
@@ -75,6 +84,12 @@ export function AdminUsers({
           signed in with — are checked by the login route <em>before</em> the database and do not
           appear here unless they have also registered. To change one, edit{" "}
           <code>/btb-crm/AUTH_USERS</code> in SSM and redeploy.
+        </p>
+        <p className="mt-3">
+          <strong className="text-ink-900">Registering does not grant CRM access.</strong> A new
+          account can sign in but sees nothing here until its email is added to{" "}
+          <code>/btb-crm/CRM_ADMINS</code> in SSM, followed by a redeploy. Until then it lands on{" "}
+          <code>/welcome</code> rather than a 404, and shows as <em>Awaiting access</em> below.
         </p>
       </div>
 
@@ -115,6 +130,7 @@ export function AdminUsers({
                 <th className="px-4 py-2.5 font-semibold">Registered</th>
                 <th className="px-4 py-2.5 font-semibold">Last sign-in</th>
                 <th className="px-4 py-2.5 font-semibold">Status</th>
+                <th className="px-4 py-2.5 font-semibold">CRM access</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
               </tr>
             </thead>
@@ -144,6 +160,16 @@ export function AdminUsers({
                       {u.blocked_reason ? (
                         <span className="ml-2 text-xs text-ink-600">{u.blocked_reason}</span>
                       ) : null}
+                    </td>
+                    {/* Separate from Status on purpose: an account can be
+                        perfectly active and still 404 on every CRM page,
+                        because signing in and CRM access are different gates. */}
+                    <td className="px-4 py-3">
+                      {u.crm_access ? (
+                        <Badge tone="green">Yes</Badge>
+                      ) : (
+                        <Badge tone="gold">Awaiting access</Badge>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap justify-end gap-2">

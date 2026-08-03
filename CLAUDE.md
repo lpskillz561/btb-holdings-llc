@@ -409,7 +409,31 @@ not to a prompt. The audience is a taxpayer and their CPA.
 matcher, so `withCrm`/`withCrmParams` in `lib/crm/rest.ts` is the only gate.
 `CRM_ADMINS` unset means every signed-in user has access. With it set, a
 newly-registered account can sign in to the portal but gets a 404 on every CRM
-route and a 403 from the API — registration does not grant CRM access.
+route and a 403 from the API — **registration does not grant CRM access.**
+
+**Signing in and CRM access are different gates, and the sign-in flow must not
+pretend otherwise.** `safeNext()` in both `login/page.tsx` and
+`register/page.tsx` used to default to `/crm`, so someone who had just
+registered — with a valid `REGISTRATION_CODE`, i.e. an invited person — finished
+the form and was shown a **404**. That reads as a broken site, and it is how the
+problem was reported.
+
+They now default to **`/welcome`**, which self-gates (it is outside the
+middleware matcher): no session → `/login`; access → `/crm`; otherwise an
+"access is enabled separately" page. So an admitted user pays one redirect and
+nobody in the normal flow meets a bare 404. A **deep link** (`?next=/crm/...`)
+is still honoured verbatim, because there the 404 is exactly the point.
+
+**The 404 itself did not change and must not.** An account without access should
+not learn what lives at `/crm`. `/welcome` names no part of the CRM.
+
+**There is no in-app way to grant access.** `/crm/admin` can block, unblock,
+reset and remove, but the allow-list is an env var — admitting someone is a
+write to `/btb-crm/CRM_ADMINS` **plus a redeploy**. The admin screen now says so,
+and shows an "Awaiting access" badge and count (`emailHasCrmAccess` in
+`access.ts`), because previously nothing on that screen distinguished a working
+account from one that 404s everywhere, and the only way to find out was for the
+user to complain.
 
 **Legacy `scrypt:` password hashes** still verify and are upgraded to PBKDF2 in
 place on the next successful sign-in. Do not remove that path until

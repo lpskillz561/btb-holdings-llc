@@ -21,7 +21,16 @@ function safeNext(next: string | undefined): string {
   if (next && next.startsWith("/crm")) {
     return next;
   }
-  return "/crm";
+  // /welcome, not /crm. Signing in does not imply CRM access — `CRM_ADMINS` is
+  // a separate allow-list — and sending everyone to /crm meant an account that
+  // is not on it landed on a bare 404. /welcome forwards straight to /crm for
+  // anyone who IS admitted, so this costs an allowed user one redirect and
+  // costs everyone else nothing but an explanation.
+  //
+  // A deep link (?next=/crm/...) is still honoured as-is: someone following a
+  // link to a specific record who has no access SHOULD get the 404, because at
+  // that point the 404 is the point.
+  return "/welcome";
 }
 
 export default async function LoginPage({

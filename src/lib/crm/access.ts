@@ -22,9 +22,21 @@ function allowList(): string[] | null {
   return emails.length > 0 ? emails : null;
 }
 
-function isAllowed(session: SessionPayload): boolean {
+/**
+ * Whether one email is on the allow-list, without needing a session.
+ *
+ * The admin screen needs this: registration does NOT grant CRM access, so a
+ * newly-registered user sits in `portal_users` looking perfectly normal while
+ * 404ing on every CRM page. Without this the only way to notice was for them to
+ * report it — which is exactly how it was found.
+ */
+export function emailHasCrmAccess(email: string): boolean {
   const list = allowList();
-  return list === null || list.includes(session.sub.trim().toLowerCase());
+  return list === null || list.includes(email.trim().toLowerCase());
+}
+
+function isAllowed(session: SessionPayload): boolean {
+  return emailHasCrmAccess(session.sub);
 }
 
 /**

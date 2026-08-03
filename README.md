@@ -231,7 +231,7 @@ There is no test suite. Verify by exercising the running app — and note that
 | `OPENAI_MODEL` | no | Defaults to `gpt-4o` |
 | `AUTH_USERS` | no | Built-in accounts, `email:password` comma-separated |
 | `REGISTRATION_CODE` | no | Invite code for `/register`. Blank closes registration. |
-| `CRM_ADMINS` | no | Comma-separated emails. **Unset means every signed-in user has access.** |
+| `CRM_ADMINS` | no | Comma-separated emails. **Unset means every signed-in user has access.** Registration does *not* grant it: a new account lands on `/welcome` until its email is added here and the app is redeployed. |
 | `CRM_SUPERUSERS` | no | Who may administer accounts at `/crm/admin`. Falls back to `CRM_ADMINS`; **unset on both means nobody** — this gate fails closed. |
 | `CRM_SELLER_*` | for contracts | The party named as Seller, Creditor and Agent. Generation refuses until the address is set. |
 | `CRM_WIRE_*` | for contracts | Where the buyer wires the deposit. Generation refuses until set. |
