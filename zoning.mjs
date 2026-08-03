@@ -59,7 +59,7 @@ async function selectParcels(client, { state, county }) {
   const savedCol = hasSaved[0]?.present ? "(s.id IS NOT NULL)" : "false";
 
   const { rows } = await client.query(
-    `SELECT DISTINCT p.parcel_id, p.co_no, p.situs_addr, ${savedCol} AS shortlisted
+    `SELECT DISTINCT p.parcel_id, p.co_no, p.situs_addr, p.owner_name, ${savedCol} AS shortlisted
        FROM parcels p
        ${savedJoin}
        LEFT JOIN parcel_zoning z

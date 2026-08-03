@@ -71,7 +71,7 @@ async function fetchBatch(rows) {
   // comparison and no keyset pagination. Blank codes are dropped in code.
   const sp = new URLSearchParams({
     where: `PARCEL IN (${ids})`,
-    outFields: "PARCEL,ZONING_CODE,SITUS",
+    outFields: "PARCEL,ZONING_CODE,SITUS,NAME1",
     returnGeometry: "false",
     f: "json",
   });
@@ -121,7 +121,7 @@ export async function* orangeZoningRows({ parcels, log = () => {} } = {}) {
       if (!ours) continue;
       if (seen.has(ours.parcel_id)) continue;
       seen.add(ours.parcel_id);
-      if (!addressesAgree(ours.situs_addr, a.SITUS)) {
+      if (!addressesAgree(ours.situs_addr, a.SITUS, ours.owner_name, a.NAME1)) {
         stats.addressMismatch++;
         continue;
       }
