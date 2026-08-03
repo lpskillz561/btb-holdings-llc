@@ -44,19 +44,17 @@ export function Badge({ children, tone = "neutral" }: { children: ReactNode; ton
 /* Layout                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export function StatTile({
-  label,
-  value,
-  hint,
-  tone = "navy",
-}: {
+interface StatProps {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
   tone?: "navy" | "gold";
-}) {
+}
+
+/** The body of one figure. Bare — StatTile and StatStrip supply the surface. */
+export function Stat({ label, value, hint, tone = "navy" }: StatProps) {
   return (
-    <div className="sf-card p-4">
+    <div className="bg-white p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-ink-600">{label}</p>
       <p
         className={`mt-1.5 text-2xl font-semibold leading-tight ${
@@ -66,6 +64,31 @@ export function StatTile({
         {value}
       </p>
       {hint && <p className="mt-1 text-xs text-ink-600">{hint}</p>}
+    </div>
+  );
+}
+
+export function StatTile(props: StatProps) {
+  return (
+    <div className="sf-card overflow-hidden">
+      <Stat {...props} />
+    </div>
+  );
+}
+
+/**
+ * Several figures as ONE surface, divided by hairlines.
+ *
+ * The overview used to show eight separate cards in two grids, and eight boxes
+ * of equal visual weight is noise — nothing reads as more important than
+ * anything else. A single band with internal rules is the Lightning pattern for
+ * this, and the gap-px-over-grey trick gives clean hairlines that wrap
+ * correctly at every column count, which per-cell borders do not.
+ */
+export function StatStrip({ children }: { children: ReactNode }) {
+  return (
+    <div className="sf-card grid gap-px overflow-hidden bg-ink-200 sm:grid-cols-2 lg:grid-cols-4">
+      {children}
     </div>
   );
 }
@@ -94,7 +117,7 @@ export function SectionHeading({
 
 export function EmptyState({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="rounded border border-dashed border-ink-300 bg-white p-8 text-center">
+    <div className="rounded-lg border border-dashed border-ink-300 bg-white p-8 text-center">
       <p className="text-sm text-ink-600">{children}</p>
       {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>

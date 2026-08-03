@@ -45,13 +45,15 @@ export default async function CrmLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="sf-page">
-      {user ? (
-        <>
-          <NavProgress />
-          <CrmChrome isSuperUser={isSuperUser(user)} />
-        </>
-      ) : null}
-      {children}
+      {user ? <NavProgress /> : null}
+      {/* One flex row: the rail is a sticky column on lg+, and the pages render
+          beside it. Below lg the chrome renders a top bar instead, and this
+          wrapper stacks. On the client-facing routes (print, present) CrmChrome
+          renders nothing, so the content simply takes the full width. */}
+      <div className="lg:flex">
+        {user ? <CrmChrome isSuperUser={isSuperUser(user)} /> : null}
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
       {user ? <AskAi aiEnabled={isAiConfigured()} /> : null}
     </div>
   );

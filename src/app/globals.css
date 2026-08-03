@@ -107,8 +107,10 @@ body {
   .sf-page .section {
     @apply py-6 lg:py-8;
   }
+  /* A whisper of shadow, not a lift: the grey/white contrast still does the
+     work, this just softens the edge where card meets page. */
   .sf-card {
-    @apply rounded border border-ink-200 bg-white;
+    @apply rounded-lg border border-ink-200 bg-white shadow-[0_1px_2px_rgba(24,24,24,0.04)];
   }
   .sf-h {
     @apply text-sm font-bold text-ink-900;
@@ -117,9 +119,9 @@ body {
     @apply text-xs text-ink-600;
   }
 
-  /* Buttons. 0.25rem radius and a 32px target, per Lightning. */
+  /* Buttons. A 32px target, per Lightning; the radius matches .sf-card. */
   .sf-btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded border px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
   }
   .sf-btn-brand {
     @apply sf-btn border-sf-500 bg-sf-500 text-white hover:border-sf-600 hover:bg-sf-600;
@@ -132,7 +134,7 @@ body {
   }
 
   .sf-input {
-    @apply w-full rounded border border-ink-300 bg-white px-3 py-1.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-sf-500 focus:ring-2 focus:ring-sf-200;
+    @apply w-full rounded-md border border-ink-300 bg-white px-3 py-1.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-sf-500 focus:ring-2 focus:ring-sf-200;
   }
   .sf-label {
     @apply mb-1 block text-xs font-medium text-ink-600;
@@ -158,21 +160,9 @@ body {
     animation: crm-fade-in 180ms ease-out both;
   }
 
-  /* The clicked tab, while its page is still on the server. useLinkStatus turns
-     this on the moment the link is pressed, which is the only feedback in the
-     whole navigation that does not have to wait for a round trip. It slides, so
-     it never reads as the solid underline that means "you are here". */
-  .crm-tab-pending {
-    background-image: linear-gradient(
-      90deg,
-      transparent 0%,
-      theme("colors.sf.500") 50%,
-      transparent 100%
-    );
-    background-repeat: no-repeat;
-    background-size: 60% 100%;
-    animation: crm-tab-slide 900ms ease-in-out infinite;
-  }
+  /* The clicked nav item's pending feedback lives in CrmChrome.tsx as an
+     animate-pulse on the row — the old horizontal underline sweep died with the
+     tab strip when the nav became a left rail. */
 
   /* The navigation bar, pinned to the top of the window. See NavProgress.tsx
      for why the CRM has this instead of a loading.tsx skeleton. */
@@ -207,12 +197,6 @@ body {
     .crm-enter,
     .sf-page .section {
       animation: none;
-    }
-    /* Still say something is happening — just hold it still. */
-    .crm-tab-pending {
-      animation: none;
-      background-image: none;
-      @apply bg-sf-200;
     }
     .nav-progress__bar {
       animation: none;
@@ -328,18 +312,6 @@ body {
   }
   to {
     opacity: 1;
-  }
-}
-
-/* An indeterminate sweep across a 2px underline. Indeterminate on purpose: the
-   server render has no progress to report, and a fake percentage that stalls at
-   90% is worse than one that never claims to know. */
-@keyframes crm-tab-slide {
-  from {
-    background-position: 0% 0;
-  }
-  to {
-    background-position: 100% 0;
   }
 }
 

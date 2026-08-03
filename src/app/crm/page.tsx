@@ -4,7 +4,7 @@ import { RecordHeader } from "@/components/crm/RecordHeader";
 import { ClientsBoard } from "@/components/crm/ClientsBoard";
 import { TodoBoard } from "@/components/crm/TodoBoard";
 import { statusTone } from "@/lib/crm/tone";
-import { Badge, StatTile } from "@/components/crm/ui";
+import { Badge, Stat, StatStrip } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { listAvailablePads } from "@/lib/crm/portfolio";
 import { getCrmSummary, listClients } from "@/lib/crm/clients";
@@ -64,70 +64,92 @@ export default async function CrmPage() {
         }
       />
 
-      <section className="section pt-12">
-        <div className="container-x space-y-12">
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
+      <section className="section pt-8">
+        <div className="container-x space-y-8">
+          {/* One band, eight figures. The book (top row) reads before the
+              operations (bottom row); eight separate cards gave every number
+              equal weight, which is the same as giving none any. */}
+          <StatStrip>
+            <Stat
               label="Clients"
               value={fmtNum(summary.clients_total)}
               hint={`${summary.by_status.owner} owner${summary.by_status.owner === 1 ? "" : "s"}, ${summary.by_status.prospect} prospect${summary.by_status.prospect === 1 ? "" : "s"}`}
             />
-            <StatTile
+            <Stat
               label="Open proposals"
               value={fmtMoneyShort(summary.open_proposal_value_cents)}
               hint="Investment value of drafts and sent proposals"
             />
-            <StatTile
+            <Stat
               label="Contracted"
               value={fmtMoneyShort(summary.active_contract_value_cents)}
               hint="Signed and active contracts"
               tone="gold"
             />
-            <StatTile
+            <Stat
               label="Deduction delivered"
               value={fmtMoneyShort(summary.writeoff_delivered_cents)}
               hint="Modelled first-year deduction across accepted proposals"
             />
-          </div>
-
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
+            <Stat
               label="Units in service"
               value={`${summary.units_in_service} / ${summary.units_total}`}
               hint="Placed in service — the date the deduction turns on"
             />
-            <StatTile
+            <Stat
               label="Land owned"
               value={`${fmtNum(summary.acres_owned, 1)} ac`}
               hint="Across all client holdings"
             />
-            <StatTile
+            <Stat
               label="Rent run rate"
               value={fmtMoneyShort(summary.finance.annual_rent_run_rate_cents)}
               hint="Annualised, units in service"
             />
-            <StatTile
+            <Stat
               label="Outstanding"
               value={fmtMoneyShort(summary.finance.outstanding_cents)}
               hint="Invoiced and not yet collected"
             />
-          </div>
+          </StatStrip>
 
-          {/* Pipeline strip — where every relationship currently sits. */}
-          <div className="sf-card p-6">
-            <h2 className="mb-4 text-base font-semibold text-ink-900">Pipeline</h2>
-            <div className="flex flex-wrap gap-3">
-              {CLIENT_STATUSES.map((stage) => (
-                <div
-                  key={stage}
-                  className="min-w-[8.5rem] flex-1 rounded-lg border border-ink-200 bg-white px-4 py-3"
-                >
-                  <Badge tone={statusTone(stage)}>{LABELS.clientStatus[stage]}</Badge>
-                  <p className="mt-2 text-xl text-ink-900">
-                    {summary.by_status[stage]}
-                  </p>
-                </div>
-              ))}
+          {/* Pipeline and the activity feed share a row: both are glanced at,
+              neither earns the full width, and stacking them pushed the client
+              list — the thing people come here to work in — below the fold. */}
+          <div className="grid gap-5 lg:grid-cols-3">
+            <div className="sf-card p-6 lg:col-span-2">
+              <h2 className="mb-4 text-base font-semibold text-ink-900">Pipeline</h2>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {CLIENT_STATUSES.map((stage) => (
+                  <div
+                    key={stage}
+                    className="rounded-lg border border-ink-200 bg-white px-4 py-3"
+                  >
+                    <Badge tone={statusTone(stage)}>{LABELS.clientStatus[stage]}</Badge>
+                    <p className="mt-2 text-xl font-semibold text-ink-900">
+                      {summary.by_status[stage]}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="sf-card p-6">
+              <h2 className="mb-4 text-base font-semibold text-ink-900">Recent activity</h2>
+              {summary.activity.length === 0 ? (
+                <p className="text-sm text-ink-600">Nothing yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {summary.activity.slice(0, 8).map((entry) => (
+                    <li key={entry.id} className="text-sm leading-snug">
+                      <span className="text-ink-800">{entry.summary}</span>
+                      <span className="mt-0.5 block text-xs text-ink-500">
+                        {entry.actor_email ? `${entry.actor_email} · ` : ""}
+                        {fmtAgo(entry.created_at)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 
@@ -145,23 +167,6 @@ export default async function CrmPage() {
             <h2 className="mb-4 text-lg font-semibold text-ink-900">Clients</h2>
             <ClientsBoard initial={clients} states={states} pads={pads} />
           </div>
-
-          {summary.activity.length > 0 && (
-            <div className="sf-card p-6">
-              <h2 className="mb-4 text-base font-semibold text-ink-900">Recent activity</h2>
-              <ul className="space-y-2.5">
-                {summary.activity.map((entry) => (
-                  <li key={entry.id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
-                    <span className="text-ink-800">{entry.summary}</span>
-                    <span className="text-xs text-ink-500">
-                      {entry.actor_email ? `${entry.actor_email} · ` : ""}
-                      {fmtAgo(entry.created_at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       </section>
     </>
