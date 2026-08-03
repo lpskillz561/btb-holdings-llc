@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly auction sync
+
+[Timer]
+# Nightly: auction lists change daily, unlike assessment rolls.
+OnCalendar=*-*-* 09:00:00 UTC
+Persistent=true
+Unit=btb-etl-auctions.service
+
+[Install]
+WantedBy=timers.target

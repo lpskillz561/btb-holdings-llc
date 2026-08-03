@@ -1,0 +1,20 @@
+{
+  "name": "btb-etl",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Parcel and auction importer for the BTB Holdings CRM. Standalone: ships and runs on its own via ship.sh and the systemd timers in deploy/.",
+  "scripts": {
+    "import": "node import.mjs",
+    "auctions": "node auctions.mjs",
+    "reindex": "node reindex.mjs",
+    "ship": "./ship.sh"
+  },
+  "dependencies": {
+    "csv-parse": "^5.6.0",
+    "mongodb": "^7.4.0",
+    "pg": "^8.22.0",
+    "pg-copy-streams": "^6.0.6",
+    "unzipper": "^0.12.5"
+  }
+}

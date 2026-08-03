@@ -1,0 +1,17 @@
+[Unit]
+Description=Nightly zoning sync (Orange County, FL)
+
+[Timer]
+# Nightly, and an hour after the auction sync so the two are not contending for
+# the /var/lock/btb-etl.lock that run-etl.sh takes.
+#
+# Nightly is affordable because the job only re-asks parcels whose zoning is
+# missing or older than ZONING_MAX_AGE_DAYS. Once it has caught up, most nights
+# it asks for nothing and exits in a second. It is not "refresh everything
+# every night" - that would be thirteen hours of somebody else's server.
+OnCalendar=*-*-* 10:00:00 UTC
+Persistent=true
+Unit=btb-etl-zoning@orange-fl.service
+
+[Install]
+WantedBy=timers.target

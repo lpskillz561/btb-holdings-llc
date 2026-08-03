@@ -1,0 +1,11 @@
+[Unit]
+Description=BTB auction sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=7200
+ExecStart=/opt/btb/run-etl.sh auctions ALL
+StandardOutput=journal
+StandardError=journal
