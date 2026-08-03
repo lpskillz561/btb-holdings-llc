@@ -31,6 +31,23 @@ export interface ParkCapacity extends CrmPark {
   pad_site_work_cents: number;
   /** Sum of nightly rates on occupied pads. The revenue model's input. */
   occupied_nightly_cents: number;
+
+  /* ---- Internal land-cost allocation. NEVER client-facing. ---------------- */
+  /**
+   * How many homes the land carries — the denominator for the cost split.
+   *
+   * `planned_pad_count` is the number stated at acquisition ("this parcel takes
+   * six"), and it is what the split must divide by. Falling back to the pads
+   * actually created would make every client's share LURCH as pads are added:
+   * one pad built means the first client carries 100% of the land, and their
+   * share silently drops to a sixth later. The stated capacity is stable from
+   * the day the land is bought, which is the only way a cost figure is usable.
+   */
+  land_capacity: number | null;
+  /** Land cost ÷ capacity: what one section of this park actually cost us. */
+  land_cost_per_section_cents: number | null;
+  /** Capacity not yet spoken for. What is still sellable. */
+  sections_remaining: number | null;
 }
 
 /**
@@ -54,7 +71,22 @@ export async function listParksWithCapacity(): Promise<ParkCapacity[]> {
         + COALESCE(p.closing_costs_cents, 0))::bigint                        AS land_basis_cents,
       COALESCE(sum(d.site_work_cents), 0)::bigint                            AS pad_site_work_cents,
       COALESCE(sum(d.nightly_rate_cents)
-        FILTER (WHERE d.status = 'occupied'), 0)::bigint                     AS occupied_nightly_cents
+        FILTER (WHERE d.status = 'occupied'), 0)::bigint                     AS occupied_nightly_cents,
+      p.planned_pad_count                                                    AS land_capacity,
+      CASE
+        WHEN COALESCE(p.planned_pad_count, 0) <= 0 THEN NULL
+        ELSE round(
+          (COALESCE(p.purchase_price_cents, 0) + COALESCE(p.closing_costs_cents, 0))::numeric
+          / p.planned_pad_count
+        )::bigint
+      END                                                                    AS land_cost_per_section_cents,
+      CASE
+        WHEN COALESCE(p.planned_pad_count, 0) <= 0 THEN NULL
+        ELSE greatest(
+          p.planned_pad_count - count(d.id) FILTER (WHERE d.status IN ('occupied','reserved'))::int,
+          0
+        )
+      END                                                                    AS sections_remaining
     FROM crm_parks p
     LEFT JOIN crm_pads d ON d.park_id = p.id
     GROUP BY p.id
@@ -107,6 +139,15 @@ export interface ClientFootprint {
    * it is read. 43,560 is square feet in an acre.
    */
   share_of_park_bps: number | null;
+  /**
+   * This client's slice of what the land cost us — INTERNAL ONLY.
+   *
+   * One section's worth: the park's land cost divided by the number of homes it
+   * was stated to carry. Under the current model the client buys the home and
+   * never the ground, so this figure exists so WE know the real cost of serving
+   * them. It must never reach a proposal, a contract or anything a client reads.
+   */
+  land_share_cents: number | null;
 }
 
 /**
@@ -123,7 +164,14 @@ export async function getClientFootprint(clientId: string): Promise<ClientFootpr
        CASE
          WHEN p.acres IS NULL OR p.acres <= 0 OR d.pad_sqft IS NULL THEN NULL
          ELSE round((d.pad_sqft / (p.acres * 43560.0)) * 10000)::int
-       END AS share_of_park_bps
+       END AS share_of_park_bps,
+       CASE
+         WHEN COALESCE(p.planned_pad_count, 0) <= 0 THEN NULL
+         ELSE round(
+           (COALESCE(p.purchase_price_cents, 0) + COALESCE(p.closing_costs_cents, 0))::numeric
+           / p.planned_pad_count
+         )::bigint
+       END AS land_share_cents
      FROM crm_units u
      LEFT JOIN crm_pads d ON d.id = u.pad_id
      LEFT JOIN crm_parks p ON p.id = d.park_id
@@ -223,12 +271,41 @@ export function annualGrossCents(
 
 /** Pads that can actually take a home, newest parks first. */
 export async function listAvailablePads(): Promise<
-  { id: string; label: string; park_id: string; park_name: string; pad_sqft: number | null }[]
+  {
+    id: string;
+    label: string;
+    park_id: string;
+    park_name: string;
+    pad_sqft: number | null;
+    /** Stated capacity, sections still free, and what one section cost us. */
+    land_capacity: number | null;
+    sections_remaining: number | null;
+    land_cost_per_section_cents: number | null;
+  }[]
 > {
+  // Only parks with a section still free are offered, and each option can say
+  // how many are left — "assign the last one" and "assign one of six" are very
+  // different decisions and the dropdown should not make them look identical.
   return query(
-    `SELECT d.id, d.label, d.park_id, p.name AS park_name, d.pad_sqft
+    `SELECT d.id, d.label, d.park_id, p.name AS park_name, d.pad_sqft,
+            p.planned_pad_count AS land_capacity,
+            CASE
+              WHEN COALESCE(p.planned_pad_count, 0) <= 0 THEN NULL
+              ELSE greatest(p.planned_pad_count - taken.n, 0)
+            END AS sections_remaining,
+            CASE
+              WHEN COALESCE(p.planned_pad_count, 0) <= 0 THEN NULL
+              ELSE round(
+                (COALESCE(p.purchase_price_cents, 0) + COALESCE(p.closing_costs_cents, 0))::numeric
+                / p.planned_pad_count
+              )::bigint
+            END AS land_cost_per_section_cents
      FROM crm_pads d
      JOIN crm_parks p ON p.id = d.park_id
+     JOIN LATERAL (
+       SELECT count(*)::int AS n FROM crm_pads t
+        WHERE t.park_id = p.id AND t.status IN ('occupied','reserved')
+     ) taken ON true
      WHERE d.status = 'available'
      ORDER BY p.name ASC, d.label ASC`,
   );

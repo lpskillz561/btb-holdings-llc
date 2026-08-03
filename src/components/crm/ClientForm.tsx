@@ -28,6 +28,9 @@ export interface AvailablePad {
   label: string;
   park_id: string;
   park_name: string;
+  land_capacity?: number | null;
+  sections_remaining?: number | null;
+  land_cost_per_section_cents?: number | null;
   pad_sqft: number | null;
 }
 
@@ -217,6 +220,9 @@ export function ClientForm({
                 {pads.map((pad) => (
                   <option key={pad.id} value={pad.id}>
                     {pad.park_name} — {pad.label}
+                    {pad.sections_remaining != null
+                      ? ` (${pad.sections_remaining} of ${pad.land_capacity} sections left)`
+                      : ""}
                     {pad.pad_sqft ? ` (${pad.pad_sqft.toLocaleString("en-US")} sq ft)` : ""}
                   </option>
                 ))}

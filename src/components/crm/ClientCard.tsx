@@ -680,7 +680,9 @@ function HoldingsTab({
       <div>
         <h3 className="text-base font-semibold text-ink-900">Sited on our land</h3>
         <p className="mb-4 mt-1 text-sm text-ink-600">
-          BTB owns the park; this client owns the home standing on the pad.
+          BTB owns the park; this client owns the home standing on the pad. The
+          land cost is one section&rsquo;s share of what the park cost us &mdash;{" "}
+          <strong>internal only</strong>, never quoted to the client.
         </p>
         {detail.footprint.length === 0 ? (
           <EmptyState>
@@ -700,6 +702,11 @@ function HoldingsTab({
                   <th className="px-4 py-2.5 font-semibold">Pad</th>
                   <th className="px-4 py-2.5 font-semibold">Footprint</th>
                   <th className="px-4 py-2.5 font-semibold">Share of park</th>
+                  {/* Internal cost, not a charge. The client buys the home and
+                      never the ground; this is our cost of carrying them. */}
+                  <th className="px-4 py-2.5 font-semibold">
+                    Land cost <span className="font-normal normal-case text-ink-500">(internal)</span>
+                  </th>
                   <th className="px-4 py-2.5 font-semibold">Nightly</th>
                 </tr>
               </thead>
@@ -722,6 +729,9 @@ function HoldingsTab({
                     </td>
                     <td className="px-4 py-2.5">
                       {f.share_of_park_bps === null ? "—" : fmtPct(f.share_of_park_bps, { digits: 2 })}
+                    </td>
+                    <td className="px-4 py-2.5 text-ink-700">
+                      {f.land_share_cents === null ? "—" : fmtMoney(f.land_share_cents)}
                     </td>
                     <td className="px-4 py-2.5">{fmtMoney(f.nightly_rate_cents)}</td>
                   </tr>

@@ -79,10 +79,28 @@ export default async function ParkPage({ params }: { params: Promise<{ id: strin
               value={fmtMoney(annualGrossCents(occupiedNightly, occupancyBps))}
               hint={`Annual at ${fmtPct(occupancyBps, { digits: 0 })}`}
             />
+            {/* The internal unit cost of this business: what one section of
+                this land cost us. Never shown to a client — they buy the home,
+                not the ground. */}
             <StatTile
-              label="Land under pads"
-              value={builtBps === null ? "—" : fmtPct(builtBps, { digits: 1 })}
-              hint={`${fmtNum(padSqft)} sq ft of pads`}
+              label="Land cost per section"
+              value={
+                park.planned_pad_count && park.planned_pad_count > 0
+                  ? fmtMoney(
+                      Math.round(
+                        ((park.purchase_price_cents ?? 0) + (park.closing_costs_cents ?? 0)) /
+                          park.planned_pad_count,
+                      ),
+                    )
+                  : "—"
+              }
+              hint={
+                park.planned_pad_count && park.planned_pad_count > 0
+                  ? `${fmtNum(park.planned_pad_count)} sections · ${fmtNum(
+                      Math.max(park.planned_pad_count - occupied.length, 0),
+                    )} left`
+                  : "Set the planned pad count to split the land cost"
+              }
             />
           </div>
 
