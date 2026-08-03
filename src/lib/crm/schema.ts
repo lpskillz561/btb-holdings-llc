@@ -34,6 +34,7 @@ import {
   PROPERTY_STATUSES,
   PROPOSAL_STATUSES,
   SAVED_PARCEL_STATUSES,
+  TODO_STATUSES,
   TX_CATEGORIES,
   TX_KINDS,
   TX_STATUSES,
@@ -508,21 +509,30 @@ const TABLES: TableDef[] = [
     columns: [
       ["id", "TEXT PRIMARY KEY"],
       ["title", "TEXT NOT NULL"],
+      // Which kanban column the card sits in.
+      ["status", "TEXT NOT NULL DEFAULT 'todo'"],
       // TEXT, not TIMESTAMPTZ. Every timestamp in this schema is an ISO string
       // (see TS_DEFAULT), and mixing the two breaks queries rather than just
       // looking untidy: one bind parameter used for both `updated_at` (text)
       // and a timestamptz column makes Postgres refuse the statement outright
       // with "inconsistent types deduced for parameter $2".
       ["done_at", "TEXT"],
-      // Who added it and who ticked it. Stamped from the session, never the
-      // request body — on a shared list "who did this" is the whole audit.
+      // Who added it and who finished it. Stamped from the session, never the
+      // request body — on a shared board "who did this" is the whole audit.
       ["created_by", "TEXT"],
       ["done_by", "TEXT"],
       ...TIMESTAMPS,
     ],
+    checks: [{ column: "status", values: TODO_STATUSES }],
     indexes: [
-      // Matches the list's ORDER BY exactly: open items first, newest first.
-      "CREATE INDEX IF NOT EXISTS crm_todos_open_idx ON crm_todos ((done_at IS NULL) DESC, created_at DESC)",
+      // Matches the board's ORDER BY exactly: column, then newest first.
+      "CREATE INDEX IF NOT EXISTS crm_todos_board_idx ON crm_todos (status, created_at DESC)",
+    ],
+    alters: [
+      // Converges any card written by the pre-kanban build, where "done" was
+      // carried only by done_at. Safe to re-run: once the code sets both
+      // together, no row can be in the state this looks for.
+      "UPDATE crm_todos SET status = 'done' WHERE done_at IS NOT NULL AND status = 'todo'",
     ],
   },
   {

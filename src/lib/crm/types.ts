@@ -210,6 +210,16 @@ export const SAVED_PARCEL_STATUSES = [
 ] as const;
 export type SavedParcelStatus = (typeof SAVED_PARCEL_STATUSES)[number];
 
+/**
+ * Columns on the shared kanban board, in board order.
+ *
+ * Three, not five. A board the whole office shares is only useful if a card's
+ * column is obvious at a glance to someone who did not move it; every extra
+ * column is another judgement call about where something belongs.
+ */
+export const TODO_STATUSES = ["todo", "doing", "done"] as const;
+export type TodoStatus = (typeof TODO_STATUSES)[number];
+
 export const AI_SCOPES = ["global", "client"] as const;
 export type AiScope = (typeof AI_SCOPES)[number];
 
@@ -725,4 +735,9 @@ export const LABELS = {
     acquired: "Acquired",
     rejected: "Rejected",
   } satisfies Record<SavedParcelStatus, string>,
+  todoStatus: {
+    todo: "To do",
+    doing: "In progress",
+    done: "Done",
+  } satisfies Record<TodoStatus, string>,
 } as const;
