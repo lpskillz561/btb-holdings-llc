@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { RecordHeader } from "@/components/crm/RecordHeader";
 import { ClientsBoard } from "@/components/crm/ClientsBoard";
+import { TodoBoard } from "@/components/crm/TodoBoard";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, StatTile } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { listAvailablePads } from "@/lib/crm/portfolio";
 import { getCrmSummary, listClients } from "@/lib/crm/clients";
+import { listTodos } from "@/lib/crm/todos";
 import { fmtAgo, fmtMoneyShort, fmtNum } from "@/lib/crm/format";
 import { CLIENT_STATUSES, LABELS } from "@/lib/crm/types";
 import { listStates } from "@/lib/parcels";
@@ -27,13 +29,15 @@ export default async function CrmPage() {
   // that the section exists.
   if (!user) notFound();
 
-  const [summary, clients, states, pads] = await Promise.all([
+  const [summary, clients, states, pads, todos] = await Promise.all([
     getCrmSummary(),
     listClients(),
     listStates().catch(() => []),
     // Offered in the create-client dialog so a new client can be placed on land
     // BTB already owns at the moment they are taken on.
     listAvailablePads().catch(() => []),
+    // The shared list must never be the reason the dashboard fails to render.
+    listTodos().catch(() => []),
   ]);
 
   return (
@@ -110,6 +114,10 @@ export default async function CrmPage() {
               ))}
             </div>
           </div>
+
+          {/* Above the client board on purpose: it is the thing the office is
+              meant to read first when the dashboard opens. */}
+          <TodoBoard initial={todos} />
 
           <div>
             <h2 className="mb-4 text-lg font-semibold text-ink-900">Clients</h2>

@@ -266,6 +266,12 @@ mechanisms cannot express — relaxing a constraint on a column that already
 exists, since `ADD COLUMN IF NOT EXISTS` is a no-op once the column is there.
 Every statement in it must be safe to re-run on every boot.
 
+**Every timestamp column is `TEXT`, not `TIMESTAMPTZ`** — an ISO string, per
+`TS_DEFAULT`. This is not cosmetic. Declaring one new column `TIMESTAMPTZ` while
+`updated_at` beside it is `TEXT` makes Postgres refuse any statement that binds
+one parameter to both: `inconsistent types deduced for parameter $2`, a 500 at
+request time that `tsc` and `next build` cannot see. Match the convention.
+
 **Constraint violations are translated to 4xx** in `lib/crm/rest.ts`. A
 duplicate pad label used to surface as a 500 "Something went wrong", which is
 indistinguishable from an outage and useless to someone who typed "A-01" twice.

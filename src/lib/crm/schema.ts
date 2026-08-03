@@ -494,6 +494,37 @@ const TABLES: TableDef[] = [
       "CREATE UNIQUE INDEX IF NOT EXISTS crm_saved_parcels_uniq ON crm_saved_parcels (client_id, parcel_key)",
     ],
   },
+  // The shared team to-do on the dashboard.
+  //
+  // Deliberately has NO client_id and no owner: it is one list the whole office
+  // works from, which is the point of it. Anyone who can reach the CRM can add,
+  // tick and delete — the same gate as every other route, no second permission
+  // model for a checklist.
+  //
+  // `done_at` NULL means open. A boolean plus a timestamp would let the two
+  // disagree; one nullable timestamp cannot, and it answers "when" for free.
+  {
+    name: "crm_todos",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["title", "TEXT NOT NULL"],
+      // TEXT, not TIMESTAMPTZ. Every timestamp in this schema is an ISO string
+      // (see TS_DEFAULT), and mixing the two breaks queries rather than just
+      // looking untidy: one bind parameter used for both `updated_at` (text)
+      // and a timestamptz column makes Postgres refuse the statement outright
+      // with "inconsistent types deduced for parameter $2".
+      ["done_at", "TEXT"],
+      // Who added it and who ticked it. Stamped from the session, never the
+      // request body — on a shared list "who did this" is the whole audit.
+      ["created_by", "TEXT"],
+      ["done_by", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      // Matches the list's ORDER BY exactly: open items first, newest first.
+      "CREATE INDEX IF NOT EXISTS crm_todos_open_idx ON crm_todos ((done_at IS NULL) DESC, created_at DESC)",
+    ],
+  },
   {
     name: "crm_activity",
     columns: [
