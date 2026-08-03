@@ -109,10 +109,18 @@ export async function* orangeZoningRows({ parcels, log = () => {} } = {}) {
     const { features, bySwapped } = await fetchBatch(chunk);
     stats.answered += features.length;
 
+    // A parcel with several polygons is several rows in the county layer and
+    // one parcel here, so the same PARCEL can come back more than once per
+    // batch. Emitting it twice is harmless downstream (writeZoning dedupes) but
+    // would double-count `emitted` and make the stats lie.
+    const seen = new Set();
+
     for (const f of features) {
       const a = f.attributes ?? {};
       const ours = bySwapped.get(String(a.PARCEL));
       if (!ours) continue;
+      if (seen.has(ours.parcel_id)) continue;
+      seen.add(ours.parcel_id);
       if (!addressesAgree(ours.situs_addr, a.SITUS)) {
         stats.addressMismatch++;
         continue;
