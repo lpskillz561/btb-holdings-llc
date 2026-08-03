@@ -6,13 +6,14 @@ has already cost time.
 
 ## Where this came from
 
-Built and run in production inside `ziora-capital-holdings` (the Ziora Capital
-portal, `web/`), then extracted here as a standalone app. That original still
-runs on a Mac Mini and still serves the marketing site and the `/app` platform;
-only the CRM moved.
+Built and run in production inside the Ziora Capital portal, then extracted here
+as a standalone app. That original still runs on a Mac Mini and still serves the
+marketing site and the `/app` platform; only the CRM moved.
 
-If something looks odd, the original may have context: `~/Documents/Ziora/
-ziora-capital-holdings`, and its `CLAUDE.md`.
+**This repo shares nothing with it.** The last connection was the parcel
+importer, which is now its own repo (`btb-etl`) — see the AWS section. If a
+piece of history looks odd the original may have context, but nothing here
+depends on it, and nothing there should be edited to change this app.
 
 ## Who owns what — this changed, and the code predates it
 
@@ -500,17 +501,28 @@ ALB, listeners, Route53) are both up; the ACM cert is issued. See
 
 Not built yet: the parcel data itself, and the nightly backup.
 
-**The importer is a SCRIPT, and it is NOT IN THIS REPO.** It lives in
-`ziora-capital-holdings/etl/` and is deliberately not vendored here, because it
-has **two** consumers: this app's Aurora, and the Mini's own research tool,
-which reads `parcels` out of the Mini's local Postgres (`web/src/lib/parcels.ts`
-there, fed by `docker compose run --rm etl`). Copying it here would fork it.
+**The importer is its OWN REPO: `btb-etl`** (`~/Documents/Ziora/btb-etl`). It
+owns its source, its `run-etl.sh`, its four systemd units and its own
+`ship.sh`, and it deploys itself to the same EC2 instance on its own cadence —
+it does not ride this app's deploy. Its `CLAUDE.md` carries the ETL traps.
 
-The catch is that the coupling is invisible from this side: **a commit in that
-repo changes what this production database ingests**, with nothing here to say
-so. Ship it with the tarball step in `infra/etl/README.md`, and treat an ETL
-change as a change to this app. `etl/import.mjs` in the notes below means
-`ziora-capital-holdings/etl/import.mjs`.
+It used to live in `ziora-capital-holdings/etl/`, shared with a research tool on
+the Mac Mini, and **that link is cut**. The coupling was invisible from both
+ends: a commit over there silently changed what this production database
+ingests, with nothing in either repo to say so. There is now exactly one
+importer feeding this Aurora. Do not re-introduce a shared checkout, a submodule
+or a symlink, and do not vendor it here.
+
+**The one contract that remains is the `parcels` table.** `lib/common.mjs` in
+`btb-etl` defines the columns; `src/lib/parcels.ts` here selects them by name.
+Adding a column is safe. Renaming or dropping one is a breaking change to this
+app, so search this tree first. Note there is **no zoning column and never has
+been** — `dor_uc` is the assessor's *use* code, which is a different thing from
+what a jurisdiction permits.
+
+`etl/import.mjs` in the notes below means `btb-etl/import.mjs`. The traps
+themselves now live in that repo's `CLAUDE.md`; what is kept below is only what
+this app's operators still need to know.
 
 **EC2 schedules it itself, and the Mini is OUT of this path entirely.** Two
 systemd timers do the whole job with no second machine and no long-lived access

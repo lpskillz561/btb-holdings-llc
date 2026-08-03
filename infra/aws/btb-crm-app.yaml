@@ -290,9 +290,23 @@ Resources:
 
               chmod 700 /opt/btb/deploy.sh
 
-              # The parcel ETL, run here rather than on the Mini so the 19.5M
-              # rows never leave AWS and Aurora stays private. Dispatched from
-              # the Mini's n8n over SSM - see infra/etl/run-etl-on-ec2.sh.
+              # The parcel ETL, run here so the rows never leave AWS and Aurora
+              # stays private. It runs itself on two systemd timers; there is no
+              # dispatcher and no second machine in this path.
+              #
+              # WHAT FOLLOWS IS A BOOTSTRAP COPY, NOT THE SOURCE OF TRUTH.
+              # run-etl.sh and the four unit files are owned by the btb-etl
+              # repo, in its deploy/ directory, and `./ship.sh --units` there
+              # overwrites everything written below. This copy exists only so a
+              # FRESH instance has working timers before btb-etl has ever
+              # shipped to it - an instance with no timers imports nothing and
+              # says nothing about it.
+              #
+              # So: fix run-etl.sh in btb-etl and ship it. Only mirror the
+              # change here if a rebuilt-from-scratch instance would otherwise
+              # boot with a broken bootstrap. Note that UserData does not re-run
+              # on an existing instance anyway (see CLAUDE.md), so editing this
+              # block alone changes nothing about the box that is running.
               cat > /opt/btb/run-etl.sh <<'RUNETL'
               #!/bin/bash
               set -euo pipefail
@@ -312,9 +326,9 @@ Resources:
               REGION="${AWS::Region}"
               BUCKET="${DeployBucket}"
 
-              # The ETL lives in the ziora-capital-holdings repo, not this one,
-              # so it ships as its own artifact rather than being vendored into
-              # two places and drifting.
+              # The ETL is its own repo (btb-etl) and ships as its own artifact
+              # on its own cadence, so it is pulled fresh here rather than
+              # vendored into this one.
               rm -rf /opt/btb/etl
               mkdir -p /opt/btb/etl
               aws s3 cp "s3://$BUCKET/etl/etl.tar.gz" /tmp/etl.tar.gz --region "$REGION"

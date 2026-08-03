@@ -319,9 +319,9 @@ copied from the Mini. Two systemd timers on the instance keep it current
 (`btb-etl-parcels.timer` monthly for every state, `btb-etl-auctions.timer`
 nightly); the Mini and its n8n dispatch are out of that path entirely.
 
-**The ETL is not in this repo.** It lives in `ziora-capital-holdings/etl/`,
-because it also feeds the Mini's own research tool — so a commit there changes
-what this production database ingests. See
+**The ETL is not in this repo.** It is its own repo, `btb-etl`, which ships and
+schedules itself onto the same EC2 instance. Nothing is shared between the two
+beyond the `parcels` table it writes and this app reads. See
 [`infra/etl/README.md`](infra/etl/README.md).
 
 Still to do: the nightly `pg_dump` backup, and North Carolina and Colorado have

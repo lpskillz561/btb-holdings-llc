@@ -9,13 +9,21 @@ systemd timer (EC2)  ──▶  /opt/btb/run-etl.sh  ──▶  node import.mjs 
 
 ## Where the code lives
 
-**Not in this repo.** It lives in `ziora-capital-holdings/etl/`, because it has
-two consumers: this app's Aurora, and the Mini's own research tool, which reads
-`parcels` out of the Mini's local Postgres. Copying it here would fork it.
+**Its own repo: `btb-etl`** (`~/Documents/Ziora/btb-etl`). It owns its source,
+its `run-etl.sh`, its four systemd units and its own `ship.sh`. Read that repo's
+`CLAUDE.md` before changing anything in it.
 
-The catch is that the coupling is invisible from this side — a commit in that
-repo changes what this production database ingests. Treat an ETL change as a
-change to this app, and ship it with the tarball step below.
+It used to live in `ziora-capital-holdings/etl/`, shared with a research tool on
+the Mac Mini. **That link is cut.** The coupling was invisible from both ends —
+a commit over there silently changed what this production database ingests —
+and there is now exactly one importer feeding this Aurora. The Mini keeps
+whatever it keeps; the two are free to diverge, which is the point. Do not
+re-introduce a shared checkout, a submodule or a symlink.
+
+The only remaining contract between the two repos is the **`parcels` table**:
+`lib/common.mjs` over there defines the columns, `src/lib/parcels.ts` here
+selects them by name. Adding a column is safe; renaming one is a breaking change
+that needs a search in this tree first.
 
 ## The schedule
 
@@ -60,15 +68,25 @@ a `COPY` sitting in `Client/ClientRead` with an hours-old `xact_start`.
 
 ## Shipping a new ETL
 
-The ETL is not vendored here; it ships as its own artifact so the two copies
-cannot drift. `run-etl.sh` re-downloads on every run, so the next scheduled job
-picks it up.
+From the `btb-etl` repo, not this one. `run-etl.sh` re-downloads the source on
+every run, so the next scheduled job picks it up and there is no deploy step
+beyond the upload.
 
 ```bash
-cd ~/Documents/Ziora/ziora-capital-holdings/etl
-tar --exclude=./node_modules -czf /tmp/etl.tar.gz -C . .
-aws s3 cp /tmp/etl.tar.gz s3://btb-crm-deploy-761540266321/etl/etl.tar.gz --profile ziora
+cd ~/Documents/Ziora/btb-etl
+./ship.sh           # source only — the common case
+./ship.sh --units   # also reinstall run-etl.sh and the systemd units
 ```
+
+`ship.sh` refuses to run while an import is in flight, and strips macOS
+AppleDouble files. **Do not hand-roll the tarball** — the previous instructions
+did, and left eight `._*` files on the instance.
+
+`infra/aws/btb-crm-app.yaml` in this repo also writes `run-etl.sh` and the four
+units, but that is a **bootstrap copy only**, so a fresh instance has working
+timers before `btb-etl` has ever shipped to it. `ship.sh --units` overwrites it,
+and UserData does not re-run on an existing instance. `btb-etl/deploy/` is the
+source of truth.
 
 ## What was removed, and why
 
