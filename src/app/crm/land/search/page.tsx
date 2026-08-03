@@ -26,6 +26,7 @@ import {
   siteFit,
 } from "@/lib/crm/siteScore";
 import { SORT_OPTIONS, STATE_NAMES, isSortKey, listStates, searchArea, type SortKey } from "@/lib/parcels";
+import { zillowUrlForAddress } from "@/lib/zillow";
 
 export const metadata: Metadata = {
   title: "Land search",
@@ -312,7 +313,23 @@ export default async function LandSearchPage({
                       return (
                         <tr key={row.parcelId ?? row.oneLine} className="border-t border-ink-200">
                           <Td>
-                            <span className="text-ink-900">{row.oneLine ?? row.parcelId}</span>
+                            {zillowUrlForAddress(row.oneLine) ? (
+                              // A search link, not a listing claim — most of
+                              // these parcels are not for sale, but Zillow's
+                              // page is the fastest photo-and-context check.
+                              <a
+                                href={zillowUrlForAddress(row.oneLine)!}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Look up on Zillow"
+                                className="text-ink-900 hover:text-sf-600 hover:underline"
+                              >
+                                {row.oneLine}
+                                <span aria-hidden className="ml-1 text-xs opacity-50">↗</span>
+                              </a>
+                            ) : (
+                              <span className="text-ink-900">{row.oneLine ?? row.parcelId}</span>
+                            )}
                           </Td>
                           <Td>{fmtAcres(row.acres)}</Td>
                           <Td>{row.assessedTotal ? fmtMoney(row.assessedTotal * 100) : "—"}</Td>

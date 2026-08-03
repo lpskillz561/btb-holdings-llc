@@ -21,7 +21,30 @@ import type { ParcelFit } from "@/lib/crm/land";
 import { Markdown } from "@/components/Markdown";
 import { apiDelete, apiGet, apiPatch, apiPost, qs } from "./api";
 import { statusTone } from "@/lib/crm/tone";
+import { zillowUrlForAddress } from "@/lib/zillow";
 import { Badge, EmptyState, ErrorNote, SectionHeading, Table, Td } from "./ui";
+
+/**
+ * The address, as a Zillow search link when it carries a house number.
+ * External and new-tab: the person is mid-search here, and losing the results
+ * page to look at one candidate would mean re-running the search.
+ */
+function AddressLink({ oneLine, fallback }: { oneLine: string | null | undefined; fallback: string }) {
+  const url = zillowUrlForAddress(oneLine);
+  if (!url) return <>{oneLine ?? fallback}</>;
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Look up on Zillow"
+      className="hover:text-sf-600 hover:underline"
+    >
+      {oneLine}
+      <span aria-hidden className="ml-1 text-xs opacity-50">↗</span>
+    </a>
+  );
+}
 
 /** Assessed values arrive from the parcel DB in dollars; the CRM stores cents. */
 const dollarsToCents = (v: number | undefined) => (v === undefined ? null : Math.round(v * 100));
@@ -182,7 +205,7 @@ export function LandSearchTab({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold text-navy-900">
-                        {row.one_line ?? row.parcel_key}
+                        <AddressLink oneLine={row.one_line} fallback={row.parcel_key} />
                       </p>
                       <p className="mt-0.5 text-sm text-navy-900/55">
                         {[
@@ -355,7 +378,9 @@ export function LandSearchTab({
                     return (
                       <tr key={key} className="transition hover:bg-paper-50">
                         <Td>
-                          <span className="font-medium text-navy-900">{row.oneLine ?? key}</span>
+                          <span className="font-medium text-navy-900">
+                            <AddressLink oneLine={row.oneLine} fallback={key} />
+                          </span>
                           <span className="mt-0.5 block text-xs text-navy-900/45">
                             {[row.owner, row.propType].filter(Boolean).join(" · ")}
                           </span>
