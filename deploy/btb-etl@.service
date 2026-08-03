@@ -1,0 +1,13 @@
+[Unit]
+Description=BTB parcel ETL (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# A full multi-state import is hours, not minutes. Florida alone is ~11M rows
+# across 67 county files.
+TimeoutStartSec=21600
+ExecStart=/opt/btb/run-etl.sh parcels %i
+StandardOutput=journal
+StandardError=journal

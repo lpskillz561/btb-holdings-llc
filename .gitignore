@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.env
+.env.local
+# macOS AppleDouble files. macOS `tar` emits these beside every file and eight
+# of them once shipped to the instance; ship.sh excludes them too.
+._*
+.DS_Store

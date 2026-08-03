@@ -1,0 +1,16 @@
+[Unit]
+Description=Monthly parcel refresh (all states)
+
+[Timer]
+# Monthly, matching how assessment rolls are republished. Chasing a roll more
+# often than the counties publish it is load without new data.
+OnCalendar=*-*-01 07:00:00 UTC
+Persistent=true
+# ALL, not a single state. This used to name btb-etl@MT.service, so the monthly
+# refresh silently covered Montana alone while Florida went stale and the timer
+# reported success throughout. A per-state unit that is ALSO the scheduled unit
+# is a trap: it looks healthy and does a fraction of the work.
+Unit=btb-etl@ALL.service
+
+[Install]
+WantedBy=timers.target
