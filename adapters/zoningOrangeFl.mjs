@@ -31,10 +31,16 @@ const SERVICE =
   "https://ocgis4.ocfl.net/arcgis/rest/services/AGOL_Open_Data/MapServer/56/query";
 
 /**
- * Parcels per request. Bounded by URL length rather than by the service's
- * 200-record page cap: each id is 15 characters plus quoting and a comma.
+ * Parcels per request.
+ *
+ * The query goes as a POST body, so this is not bounded by URL length - a GET
+ * starts returning **403** somewhere between 80 and 120 ids, because the query
+ * string passes IIS's 2,048-byte limit and the filter in front of this service
+ * rejects it before ArcGIS ever sees it. Measured: GET is fine at 80 and 403s
+ * at 120; POST is fine at 500. 200 leaves room and matches the service's own
+ * page size, so a batch never needs paginating.
  */
-const BATCH = 120;
+const BATCH = 200;
 
 export const ORANGE_FL = {
   state: "FL",
@@ -69,7 +75,16 @@ async function fetchBatch(rows) {
     returnGeometry: "false",
     f: "json",
   });
-  const body = await fetchJson(`${SERVICE}?${sp.toString()}`);
+  // POST, not GET. See BATCH: a long `IN (...)` in a query string trips the
+  // 2,048-byte limit and comes back 403 from the WAF rather than from ArcGIS.
+  const body = await fetchJson(SERVICE, {
+    init: {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: sp.toString(),
+    },
+    label: `${SERVICE} (${bySwapped.size} parcels)`,
+  });
   if (body?.error) {
     throw new Error(`Orange County zoning service: ${body.error.message ?? "unknown error"}`);
   }

@@ -268,11 +268,18 @@ DATABASE_URL=… ZONING_WHERE="p.dor_uc IN ('028','036')" node zoning.mjs
 ### The WAF
 
 There is an IIS filter in front of the county service that returns **403 with an
-HTML body** — not an ArcGIS error — for query shapes it dislikes. Confirmed by
-bisecting: `ZONING_CODE <> ''` and `PARCEL > 'x'` are both refused, while
-`1=1`, `IS NOT NULL`, `IN (…)`, `orderByFields` and `resultOffset` are fine.
-That is why blank codes are filtered in code and why there is no keyset
-pagination.
+HTML body** — not an ArcGIS error — and it catches three different things:
+
+- `ZONING_CODE <> ''` and `PARCEL > 'x'` are refused outright as query shapes.
+  `1=1`, `IS NOT NULL`, `IN (…)`, `orderByFields` and `resultOffset` are fine.
+  Hence blank codes are filtered in code, and there is no keyset pagination.
+- **A long query string is refused regardless of its content.** A GET with an
+  `IN (…)` of 80 parcel ids is fine and 120 is a 403 — that is IIS's 2,048-byte
+  query-string limit, hit before ArcGIS sees the request. The job therefore
+  POSTs its query; POST is fine at 500 ids.
+
+All three were found by bisecting a failing request, because the response is an
+HTML error page rather than anything that names the real problem.
 
 ### Adding a county
 
