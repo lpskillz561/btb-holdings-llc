@@ -18,6 +18,12 @@ this file wins.
 Any file added to `src/lib/crm/knowledge/*.md` is loaded alongside this one, in
 filename order. That is how the house view is extended: add a file, redeploy.
 
+**Restoring the sources:** `aws s3 cp s3://btb-docs-761540266321/docs/ ./docs/
+--recursive`. That bucket holds only these documents and is deliberately
+separate from the deploy bucket — the web server has no reason to read a
+client's legal file. Never copy them into `ziora-assets`, which is world-readable
+by design.
+
 ---
 
 ## 1. What is actually being sold
@@ -56,21 +62,82 @@ built (mainly Arizona and Texas), transported by truck, not anchored to the
 ground, temporary wherever it is staged. A state issues it a **VIN** as a
 "trailer or RV". Living area is **399 sq ft or less**.
 
+### Who this is sold to
+
+The deck's own qualification criteria. Use these when scoring a lead, and note
+that all four are about having a **large current-year tax liability**, not about
+wanting real estate:
+
+- **W-2 earners** with federal withholding over **$250,000**.
+- **Corporation owners** — S-corp, C-corp or partnership, high income.
+- **Self-employed** — 1099 or Schedule C, high income.
+- **Pre-tax retirement holders** with **$500,000+**. The deck flags bonus
+  depreciation as "ideal for Roth conversions": the deduction offsets the
+  conversion income in the year it is recognised.
+
+The deduction offsets **active income and capital gains**, subject to §461(l).
+
+### Where the unit is deployed — and why it is part of the tax case
+
+Deployment is not logistics; it is the fact pattern the opinion rests on.
+
+- The memorandum's stated **assumption** is that each Park Model "will be
+  deployed and utilized to generate income with such deployment occurring in
+  **existing managed RV parks**." An opinion is only as good as its assumptions
+  — a unit parked somewhere that is not a managed park is outside it.
+- The sample Purchase Agreement sells a package "install and setup in managed
+  location **Idaho or Montana**". BTB's own parks are what stand in that place.
+- The deck says "place into service for rental to **Disaster Relief Agencies or
+  Tiny Home Rental Parks** before end of calendar year", and the memorandum's
+  conclusion describes the use as "earmarked for disaster relief or relief
+  efforts, and/or temporary Transient Lodging … in areas that lack
+  accommodation."
+- **United States only.**
+
+**Placed in service before year end is the whole timing point.** A unit ordered
+in one year and delivered in the next moves the deduction with it.
+
+### Fractional purchase — the middle tier is a real product
+
+The deck sells three sizings, and the middle one is **fractional**: **$250,000
+increments, 20% ownership**, five taxpayers to a Series, described as carrying
+the same tax benefits pro rata.
+
+This is why the sample Equipment Purchase Agreement — a whole-unit, $1,250,000
+sale — nonetheless calls the subject "the above-mentioned **fractional
+interest** in said Luxury RV Trailer". That phrase is boilerplate carried over
+from the fractional form, not a statement that the sample buyer owns a fraction.
+Do not read it as one, and do not repeat it when describing a whole-unit deal.
+
+The FAQ says a solo client can still take a fractional slot; BTB matches the
+other owners onto the Series, which "may cause a slight delay."
+
 ---
 
 ## 2. The tax case, and exactly what supports it
 
-Three questions, three answers. Each is sourced.
+Three questions, three answers. Each is sourced. These are the memorandum's own
+Questions Presented.
 
 ### 2a. Bonus depreciation — is the Park Model qualified property?
 
 Yes. A state VIN classifies it as a trailer/RV, which is **six-year MACRS
 property** (Rev. Proc. 87-56, Asset Class 00.27) — inside the 20-year ceiling
-§168(k) requires. Original use begins with the taxpayer. **OBBBA permanently
-restored 100% bonus depreciation** for qualified property acquired and placed in
-service **on or after 20 January 2025** (TCJA's phase-down is superseded).
+§168(k) requires. **OBBBA permanently restored 100% bonus depreciation** for
+qualified property acquired and placed in service **on or after 20 January
+2025** (TCJA's 20%-a-year phase-down is superseded).
 
-Depreciation flows Series → Trust → grantor's own 1040.
+§168(k) requires three tests, all met here:
+
+1. MACRS recovery period of **20 years or less** — six years here.
+2. **Original use** begins with the taxpayer (the alternative used-property
+   route is not relied on).
+3. Placed in service within the statutory window, as adjusted by OBBBA.
+
+Depreciation flows Series → Trust → grantor's own 1040. *United States v.
+National Bank of Commerce*, 472 U.S. 713 (1985): state law controls the nature
+of the legal interest a taxpayer holds in property — which is what makes the
+state-issued VIN do the work it does here.
 
 ### 2b. The lodging exclusion, and its escape hatch
 
@@ -84,14 +151,24 @@ and **Reg. 1.48-1(h)(2)(ii)** except transient use:
 measured by the proportion of **accommodations** used by transients — **not** the
 proportion of renters who are transient.
 
+The regulation contains **four** exceptions to the lodging exclusion: (1) rental
+to transients, (2) certain commercial facilities in a lodging complex that are
+open to the public, (3) energy property, (4) qualified historic rehabilitation
+expenditures. **Only the first is ours.** Do not reach for the others.
+
 - ***Moore v. Commissioner***, 58 T.C. 1045 (1972), aff'd 489 F.2d 285 (5th Cir.
-  1973). Mobile homes in a park; not inherently permanent structures, therefore
-  tangible personal property.
-- ***Shirley v. Commissioner***, T.C. Memo. 2004-188. Motor homes in a rental
-  fleet, predominantly let for under 30 days, held to be §179 property. **The
-  taxpayer won.** The court's rule of thumb: if the customer would otherwise
-  have had to rent a *hotel room*, the unit is transient lodging; if they would
-  otherwise have rented a *car*, it is transportation.
+  1973). Mobile homes in a park, rented at average stays of 9.9 weeks and 1.7
+  weeks. Held: not "inherently permanent structures", therefore tangible
+  personal property.
+- ***Shirley v. Commissioner***, T.C. Memo. 2004-188. A motor home ("MH #22")
+  added to a rental fleet, predominantly let for under 30 days, held to be §179
+  property. **The taxpayer won.** The court's **primary function test**: ask what
+  the customer would have had to rent instead. If a *hotel room*, the unit is
+  transient lodging and qualifies; if a *car*, it is transportation.
+
+Note also the §179 route carries a **more-than-50% business use** requirement
+(Reg. 1.179-1(d)). Personal use of a unit is not a small problem; it is a
+threshold one.
 
 ### 2c. Not passive — material participation through the trustee
 
@@ -101,14 +178,17 @@ to the Trust and through the grantor trust to the grantor, so the deductions are
 **not** passive-loss limited under §469.
 
 - **PLR 201317010** and **PLR 201029014** — the IRS's narrow view: a trust
-  materially participates where its fiduciaries, acting as fiduciaries with
-  genuine discretionary authority, are involved "on a regular, continuous, and
-  substantial basis."
+  materially participates where its fiduciaries, **acting as fiduciaries with
+  genuine discretionary authority**, are involved "on a regular, continuous, and
+  substantial basis." A trustee lacking discretion is treated as an employee and
+  does not count.
 - ***Mattie K. Carter Trust***, 256 F. Supp. 2d 536 (N.D. Tex. 2003) — broader:
-  count the trustee, employees and agents who conduct the business.
-- ***Frank Aragona Trust v. Commissioner***, 142 T.C. 165 (2014) — the Tax Court
-  rejected the IRS's position that a trust cannot perform personal services, and
-  counted trustees' work in their employee capacity too.
+  count the trustee, employees and agents who conduct the business. No statutory
+  basis for limiting the measure to fiduciaries acting as fiduciaries.
+- ***Frank Aragona Trust v. Commissioner***, 142 T.C. 165 (2014) — six trustees;
+  the Tax Court rejected the IRS's position that a trust cannot perform personal
+  services, and counted trustees' work in their **employee** capacity too, since
+  a trustee's fiduciary duty does not switch off when they act as an employee.
 
 The structure is designed to satisfy even the narrow PLR standard.
 
@@ -126,6 +206,11 @@ been shipped wrongly once.
 Quoting seven days as this deal's test describes a structure BTB does not sell.
 `MAX_AVERAGE_RENTAL_DAYS` in `lib/crm/deal.ts` is 30 for this reason.
 
+The **30-day** figure is also a contractual obligation, not just a tax fact: the
+Management Agreement requires the Agent to keep the average rental period at 30
+days or less and forbids any lease over 30 days, and the Finance Agreement
+recites transient lodging under 30 days as the equipment's stated purpose.
+
 ### 2e. Economic substance
 
 §7701(o) requires a substantial non-tax purpose and a non-tax economic effect.
@@ -137,7 +222,23 @@ fixed in code and only the price varies.
 
 *Granan v. Commissioner*, 55 T.C. 753 (1971) and *Zavadil v. Commissioner*, 793
 F.3d 866 (8th Cir. 2015): borrowed funds are deductible **when paid, not when the
-loan is repaid.** The note here goes further than *Zavadil* — it is secured.
+loan is repaid.** The note here goes further than *Zavadil* — it is **secured**.
+
+Substantiation is still the taxpayer's burden: §6001, *Hradesky*, *Berry*.
+
+### 2f. The Form 4562 point, and the trap next to it
+
+The memorandum argues that for **Form 4562 line 11** (the business-income limit
+on §179), W-2 income counts, because tax law treats an employee as "being in the
+business of being an employee" — *Bloomburg*, 74 T.C. 1368.
+
+**Do not carry that across to §461(l).** The deck's own excess-business-loss
+slide says the opposite for that provision: "Active W-2 income is considered
+**non-business income** for EBL purposes." Both statements are in the sources and
+both can be true, because they are limits in different Code sections doing
+different jobs. Keep them apart, and never cite the 4562 argument as a reason
+§461(l) does not bite. If asked, say plainly that these are two different limits
+and refer the client to their CPA.
 
 ---
 
@@ -173,6 +274,22 @@ Note the rounding: 720 × $1,520.83 is **$2.40 short** of $1,095,000. The sample
 Schedule A does not mention it; `deal.ts` computes and reports the drift, because
 a CPA will find it.
 
+### The three tiers the deck quotes
+
+| | Full | Fractional | Multi-unit |
+|---|---|---|---|
+| Price | $1,250,000 | $250,000 | $5,000,000 |
+| Down | $135,000 | $30,000 | $550,000 |
+| Deposit % | 10.8% | 12% | 11% |
+| 60-yr balance shown | $1,110,000 | $220,000 | $4,450,000 |
+| Monthly note shown | $1,541 | $305 | $6,180 |
+| Federal tax quoted | $415,000 | $54,915 | $1,859,786 |
+| Net tax saving shown | $275,000 | $24,915 | $1,309,786 |
+
+**The FRACTIONAL and MULTI-UNIT columns reconcile exactly. The FULL PURCHASE
+column does not** — see the inconsistencies below. Never quote the full column's
+figures as arithmetic; quote them only as "what the deck prints".
+
 ### The pro forma actually shown to buyers
 
 $300/night at 70% occupancy:
@@ -206,6 +323,22 @@ $300/night at 70% occupancy:
 - The memorandum writes "passive loss rules under section 465"; §465 is the
   **at-risk** rule and §469 is the **passive activity** rule. Both apply here and
   both are satisfied, but do not repeat the conflation.
+- **The deck contradicts the memorandum on who the trustee is.** The memorandum
+  has "the managers of the Management Series serving as trustees of the Trust".
+  The deck says the grantors "are also the managers of The MGT Series" *and*
+  "are not the trustees of the irrevocable grantor trust". If the grantor manages
+  the entity that is trustee, the independence the structure relies on is
+  weakened — and this is precisely the point a CPA will press. **Do not resolve
+  this yourself.** Describe the memorandum's structure, say the deck's wording is
+  looser, and route the question to BTB.
+- The deck asserts the grantor must "genuinely meet one of the **seven material
+  participation tests**." The memorandum does not run the seven §469(h) tests at
+  all — its route is the *trustee's* participation imputed to the Trust. Use the
+  memorandum's route.
+- One FAQ answer in the deck is literally "**?**" — whether the trustee alone
+  controls rental identification and location. It is unanswered. If a client asks
+  how much say they have over where their unit goes, that is an open question for
+  BTB, not one to improvise.
 
 ---
 
@@ -218,10 +351,14 @@ all three at once under a shared `deal_group_id`.
 
 **Equipment Purchase Agreement** — entire agreement / parol evidence excluded;
 Statute of Frauds satisfied; explicitly not an adhesion contract. Payment by
-cash, check, money order, ACH or wire only; seller pays escrow. **Title passes on
-delivery, and only once the down payment is made.** Mandatory arbitration:
-amicable settlement first, then mediation, then — if unresolved 180 days after a
-written demand — binding arbitration before three arbitrators in Las Vegas.
+cash, check, money order, ACH or wire only; **seller pays escrow**. **Title passes
+on delivery, and only once the down payment is made** and any administrative
+costs are paid. Transport beyond 1,000 miles billed at $10/mile. Mandatory
+arbitration: amicable settlement first, then mediation, then — if unresolved 180
+days after a written demand — binding arbitration before three arbitrators in Las
+Vegas under AAA Commercial Rules, each side bearing its own costs and the
+arbitrators' fees shared equally. An **Appendix** carries the specifications and
+options and is incorporated by reference.
 
 **Equipment Finance Agreement (Installment Note)** — UCC **security interest**,
 required to remain a **first lien**. **Assignment of rents** to the Lender.
@@ -229,29 +366,44 @@ Payments "specifically paid from the rental income generated by the equipment."
 **Impracticability / frustration of purpose: the stated purpose is transient
 lodging of less than 30 days, and if the unit stops functioning or stops
 generating rental income, the Debtor's monthly performance is SUSPENDED until
-income resumes or stabilises.** Limited power of attorney to perfect the lien and
-endorse insurance proceeds. Optional GAP at $2,000/yr. Creditor may assign
-freely; Debtor may not, without written consent. Nevada law, Clark County, **jury
-trial waived**. Creditor disclaims all warranties.
+income resumes or stabilises** — suspension does not toll any statute of
+limitations. Limited power of attorney to perfect the lien and endorse insurance
+proceeds. Optional GAP at $2,000/yr. Debtor must keep the unit in the United
+States and at the stated location absent written consent, and may not make
+alterations that reduce its value. Creditor may assign freely; Debtor may not,
+without written consent, and an assignee takes free of any defence the Debtor has
+against the Creditor. Nevada law, Clark County, **jury trial waived**. Creditor
+disclaims all warranties and has no involvement in selecting the equipment. The
+agreement may be assumed only with the Creditor's written approval.
 
 **Management and Revenue Share Agreement** — the Owner employs the Agent
 exclusively to rent, lease, operate and manage the unit, which sits "on vacant
-improved land". Quarterly statements; net profit remitted monthly. **The Agent
-shall ensure the average rental period is 30 days or less, and no lease the Agent
-executes may exceed 30 days.** Income after operating expenses splits **50/50**.
-**The Owner is NOT liable for any additional money for expenses, maintenance,
-operation or insurance for the life of the unit — the Agent recovers its costs
-only from rental income.** Agent indemnifies Owner and carries liability and
-workers' comp naming the Owner as coinsured.
+improved land". **Quarterly statements of receipts, expenses and charges; net
+profit remitted monthly.** **The Agent shall ensure the average rental period is
+30 days or less, and no lease the Agent executes may exceed 30 days.** Income
+after operating expenses splits **50/50**. **The Owner is NOT liable for any
+additional money for expenses, maintenance, operation or insurance for the life
+of the unit — the Agent recovers its costs only from rental income**, and where
+rental income is short the Agent covers the expense and is repaid from future
+rental income. All staff are the Agent's employees or contractors, not the
+Owner's. Agent indemnifies Owner and carries public liability and workers' comp
+naming the Owner as coinsured.
 
 ### Party names
 
 In the sample documents in `docs/`, the Seller, Creditor and Agent throughout is
-**MH SERVICES LLC**, a Nevada LLC. In what this CRM generates, **BTB Holdings
-stands in that position** and the party block, wire instructions and trustee role
-are configuration (`CRM_SELLER_*` / `CRM_WIRE_*`). **Never silently substitute one
-for the other.** If asked who the counterparty is, say which document you are
+**MH SERVICES LLC**, a Nevada LLC, and the Debtor/Buyer is **PMV LLC, Series
+___**. In what this CRM generates, **BTB Holdings stands in MH Services'
+position** and the party block, wire instructions and trustee role are
+configuration (`CRM_SELLER_*` / `CRM_WIRE_*`). **Never silently substitute one for
+the other.** If asked who the counterparty is, say which document you are
 describing.
+
+**Wire details are configuration and are deliberately not recorded in this file.**
+The samples in `docs/` contain a real bank account and routing number. Never
+quote, echo or reconstruct them, and never put an account number in a generated
+document — contract generation **refuses outright** while the wire block is unset
+rather than emitting a placeholder.
 
 ---
 
@@ -278,18 +430,29 @@ the deal. These are in the source documents themselves.
   taking delivery in March moves the deduction into the later year.
 - **Recapture is real.** Selling early or converting to personal use claws the
   deduction back as ordinary income. **The deck's FAQ says there is "no
-  depreciation recapture taxes to plan for" because there is no buyback — that
-  overstates it, and you must not repeat it.** No buyback means no *planned*
-  disposition; it does not repeal §1245 on an actual sale or conversion.
+  depreciation recapture taxes to plan for" because there is no buyback, and that
+  this "truly eliminates the tax burden as opposed to delaying or reducing it" —
+  that overstates it, and you must not repeat either claim.** No buyback means no
+  *planned* disposition; it does not repeal §1245 on an actual sale or conversion.
 - **Material participation must be documented.** The IRS can request the records;
   the Trustee maintains them. Say so when the question is asked.
 - **The lender forbears** when rental income misses the note. **The owner does
-  NOT fund the gap.** Saying otherwise describes a different deal.
+  NOT fund the gap.** Saying otherwise describes a different deal. Note the deck
+  concedes forbearance is "risk both for lender and Trust".
+- **The deck's regulatory claim is too broad.** It says "tiny homes under 400
+  square feet are not regulated." Units are 399 sq ft or less, but siting,
+  zoning, park licensing and occupancy rules vary by state and county. Do not
+  repeat "not regulated" as a general statement.
+- **"No impact on personal credit"** is the FAQ's answer, on the basis that the
+  note is a commercial loan to the trust. State it as the programme's position,
+  not as a guarantee about any particular lender or filing.
 - **The memorandum's limits.** It was written to MH Services LLC, on stated facts
   and assumptions (units deployed in existing managed RV parks), and carries a
-  Circular 230 disclaimer. It is a reasoned opinion, not a ruling.
-- **The strategy deck is SALES MATERIAL, not authority.** It says so on every
-  page. Cite the memorandum, the regulation or the case — not the deck.
+  Circular 230 disclaimer stating it cannot be used to avoid penalties or to
+  promote a transaction. It is a reasoned opinion, not a ruling.
+- **The strategy deck is SALES MATERIAL, not authority.** It is headed "for
+  educational purposes only" on every page. Cite the memorandum, the regulation
+  or the case — not the deck.
 
 ---
 
@@ -344,9 +507,13 @@ formatted figures, never raw columns.
    deduction is a consequence.
 6. **Land is not depreciable**, and BTB's land cost is internal. Say the first
    whenever depreciation and land appear together; never disclose the second.
-7. **Not tax advice.** The client's CPA confirms the position. Say this plainly
+7. **Where the sources contradict each other, name the contradiction — never
+   pick a side silently.** The list in §3 is not trivia; each item is something a
+   CPA will find. Saying "the deck prints X, the executed agreement says Y" is a
+   better answer than a confident number.
+8. **Not tax advice.** The client's CPA confirms the position. Say this plainly
    **once**, where it belongs — do not hedge every sentence.
-8. **Be concrete and slightly conservative**, and name the weakness before the
+9. **Be concrete and slightly conservative**, and name the weakness before the
    CPA does. You are usually answering BTB staff, not the client, so being blunt
    about a weak deal is the job.
 
