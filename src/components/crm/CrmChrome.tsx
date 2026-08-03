@@ -20,6 +20,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { BtbMark } from "@/components/Logo";
+import { isClientFacingRoute } from "@/lib/crm/routes";
 import { site } from "@/lib/site";
 
 /**
@@ -86,9 +87,10 @@ function Tab({ label, active }: { label: string; active: boolean }) {
 export function CrmChrome({ isSuperUser = false }: { isSuperUser?: boolean }) {
   const pathname = usePathname();
 
-  // The print routes are nested under /crm and are the client's document, not a
-  // screen of ours. They have never carried this chrome and must not start.
-  if (pathname.endsWith("/print")) return null;
+  // The print routes and the presentation are nested under /crm but are the
+  // client's, not a screen of ours. They have never carried this chrome and must
+  // not start. See lib/crm/routes.ts.
+  if (isClientFacingRoute(pathname)) return null;
 
   return (
     <>

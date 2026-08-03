@@ -67,6 +67,19 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         title={detail.client.name}
         intro={summary}
         breadcrumb={[{ href: "/crm", label: "CRM" }]}
+        actions={
+          // Scoped to this client, so the deck opens with their name on it and
+          // the terms sized to the write-off on their record rather than to a
+          // generic tier. See lib/crm/presentation.ts.
+          <a
+            href={`/crm/present?client=${detail.client.id}`}
+            target="_blank"
+            rel="noopener"
+            className="sf-btn-brand shrink-0"
+          >
+            Present to this client
+          </a>
+        }
       />
       <ClientCard
         detail={detail}

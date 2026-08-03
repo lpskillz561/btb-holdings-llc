@@ -49,6 +49,19 @@ export default async function CrmPage() {
         eyebrow="Tiny home programme"
         title="Client CRM"
         intro="Every prospect, what they're solving for, what we've proposed, and what they own."
+        actions={
+          // A new tab, deliberately: the presenter shares that one tab in Meet
+          // and keeps the CRM open behind it. Opening in place would put the
+          // pipeline on the shared screen the moment they finish presenting.
+          <a
+            href="/crm/present"
+            target="_blank"
+            rel="noopener"
+            className="sf-btn-brand shrink-0"
+          >
+            Show presentation
+          </a>
+        }
       />
 
       <section className="section pt-12">

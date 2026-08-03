@@ -23,6 +23,7 @@ import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Markdown } from "@/components/Markdown";
 import { fmtAgo } from "@/lib/crm/format";
+import { isClientFacingRoute } from "@/lib/crm/routes";
 import type { CrmConversation, CrmMessage } from "@/lib/crm/types";
 import { apiGet, apiPost, qs } from "./api";
 import { ErrorNote } from "./ui";
@@ -215,9 +216,11 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
     setMessages(await apiGet<CrmMessage[]>(`/api/crm/advisor${qs({ conversation_id: id })}`));
   }
 
-  // The print routes are the client's document, not a screen of ours. Same rule
-  // as CrmChrome — nothing of the application's furniture belongs on them.
-  if (pathname.endsWith("/print")) return null;
+  // The print routes and the presentation are the client's, not a screen of
+  // ours. Same rule as CrmChrome — nothing of the application's furniture
+  // belongs on them, and a floating "Ask AI" button in a screen share is
+  // exactly the kind of thing a prospect should never see.
+  if (isClientFacingRoute(pathname)) return null;
 
   if (!open) {
     return (

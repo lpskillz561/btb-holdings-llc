@@ -155,6 +155,23 @@ in — counting both registered rows and built-in accounts.
 A password reset generates a temporary password, shows it **once**, and stores
 only its hash.
 
+### The client presentation
+
+A full-screen pitch deck at `/crm/present`, built to be screen-shared. "Show
+presentation" on the Overview opens it generically; "Present to this client" on a
+client card opens it sized to that client's write-off target with their name on
+the title slide.
+
+Seventeen slides drawn from `docs/` — who it is for, the asset, the ownership
+chain as a diagram, the tax case with its authorities, the terms, the leverage,
+the monthly pro forma, the sizes, and the limits a CPA will raise. Arrow keys or
+space to move, `F` for fullscreen, `O` for the slide list.
+
+Every figure comes from `src/lib/crm/presentation.ts`, which computes it through
+`deal.ts` and `economics.ts` — nothing is typed into a slide. It is navy/gold
+brand, not Lightning, and `CrmChrome` and the Ask AI button both render nothing
+there.
+
 ### AI
 
 Four surfaces — proposal drafting, land-fit assessment, the client advisor, and

@@ -202,6 +202,42 @@ string.** Any `.md` in that directory is loaded, in filename order.
   scope is wired but unreachable from a URL today. Contracts are still fully
   answerable: they are in both the client and the workspace context.
 
+### The client presentation — `/crm/present`
+
+A full-screen deck built to be screen-shared on a call. "Show presentation" on
+the Overview opens it; "Present to this client" on a client card opens it with
+`?client=` so the title slide carries their name and the terms are sized to the
+write-off on their record.
+
+- **It is under `/crm` because that is what gates it.** The middleware matcher is
+  `/crm/:path*`. A top-level `/present` would be **public** — the deck names our
+  terms, our deposit and our authorities.
+- **`lib/crm/presentation.ts` computes every figure** through `deal.ts` and
+  `economics.ts`. No money is typed into a slide, so a slide cannot disagree with
+  the contract it becomes.
+- **It does NOT reproduce the strategy deck's arithmetic.** The tiers are
+  computed at `CRM_DEFAULT_DEPOSIT_BPS`, because the deck's own FULL PURCHASE
+  column does not reconcile ($1,250,000 − $135,000 is $1,115,000, not the
+  $1,110,000 it prints). Nor does it repeat the FAQ's claim that there is "no
+  depreciation recapture to plan for" — recapture on an actual sale or conversion
+  is on the limits slide.
+- **The pro forma is transcribed, not derived.** `PRO_FORMA` in that module is
+  the document buyers are actually shown. It bills 20 nights while its heading
+  says 70% (20 of 30 is 66.7%), so the slide says "20 billed nights" and does not
+  assert an occupancy figure that fails to reconcile.
+- **`isClientFacingRoute()` in `lib/crm/routes.ts`** is what keeps `CrmChrome` and
+  `AskAi` off this route and off `/print`. It replaced two copies of
+  `endsWith("/print")`; the cost of missing one is our internal tooling appearing
+  in a prospect's screen share.
+- **Chart colour was validated, not chosen.** The accent `#b08a2c` and the
+  neutral ramp in `components/present/Charts.tsx` were run against the navy
+  surface — the brand's `gold-500` fails the lightness band there and reads
+  washed out when projected, which is why marks use a different gold from the
+  rules and eyebrows.
+- **The canvas is fixed at 16:9 and scaled, never reflowed** (`.deck-canvas`,
+  `cqw` units). A deck that reflows shows the presenter and the room different
+  line breaks.
+
 ## Two looks, on purpose
 
 **Internal screens are Salesforce Lightning. Client documents are not.**
