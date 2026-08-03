@@ -9,10 +9,10 @@ money — and sources the land for it from a 19.5M-row county parcel database.
 a pad in a BTB park, so `crm_parks` / `crm_pads` are BTB's inventory and carry no
 `client_id`. A home with no client is one BTB owns and rents on its own book.
 
-Extracted from the Ziora Capital Holdings portal, where it was built and run in
-production. Target home is AWS: Aurora PostgreSQL, EC2 behind an ALB, at
-**btbholdingsllc.com**. See [`docs/AWS-MIGRATION.md`](docs/AWS-MIGRATION.md) for
-where that stands.
+A standalone app, sharing nothing with any other project. It runs on AWS —
+Aurora PostgreSQL, EC2 behind an ALB — at **btbholdingsllc.com**. The parcel
+importer that feeds it is its own repo, `btb-etl`. See
+[`docs/AWS-MIGRATION.md`](docs/AWS-MIGRATION.md) for the deployment.
 
 ---
 
@@ -29,10 +29,11 @@ where that stands.
 | **Financials** | `/crm/financials` | Cash in and out, per-client profitability, recent transactions |
 | **Archive** | `/crm/archive` | Proposals and contracts withdrawn from the board, and the only way to restore them |
 
-The Overview also carries the **shared kanban board** — one list the whole
-office works from, with cards anyone can add, assign, annotate and drag between
-To do, In progress and Done. It is fenced off from the reporting around it
-because it is the only block on that page anybody edits.
+The **shared kanban board** at `/crm/todos` is one list the whole office works
+from: cards anyone can add, assign, annotate and drag between To do, In progress
+and Done, each with a comment thread stamped with who said what and when. The
+Overview carries a read-only summary of what is still open, linking straight to
+the card you click.
 
 Each client card carries **Overview** (record, people, tax profile, land
 criteria, cost position, activity), **Proposals**, **Contracts**, **Holdings**,
@@ -263,9 +264,10 @@ so the two cannot drift.
 **A new column added there must be nullable or have a default**, or the `ALTER`
 fails on a populated table.
 
-The parcel tables are **not** created by this app. They come from the ETL in the
-Ziora Capital repo (`etl/import.mjs`, `etl/auctions.mjs`), which is scheduled by
-n8n. Without them the CRM works fine; land search returns nothing.
+The parcel tables are **not** created by this app. They come from `btb-etl`
+(`import.mjs`, `auctions.mjs`), which is its own repo and runs itself on two
+systemd timers on the same instance. Without them the CRM works fine; land
+search returns nothing.
 
 ### Invariants
 
@@ -314,10 +316,10 @@ configuration lives in SSM Parameter Store under `/btb-crm/`, SecureString for
 the secrets, read by the instance role at deploy time.
 
 **Parcel data is loaded**: 11,974,053 rows — Florida 11,090,226 across all 67
-counties and Montana 883,827 across all 56, scraped fresh by the ETL rather than
-copied from the Mini. Two systemd timers on the instance keep it current
-(`btb-etl-parcels.timer` monthly for every state, `btb-etl-auctions.timer`
-nightly); the Mini and its n8n dispatch are out of that path entirely.
+counties and Montana 883,827 across all 56, scraped fresh from the source rolls.
+Two systemd timers on the instance keep it current (`btb-etl-parcels.timer`
+monthly for every state, `btb-etl-auctions.timer` nightly). No second machine is
+in that path and no long-lived access key exists for it.
 
 **The ETL is not in this repo.** It is its own repo, `btb-etl`, which ships and
 schedules itself onto the same EC2 instance. Nothing is shared between the two

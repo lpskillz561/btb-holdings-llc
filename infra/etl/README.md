@@ -13,12 +13,9 @@ systemd timer (EC2)  ──▶  /opt/btb/run-etl.sh  ──▶  node import.mjs 
 its `run-etl.sh`, its four systemd units and its own `ship.sh`. Read that repo's
 `CLAUDE.md` before changing anything in it.
 
-It used to live in `ziora-capital-holdings/etl/`, shared with a research tool on
-the Mac Mini. **That link is cut.** The coupling was invisible from both ends —
-a commit over there silently changed what this production database ingests —
-and there is now exactly one importer feeding this Aurora. The Mini keeps
-whatever it keeps; the two are free to diverge, which is the point. Do not
-re-introduce a shared checkout, a submodule or a symlink.
+**There is exactly one importer feeding this Aurora and it is that repo.** Do
+not re-introduce a shared checkout, a submodule or a symlink to any other
+project, and do not vendor it here.
 
 The only remaining contract between the two repos is the **`parcels` table**:
 `lib/common.mjs` over there defines the columns, `src/lib/parcels.ts` here

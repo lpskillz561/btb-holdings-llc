@@ -6,14 +6,17 @@ has already cost time.
 
 ## Where this came from
 
-Built and run in production inside the Ziora Capital portal, then extracted here
-as a standalone app. That original still runs on a Mac Mini and still serves the
-marketing site and the `/app` platform; only the CRM moved.
+This CRM was extracted from an earlier in-house portal and is now a standalone
+app. **It shares nothing with anything else.** The last shared component was the
+parcel importer, which is its own repo (`btb-etl`) — see the AWS section.
 
-**This repo shares nothing with it.** The last connection was the parcel
-importer, which is now its own repo (`btb-etl`) — see the AWS section. If a
-piece of history looks odd the original may have context, but nothing here
-depends on it, and nothing there should be edited to change this app.
+Two consequences worth stating plainly, because both have caught people out:
+
+- Some code predates the current business model and is more generic than the
+  deal actually sold. Where this file and the code disagree, this file is the
+  newer fact — see "Who owns what" below.
+- Nothing outside this repo and `btb-etl` can change this app's behaviour. If a
+  bug looks like it came from somewhere else, it didn't.
 
 ## Who owns what — this changed, and the code predates it
 
@@ -506,12 +509,9 @@ owns its source, its `run-etl.sh`, its four systemd units and its own
 `ship.sh`, and it deploys itself to the same EC2 instance on its own cadence —
 it does not ride this app's deploy. Its `CLAUDE.md` carries the ETL traps.
 
-It used to live in `ziora-capital-holdings/etl/`, shared with a research tool on
-the Mac Mini, and **that link is cut**. The coupling was invisible from both
-ends: a commit over there silently changed what this production database
-ingests, with nothing in either repo to say so. There is now exactly one
-importer feeding this Aurora. Do not re-introduce a shared checkout, a submodule
-or a symlink, and do not vendor it here.
+**There is exactly one importer feeding this Aurora and it is that repo.** Do
+not re-introduce a shared checkout, a submodule or a symlink to any other
+project, and do not vendor it here.
 
 **The one contract that remains is the `parcels` table.** `lib/common.mjs` in
 `btb-etl` defines the columns; `src/lib/parcels.ts` here selects them by name.
@@ -524,9 +524,8 @@ what a jurisdiction permits.
 themselves now live in that repo's `CLAUDE.md`; what is kept below is only what
 this app's operators still need to know.
 
-**EC2 schedules it itself, and the Mini is OUT of this path entirely.** Two
-systemd timers do the whole job with no second machine and no long-lived access
-key: `btb-etl-parcels.timer` (monthly, matching how assessment rolls are
+**EC2 schedules it itself.** Two systemd timers do the whole job, with no
+second machine in the path and no long-lived access key: `btb-etl-parcels.timer` (monthly, matching how assessment rolls are
 republished) and `btb-etl-auctions.timer` (nightly, since auctions move daily).
 The n8n dispatch path is gone — the workflows, `run-etl-on-ec2.sh` and the
 `btb-n8n-mini` IAM user with its access key are all deleted. The key had never
@@ -632,13 +631,15 @@ Things about that deployment that are not visible from the code:
 
 ## Open items
 
-- The source Postgres on the Mini (12 GB, includes client tax profiles) **has no
-  backup**. Whatever happens with AWS, that gap is real today. The S3 bucket,
-  lifecycle rule and instance permission for it now exist; the cron job does not.
+- **Aurora has no automated backup job.** The S3 bucket, the lifecycle rule and
+  the instance permission all exist; the nightly `pg_dump` cron does not. This
+  database holds client tax profiles, so that gap is the largest open risk in
+  the system. (A separate legacy Postgres on the office Mac Mini, unrelated to
+  this app, is also unbacked-up — that is the other team's to solve now.)
 - `parcels` is loaded and land search works: **11,974,053 rows** — Florida
-  11,090,226 (all 67 counties, roll 2026P) and Montana 883,827 (all 56). Scraped
-  fresh by the ETL rather than dumped from the Mini. `auctions` has not been
-  built yet, and NC and CO have never been imported.
+  11,090,226 (all 67 counties, roll 2026P) and Montana 883,827 (all 56),
+  scraped fresh from the source rolls. `auctions` has not been built yet, and NC
+  and CO have never been imported.
 - The AI surfaces are **live**. `OPENAI_API_KEY` is in SSM as a SecureString and
   `OPENAI_MODEL` is `gpt-5.6-luna`; the advisor was exercised end to end against
   a real client record. Both are runtime-only, so changing either is an SSM
