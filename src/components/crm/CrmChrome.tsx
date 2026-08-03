@@ -38,15 +38,16 @@ import { site } from "@/lib/site";
  */
 const SECTIONS = [
   { href: "/crm", label: "Overview", icon: "home" },
+  // Second, right under Overview: the board is what the team works FROM each
+  // day, so it sits with the dashboard rather than filed after the views of the
+  // book. The dashboard's own list links here too.
+  { href: "/crm/todos", label: "Board", icon: "board" },
   { href: "/crm/proposals", label: "Proposals", icon: "doc" },
   { href: "/crm/contracts", label: "Contracts", icon: "pen" },
   // BTB's own land, distinct from Holdings, which is the client-owned homes.
   { href: "/crm/land", label: "Our land", icon: "map" },
   { href: "/crm/holdings", label: "Holdings", icon: "unit" },
   { href: "/crm/financials", label: "Financials", icon: "chart" },
-  // The shared kanban board. Last because it is the team talking to itself
-  // rather than a view of the book, and it is reached from the dashboard too.
-  { href: "/crm/todos", label: "Board", icon: "board" },
 ] as const;
 
 type IconName = (typeof SECTIONS)[number]["icon"] | "users" | "exit";
