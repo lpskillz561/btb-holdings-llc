@@ -562,6 +562,28 @@ const TABLES: TableDef[] = [
       "UPDATE crm_todos SET status = 'done' WHERE done_at IS NOT NULL AND status = 'todo'",
     ],
   },
+  // The discussion on a card. A table rather than appending to `notes` for the
+  // same reason park comments are: `notes` is one shared field, so the last
+  // person to type wins and the argument that got you there is gone. A comment
+  // is an event — who said it, when — and that is the whole point of having it.
+  {
+    name: "crm_todo_comments",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      // Cascade is right here: a comment has no meaning without its card, and
+      // deleting a card should not strand its discussion.
+      ["todo_id", "TEXT NOT NULL REFERENCES crm_todos(id) ON DELETE CASCADE"],
+      // Stamped from the session, never the request body — same rule as
+      // `created_by` on the card itself.
+      ["author_email", "TEXT NOT NULL"],
+      ["body", "TEXT NOT NULL"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      // Matches the thread's ORDER BY: one card, oldest first.
+      "CREATE INDEX IF NOT EXISTS crm_todo_comments_card_idx ON crm_todo_comments (todo_id, created_at)",
+    ],
+  },
   {
     name: "crm_activity",
     columns: [

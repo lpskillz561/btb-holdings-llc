@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { RecordHeader } from "@/components/crm/RecordHeader";
 import { ClientsBoard } from "@/components/crm/ClientsBoard";
-import { TodoBoard } from "@/components/crm/TodoBoard";
+import { TodoSummary } from "@/components/crm/TodoSummary";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, Stat, StatStrip } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { listAvailablePads } from "@/lib/crm/portfolio";
 import { getCrmSummary, listClients } from "@/lib/crm/clients";
-import { listAssignableUsers, listTodos } from "@/lib/crm/todos";
+import { listTodos } from "@/lib/crm/todos";
 import { fmtAgo, fmtMoneyShort, fmtNum } from "@/lib/crm/format";
 import { CLIENT_STATUSES, LABELS } from "@/lib/crm/types";
 import { listStates } from "@/lib/parcels";
@@ -29,7 +29,7 @@ export default async function CrmPage() {
   // that the section exists.
   if (!user) notFound();
 
-  const [summary, clients, states, pads, todos, boardUsers] = await Promise.all([
+  const [summary, clients, states, pads, todos] = await Promise.all([
     getCrmSummary(),
     listClients(),
     listStates().catch(() => []),
@@ -37,10 +37,9 @@ export default async function CrmPage() {
     // BTB already owns at the moment they are taken on.
     listAvailablePads().catch(() => []),
     // The shared board must never be the reason the dashboard fails to render.
+    // Read-only here; it is edited at /crm/todos, which is why the assignee list
+    // is no longer fetched on this page.
     listTodos().catch(() => []),
-    // Assignees are fetched here rather than from a /api/crm/users endpoint:
-    // the board needs the list, and nothing else has to expose one.
-    listAssignableUsers().catch(() => []),
   ]);
 
   return (
@@ -113,13 +112,14 @@ export default async function CrmPage() {
             />
           </StatStrip>
 
-          {/* Pipeline and the activity feed share a row: both are glanced at,
-              neither earns the full width, and stacking them pushed the client
-              list — the thing people come here to work in — below the fold. */}
+          {/* Pipeline, the board and the activity feed share a row: each is
+              glanced at, none earns the full width, and stacking them pushed the
+              client list — the thing people come here to work in — below the
+              fold. The board is a LIST here and is edited at /crm/todos. */}
           <div className="grid gap-5 lg:grid-cols-3">
-            <div className="sf-card p-6 lg:col-span-2">
+            <div className="sf-card p-6">
               <h2 className="mb-4 text-base font-semibold text-ink-900">Pipeline</h2>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-3">
                 {CLIENT_STATUSES.map((stage) => (
                   <div
                     key={stage}
@@ -133,6 +133,9 @@ export default async function CrmPage() {
                 ))}
               </div>
             </div>
+
+            <TodoSummary todos={todos} />
+
             <div className="sf-card p-6">
               <h2 className="mb-4 text-base font-semibold text-ink-900">Recent activity</h2>
               {summary.activity.length === 0 ? (
@@ -151,16 +154,6 @@ export default async function CrmPage() {
                 </ul>
               )}
             </div>
-          </div>
-
-          {/* Fenced off from the rest of the dashboard on purpose.
-              Everything around it is REPORTING — figures the CRM computed about
-              the book. This is the one block that is the team talking to itself
-              and the only one anybody edits, so it gets rules top and bottom and
-              its own white ground to sit on rather than blending into the run of
-              cards above and below it. */}
-          <div className="-mx-6 border-y-2 border-ink-300 bg-white px-6 py-8 lg:-mx-8 lg:px-8">
-            <TodoBoard initial={todos} users={boardUsers} />
           </div>
 
           <div>

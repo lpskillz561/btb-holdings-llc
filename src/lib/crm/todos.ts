@@ -1,8 +1,11 @@
-// The shared kanban board on the dashboard.
+// The shared kanban board, at /crm/todos.
 //
 // One board, visible and editable by everyone who can reach the CRM. There is
 // no owner and no per-card permission: this is the office whiteboard, and a
 // whiteboard nobody else can rub out is not a whiteboard.
+//
+// Comments are the one exception to that (see deleteTodoComment): anyone may
+// add to a thread and nobody may delete someone else's remark.
 //
 // Written by hand rather than through ./resource because two of the columns
 // must NOT come from the request body. `created_by` and `done_by` are stamped
@@ -24,10 +27,31 @@ export interface CrmTodo {
   done_by: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Comments on the card. Carried on the row by `listTodos` so the board can
+   * badge a card without a query per card; absent on the row a write returns,
+   * where the client already knows the count it is holding.
+   */
+  comment_count?: number;
+}
+
+export interface CrmTodoComment {
+  id: string;
+  todo_id: string;
+  author_email: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
 }
 
 const COLUMNS =
   "id, title, status, assignee, notes, done_at, created_by, done_by, created_at, updated_at";
+
+/** Same as COLUMNS, qualified, for the join in listTodos. */
+const T_COLUMNS = COLUMNS.split(", ").map((c) => `t.${c}`).join(", ");
+
+/** A comment is a remark, not a document. Bounded so one cannot bloat a thread. */
+const MAX_COMMENT = 5000;
 
 /** Longer than this is a note, not a card — and it has to fit in a column. */
 const MAX_TITLE = 300;
@@ -97,9 +121,82 @@ function cleanStatus(value: unknown): TodoStatus {
  * not hand-orderable within a column — see the note in TodoBoard.
  */
 export async function listTodos(): Promise<CrmTodo[]> {
+  // The comment count is a correlated subquery rather than a GROUP BY join: it
+  // keeps crm_todos_board_idx driving the ORDER BY, and a card with no comments
+  // still needs its row, which an inner join would drop.
   return query<CrmTodo>(
-    `SELECT ${COLUMNS} FROM crm_todos ORDER BY status, created_at DESC LIMIT 500`,
+    `SELECT ${T_COLUMNS},
+            (SELECT count(*)::int FROM crm_todo_comments c WHERE c.todo_id = t.id) AS comment_count
+     FROM crm_todos t
+     ORDER BY t.status, t.created_at DESC
+     LIMIT 500`,
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Comments                                                                    */
+/* -------------------------------------------------------------------------- */
+
+/** One card's thread, oldest first — a conversation reads down. */
+export async function listTodoComments(todoId: string): Promise<CrmTodoComment[]> {
+  return query<CrmTodoComment>(
+    `SELECT id, todo_id, author_email, body, created_at, updated_at
+     FROM crm_todo_comments WHERE todo_id = $1 ORDER BY created_at ASC`,
+    [todoId],
+  );
+}
+
+/**
+ * Add a comment.
+ *
+ * The author is the session, never the body: "who said this" is the entire
+ * value of a comment over another line in `notes`, and a client-supplied name
+ * would be a claim rather than a fact.
+ */
+export async function addTodoComment(
+  todoId: string,
+  authorEmail: string,
+  body: unknown,
+): Promise<CrmTodoComment> {
+  const text = String(body ?? "").trim();
+  if (!text) throw new CrmError("A comment cannot be empty.", 400);
+  if (text.length > MAX_COMMENT) {
+    throw new CrmError(`Comments are limited to ${MAX_COMMENT} characters.`, 400);
+  }
+
+  // Checked here so a comment on a deleted card is a clean 404 rather than a
+  // foreign-key violation surfacing as a 400 with no useful message.
+  const card = await queryOne<{ id: string }>("SELECT id FROM crm_todos WHERE id = $1", [todoId]);
+  if (!card) throw new CrmError("That card no longer exists.", 404);
+
+  const stamp = nowIso();
+  const rows = await query<CrmTodoComment>(
+    `INSERT INTO crm_todo_comments (id, todo_id, author_email, body, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $5)
+     RETURNING id, todo_id, author_email, body, created_at, updated_at`,
+    [newId(), todoId, authorEmail, text, stamp],
+  );
+  return rows[0];
+}
+
+/**
+ * Delete a comment — only the person who wrote it may.
+ *
+ * Deliberately narrower than the board's own rule that anyone may edit any
+ * card. A card is shared work; a comment is a thing someone said, and letting
+ * one person quietly delete another's remark would make the thread untrustworthy
+ * as a record of what was decided.
+ */
+export async function deleteTodoComment(commentId: string, actor: string): Promise<void> {
+  const row = await queryOne<{ author_email: string }>(
+    "SELECT author_email FROM crm_todo_comments WHERE id = $1",
+    [commentId],
+  );
+  if (!row) throw new CrmError("That comment no longer exists.", 404);
+  if (row.author_email.toLowerCase() !== actor.toLowerCase()) {
+    throw new CrmError("Only the person who wrote a comment can delete it.", 403);
+  }
+  await query("DELETE FROM crm_todo_comments WHERE id = $1", [commentId]);
 }
 
 export async function createTodo(

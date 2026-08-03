@@ -44,6 +44,9 @@ const SECTIONS = [
   { href: "/crm/land", label: "Our land", icon: "map" },
   { href: "/crm/holdings", label: "Holdings", icon: "unit" },
   { href: "/crm/financials", label: "Financials", icon: "chart" },
+  // The shared kanban board. Last because it is the team talking to itself
+  // rather than a view of the book, and it is reached from the dashboard too.
+  { href: "/crm/todos", label: "Board", icon: "board" },
 ] as const;
 
 type IconName = (typeof SECTIONS)[number]["icon"] | "users" | "exit";
@@ -56,6 +59,7 @@ const ICON_PATHS: Record<IconName, string> = {
   map: "M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6zM9 4v14M15 6v14",
   unit: "M3 20h18M5 20V9.5L12 4l7 5.5V20M9.5 20v-6h5v6",
   chart: "M4 4v16h16M8 16v-5M12 16V8M16 16v-8",
+  board: "M4 5h16v14H4zM9.33 5v14M14.67 5v14",
   users: "M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.5 2.9-5 5.5-5s5 1.5 5.5 5M15.5 10.5a3 3 0 1 0-1.4-5.8M15.8 15.3c2.3.3 4.2 1.7 4.7 4.7",
   exit: "M14 4h6v16h-6M10 8l-4 4 4 4M6 12h11",
 };
