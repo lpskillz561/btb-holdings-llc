@@ -4,29 +4,36 @@
  * The shared kanban board on the dashboard.
  *
  * One board for the whole office: everyone sees the same cards and everyone can
- * add, move, reword and delete them. There is no per-card owner and no second
- * permission model — reaching the CRM at all is the permission.
+ * add, move, assign, annotate and delete them. There is no per-card owner in the
+ * permission sense and no second permission model — reaching the CRM at all is
+ * the permission. `assignee` says who is *doing* it, which is a different thing
+ * from who may change it.
  *
  * Dragging is the HTML5 drag-and-drop API rather than a library. It is a
  * three-column board with no reordering inside a column, which that API handles
- * without the ~30kB and the ownership a drag library brings.
+ * without the weight and the ownership a drag library brings.
  *
  * The arrow buttons are NOT a lesser fallback, they are the primary path for
  * everyone HTML5 drag leaves out: it does not fire on touch at all, so on a
- * phone or an iPad the board would otherwise be read-only, and a drag target is
- * unreachable by keyboard. Both routes call the same move().
+ * phone the board would otherwise be read-only, and a drop target is unreachable
+ * by keyboard. Both routes call the same move().
  *
  * Cards are not hand-orderable within a column — that needs a position column
  * and fractional indexing to survive two people dragging at once, which is a
  * bigger change than it looks. Newest first, per column.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiDelete, apiPatch, apiPost } from "./api";
-import { ErrorNote, SectionHeading } from "./ui";
-import { fmtAgo } from "@/lib/crm/format";
+import { Dialog, ErrorNote, SectionHeading, TextArea, TextInput } from "./ui";
+import { fmtAgo, fmtDate } from "@/lib/crm/format";
 import { LABELS, TODO_STATUSES, type TodoStatus } from "@/lib/crm/types";
 import type { CrmTodo } from "@/lib/crm/todos";
+
+export interface BoardUser {
+  email: string;
+  name: string | null;
+}
 
 /** Column accent. Done is grey on purpose: finished work should recede. */
 const COLUMN_TONE: Record<TodoStatus, string> = {
@@ -35,16 +42,38 @@ const COLUMN_TONE: Record<TodoStatus, string> = {
   done: "border-t-ink-300",
 };
 
-export function TodoBoard({ initial }: { initial: CrmTodo[] }) {
+/** "David Belousov" -> DB; an email with no name -> its first two letters. */
+function initials(person: BoardUser | undefined, email: string): string {
+  const source = person?.name?.trim();
+  if (source) {
+    const parts = source.split(/\s+/);
+    return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
+  }
+  return email.slice(0, 2).toUpperCase();
+}
+
+function label(person: BoardUser | undefined, email: string): string {
+  return person?.name?.trim() || email;
+}
+
+export function TodoBoard({
+  initial,
+  users,
+}: {
+  initial: CrmTodo[];
+  users: BoardUser[];
+}) {
   const [todos, setTodos] = useState<CrmTodo[]>(initial);
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<TodoStatus | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
+  const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u]));
   const openCount = todos.filter((t) => t.status !== "done").length;
-  const byStatus = (status: TodoStatus) => todos.filter((t) => t.status === status);
+  const open = todos.find((t) => t.id === openId) ?? null;
 
   async function add(event: React.FormEvent) {
     event.preventDefault();
@@ -63,23 +92,30 @@ export function TodoBoard({ initial }: { initial: CrmTodo[] }) {
     }
   }
 
-  /** Optimistic: the card lands in the new column before the round trip. */
-  async function move(todo: CrmTodo, status: TodoStatus) {
-    if (todo.status === status) return;
+  /** Optimistic patch, rolled back with the reason if the server disagrees. */
+  async function patch(todo: CrmTodo, changes: Partial<CrmTodo>) {
     const before = todos;
-    setTodos((rows) => rows.map((r) => (r.id === todo.id ? { ...r, status } : r)));
+    setTodos((rows) => rows.map((r) => (r.id === todo.id ? { ...r, ...changes } : r)));
     setError("");
     try {
-      const saved = await apiPatch<CrmTodo>(`/api/crm/todos/${todo.id}`, { status });
+      const saved = await apiPatch<CrmTodo>(`/api/crm/todos/${todo.id}`, changes);
       setTodos((rows) => rows.map((r) => (r.id === saved.id ? saved : r)));
+      return saved;
     } catch (err) {
       setTodos(before);
-      setError(err instanceof Error ? err.message : "Could not move that card.");
+      setError(err instanceof Error ? err.message : "Could not save that.");
+      return null;
     }
+  }
+
+  async function move(todo: CrmTodo, status: TodoStatus) {
+    if (todo.status === status) return;
+    await patch(todo, { status });
   }
 
   async function remove(todo: CrmTodo) {
     const before = todos;
+    setOpenId((id) => (id === todo.id ? null : id));
     setTodos((rows) => rows.filter((r) => r.id !== todo.id));
     setError("");
     try {
@@ -123,7 +159,10 @@ export function TodoBoard({ initial }: { initial: CrmTodo[] }) {
 
       <div className="grid gap-4 md:grid-cols-3">
         {TODO_STATUSES.map((status) => {
-          const cards = byStatus(status);
+          const cards = todos.filter((t) => t.status === status);
+          const index = TODO_STATUSES.indexOf(status);
+          const prev = TODO_STATUSES[index - 1];
+          const next = TODO_STATUSES[index + 1];
           return (
             <section
               key={status}
@@ -139,17 +178,13 @@ export function TodoBoard({ initial }: { initial: CrmTodo[] }) {
               }`}
             >
               <h3 className="flex items-baseline justify-between px-1 pb-2 pt-1">
-                <span className="text-sm font-bold text-ink-900">
-                  {LABELS.todoStatus[status]}
-                </span>
+                <span className="text-sm font-bold text-ink-900">{LABELS.todoStatus[status]}</span>
                 <span className="sf-meta">{cards.length}</span>
               </h3>
 
               <ul className="space-y-2 empty:hidden">
                 {cards.map((todo) => {
-                  const index = TODO_STATUSES.indexOf(status);
-                  const prev = TODO_STATUSES[index - 1];
-                  const next = TODO_STATUSES[index + 1];
+                  const person = todo.assignee ? byEmail.get(todo.assignee) : undefined;
                   return (
                     <li
                       key={todo.id}
@@ -159,24 +194,49 @@ export function TodoBoard({ initial }: { initial: CrmTodo[] }) {
                         setDragId(null);
                         setOverColumn(null);
                       }}
-                      className={`group cursor-grab rounded border border-ink-200 bg-white p-2.5 active:cursor-grabbing ${
+                      className={`group rounded border border-ink-200 bg-white ${
                         dragId === todo.id ? "opacity-40" : ""
                       }`}
                     >
-                      <p
-                        className={`text-sm ${
-                          status === "done" ? "text-ink-500 line-through" : "text-ink-900"
-                        }`}
+                      {/* The card body is the click target; the controls below
+                          are not, so moving a card never opens it. */}
+                      <button
+                        type="button"
+                        onClick={() => setOpenId(todo.id)}
+                        className="block w-full cursor-grab p-2.5 text-left active:cursor-grabbing"
                       >
-                        {todo.title}
-                      </p>
-                      <p className="sf-meta mt-1">
-                        {status === "done"
-                          ? `Done by ${todo.done_by ?? "someone"} ${fmtAgo(todo.done_at)}`
-                          : `Added by ${todo.created_by ?? "someone"} ${fmtAgo(todo.created_at)}`}
-                      </p>
+                        <p
+                          className={`text-sm ${
+                            status === "done" ? "text-ink-500 line-through" : "text-ink-900"
+                          }`}
+                        >
+                          {todo.title}
+                        </p>
+                        <p className="sf-meta mt-1">
+                          {status === "done"
+                            ? `Done by ${todo.done_by ?? "someone"} ${fmtAgo(todo.done_at)}`
+                            : `Added by ${todo.created_by ?? "someone"} ${fmtAgo(todo.created_at)}`}
+                        </p>
+                        {(todo.assignee || todo.notes) && (
+                          <p className="mt-1.5 flex items-center gap-1.5">
+                            {todo.assignee && (
+                              <span
+                                title={label(person, todo.assignee)}
+                                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sf-500 text-[0.6rem] font-bold text-white"
+                              >
+                                {initials(person, todo.assignee)}
+                              </span>
+                            )}
+                            {todo.notes && (
+                              <span className="sf-meta" title="Has notes">
+                                ≡ notes
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </button>
 
-                      <div className="mt-1.5 flex items-center gap-1">
+                      <div className="flex items-center gap-1 px-2.5 pb-2">
                         {prev && (
                           <button
                             type="button"
@@ -201,12 +261,11 @@ export function TodoBoard({ initial }: { initial: CrmTodo[] }) {
                         )}
                         <button
                           type="button"
-                          onClick={() => void remove(todo)}
-                          aria-label={`Delete "${todo.title}"`}
-                          title="Delete"
-                          className="ml-auto rounded px-1.5 py-0.5 text-xs text-ink-500 opacity-0 transition hover:bg-err-100 hover:text-err-700 focus:opacity-100 group-hover:opacity-100"
+                          onClick={() => setOpenId(todo.id)}
+                          aria-label={`Open "${todo.title}"`}
+                          className="ml-auto rounded px-1.5 py-0.5 text-xs text-ink-500 hover:bg-ink-100 hover:text-sf-600"
                         >
-                          Delete
+                          Details
                         </button>
                       </div>
                     </li>
@@ -223,6 +282,165 @@ export function TodoBoard({ initial }: { initial: CrmTodo[] }) {
           );
         })}
       </div>
+
+      {open && (
+        <CardDialog
+          key={open.id}
+          todo={open}
+          users={users}
+          onClose={() => setOpenId(null)}
+          onSave={(changes) => patch(open, changes)}
+          onDelete={() => void remove(open)}
+        />
+      )}
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Card detail                                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The expanded card: title, who it is assigned to, and the notes.
+ *
+ * Edits are held locally and saved on submit rather than on every keystroke.
+ * Notes are the one field people will type paragraphs into, and a PATCH per
+ * character would both hammer the API and let two people editing the same card
+ * overwrite each other mid-sentence.
+ */
+function CardDialog({
+  todo,
+  users,
+  onClose,
+  onSave,
+  onDelete,
+}: {
+  todo: CrmTodo;
+  users: BoardUser[];
+  onClose: () => void;
+  onSave: (changes: Partial<CrmTodo>) => Promise<CrmTodo | null>;
+  onDelete: () => void;
+}) {
+  const [title, setTitle] = useState(todo.title);
+  const [assignee, setAssignee] = useState(todo.assignee ?? "");
+  const [notes, setNotes] = useState(todo.notes ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Someone else moved or edited this card while it was open.
+  useEffect(() => {
+    setTitle(todo.title);
+    setAssignee(todo.assignee ?? "");
+    setNotes(todo.notes ?? "");
+  }, [todo.title, todo.assignee, todo.notes]);
+
+  const dirty =
+    title.trim() !== todo.title ||
+    (assignee || null) !== todo.assignee ||
+    (notes.trim() || null) !== (todo.notes ?? null);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!dirty || saving) return;
+    setSaving(true);
+    setSaved(false);
+    const row = await onSave({
+      title: title.trim(),
+      // null, not "", so the API clears the column rather than storing a blank.
+      assignee: assignee || null,
+      notes: notes.trim() || null,
+    });
+    setSaving(false);
+    if (row) {
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2000);
+    }
+  }
+
+  return (
+    <Dialog open onClose={onClose} title={LABELS.todoStatus[todo.status]}>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <label className="sf-label" htmlFor="card-title">
+            Task
+          </label>
+          <TextInput
+            id="card-title"
+            value={title}
+            maxLength={300}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="sf-label" htmlFor="card-assignee">
+            Assigned to
+          </label>
+          <select
+            id="card-assignee"
+            value={assignee}
+            onChange={(e) => setAssignee(e.target.value)}
+            className="sf-input"
+          >
+            <option value="">Unassigned</option>
+            {users.map((u) => (
+              <option key={u.email} value={u.email}>
+                {u.name ? `${u.name} (${u.email})` : u.email}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="sf-label" htmlFor="card-notes">
+            Notes and detail
+          </label>
+          <TextArea
+            id="card-notes"
+            rows={8}
+            value={notes}
+            maxLength={5000}
+            placeholder="Context, links, what done looks like…"
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-ink-200 pt-3 text-xs text-ink-600">
+          <dt>Added by</dt>
+          <dd className="text-ink-800">
+            {todo.created_by ?? "someone"} · {fmtDate(todo.created_at)}
+          </dd>
+          {todo.done_at && (
+            <>
+              <dt>Completed by</dt>
+              <dd className="text-ink-800">
+                {todo.done_by ?? "someone"} · {fmtDate(todo.done_at)}
+              </dd>
+            </>
+          )}
+        </dl>
+
+        <div className="flex items-center gap-2 pt-1">
+          <button type="submit" className="sf-btn-brand" disabled={!dirty || saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+          <button type="button" className="sf-btn-neutral" onClick={onClose}>
+            Close
+          </button>
+          {saved && <span className="sf-meta text-sf-600">Saved</span>}
+          <button
+            type="button"
+            className="sf-btn-danger ml-auto"
+            onClick={() => {
+              onDelete();
+              onClose();
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </form>
+    </Dialog>
   );
 }

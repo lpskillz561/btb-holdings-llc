@@ -8,7 +8,7 @@ import { Badge, StatTile } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { listAvailablePads } from "@/lib/crm/portfolio";
 import { getCrmSummary, listClients } from "@/lib/crm/clients";
-import { listTodos } from "@/lib/crm/todos";
+import { listAssignableUsers, listTodos } from "@/lib/crm/todos";
 import { fmtAgo, fmtMoneyShort, fmtNum } from "@/lib/crm/format";
 import { CLIENT_STATUSES, LABELS } from "@/lib/crm/types";
 import { listStates } from "@/lib/parcels";
@@ -29,15 +29,18 @@ export default async function CrmPage() {
   // that the section exists.
   if (!user) notFound();
 
-  const [summary, clients, states, pads, todos] = await Promise.all([
+  const [summary, clients, states, pads, todos, boardUsers] = await Promise.all([
     getCrmSummary(),
     listClients(),
     listStates().catch(() => []),
     // Offered in the create-client dialog so a new client can be placed on land
     // BTB already owns at the moment they are taken on.
     listAvailablePads().catch(() => []),
-    // The shared list must never be the reason the dashboard fails to render.
+    // The shared board must never be the reason the dashboard fails to render.
     listTodos().catch(() => []),
+    // Assignees are fetched here rather than from a /api/crm/users endpoint:
+    // the board needs the list, and nothing else has to expose one.
+    listAssignableUsers().catch(() => []),
   ]);
 
   return (
@@ -117,7 +120,7 @@ export default async function CrmPage() {
 
           {/* Above the client board on purpose: it is the thing the office is
               meant to read first when the dashboard opens. */}
-          <TodoBoard initial={todos} />
+          <TodoBoard initial={todos} users={boardUsers} />
 
           <div>
             <h2 className="mb-4 text-lg font-semibold text-ink-900">Clients</h2>

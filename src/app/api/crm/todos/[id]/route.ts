@@ -6,7 +6,11 @@ export const runtime = "nodejs";
 
 export const PATCH = withCrmParams<{ id: string }>(async (req, { actor, params }) => {
   const body = await readBody(req);
-  const row = await updateTodo(params.id, { title: body.title, status: body.status }, actor);
+  const row = await updateTodo(
+    params.id,
+    { title: body.title, status: body.status, assignee: body.assignee, notes: body.notes },
+    actor,
+  );
   return NextResponse.json(row);
 });
 

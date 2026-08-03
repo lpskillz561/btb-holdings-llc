@@ -9,6 +9,7 @@
 // from the session, so "who finished this" is a fact rather than a claim the
 // client made about itself.
 
+import { envUserEmails } from "@/lib/credentials";
 import { CrmError, newId, nowIso, query, queryOne } from "./db";
 import { TODO_STATUSES, type TodoStatus } from "./types";
 
@@ -16,6 +17,8 @@ export interface CrmTodo {
   id: string;
   title: string;
   status: TodoStatus;
+  assignee: string | null;
+  notes: string | null;
   done_at: string | null;
   created_by: string | null;
   done_by: string | null;
@@ -24,10 +27,13 @@ export interface CrmTodo {
 }
 
 const COLUMNS =
-  "id, title, status, done_at, created_by, done_by, created_at, updated_at";
+  "id, title, status, assignee, notes, done_at, created_by, done_by, created_at, updated_at";
 
 /** Longer than this is a note, not a card — and it has to fit in a column. */
 const MAX_TITLE = 300;
+
+/** Detail, not an essay. Generous, but bounded so one card cannot bloat a page. */
+const MAX_NOTES = 5000;
 
 function cleanTitle(value: unknown): string {
   const title = String(value ?? "").trim().replace(/\s+/g, " ");
@@ -36,6 +42,44 @@ function cleanTitle(value: unknown): string {
     throw new CrmError(`Keep it under ${MAX_TITLE} characters.`, 400);
   }
   return title;
+}
+
+/** Explicit null clears the field; anything else is trimmed text. */
+function cleanNotes(value: unknown): string | null {
+  if (value === null) return null;
+  const notes = String(value ?? "").trim();
+  if (!notes) return null;
+  if (notes.length > MAX_NOTES) {
+    throw new CrmError(`Notes are limited to ${MAX_NOTES} characters.`, 400);
+  }
+  return notes;
+}
+
+function cleanAssignee(value: unknown): string | null {
+  if (value === null) return null;
+  const email = String(value ?? "").trim().toLowerCase();
+  return email || null;
+}
+
+/**
+ * Everyone who could be assigned a card.
+ *
+ * BOTH kinds of account, because there are two and the env kind is not a row:
+ * `info@ziora.io` lives only in AUTH_USERS, so a list built from `portal_users`
+ * alone would omit the person most likely to be assigned anything. Blocked
+ * accounts are left out — they cannot sign in, so giving them work is a way to
+ * lose it.
+ */
+export async function listAssignableUsers(): Promise<{ email: string; name: string | null }[]> {
+  const rows = await query<{ email: string; name: string | null }>(
+    "SELECT email, name FROM portal_users WHERE blocked_at IS NULL",
+  );
+  const byEmail = new Map<string, string | null>();
+  for (const email of envUserEmails()) byEmail.set(email.toLowerCase(), null);
+  for (const row of rows) byEmail.set(row.email.toLowerCase(), row.name);
+  return [...byEmail.entries()]
+    .map(([email, name]) => ({ email, name }))
+    .sort((a, b) => a.email.localeCompare(b.email));
 }
 
 function cleanStatus(value: unknown): TodoStatus {
@@ -81,7 +125,7 @@ export async function createTodo(
  */
 export async function updateTodo(
   id: string,
-  patch: { title?: unknown; status?: unknown },
+  patch: { title?: unknown; status?: unknown; assignee?: unknown; notes?: unknown },
   actor: string,
 ): Promise<CrmTodo> {
   const sets: string[] = ["updated_at = $2"];
@@ -90,6 +134,18 @@ export async function updateTodo(
   if (patch.title !== undefined) {
     params.push(cleanTitle(patch.title));
     sets.push(`title = $${params.length}`);
+  }
+
+  // Absent leaves it alone; explicit null unassigns / clears. Same PATCH
+  // semantics as the rest of this API.
+  if (patch.assignee !== undefined) {
+    params.push(cleanAssignee(patch.assignee));
+    sets.push(`assignee = $${params.length}`);
+  }
+
+  if (patch.notes !== undefined) {
+    params.push(cleanNotes(patch.notes));
+    sets.push(`notes = $${params.length}`);
   }
 
   if (patch.status !== undefined) {

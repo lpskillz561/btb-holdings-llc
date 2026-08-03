@@ -511,6 +511,11 @@ const TABLES: TableDef[] = [
       ["title", "TEXT NOT NULL"],
       // Which kanban column the card sits in.
       ["status", "TEXT NOT NULL DEFAULT 'todo'"],
+      // Email of whoever owns the card. Nullable — unassigned is a real and
+      // common state on a shared board, not a missing value to be defaulted.
+      ["assignee", "TEXT"],
+      // Free-text detail, shown when a card is opened.
+      ["notes", "TEXT"],
       // TEXT, not TIMESTAMPTZ. Every timestamp in this schema is an ISO string
       // (see TS_DEFAULT), and mixing the two breaks queries rather than just
       // looking untidy: one bind parameter used for both `updated_at` (text)
