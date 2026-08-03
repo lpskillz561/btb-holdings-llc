@@ -266,11 +266,20 @@ export function StructureDiagram({ width = 980 }: { width?: number }) {
   const mgtX = 610;
   const linkY = 153;
 
+  // `sub` is an ARRAY OF LINES, not a sentence. SVG <text> does not wrap: a
+  // string too wide for the box does not reflow, it just runs out the side, and
+  // "One Series per home — owned 100% by the Trust" did exactly that. There is
+  // no width at which this stops being a hazard, so the break is explicit and
+  // measured — see the padding assertion in the deck's browser check.
   const nodes = [
-    { y: 8, title: "The buyer", sub: "A high-income taxpayer" },
-    { y: 116, title: "Irrevocable grantor trust", sub: "Settled by the buyer, funded with cash" },
-    { y: 224, title: "Series LLC", sub: "One Series per home — owned 100% by the Trust" },
-    { y: 332, title: "The Park Model", sub: "Titled with a state VIN as a trailer / RV" },
+    { y: 8, title: "The buyer", sub: ["A high-income taxpayer"] },
+    { y: 116, title: "Irrevocable grantor trust", sub: ["Settled by the buyer, funded with cash"] },
+    {
+      y: 224,
+      title: "Series LLC",
+      sub: ["One Series per home —", "owned 100% by the Trust"],
+    },
+    { y: 332, title: "The Park Model", sub: ["Titled with a state VIN as a trailer / RV"] },
   ];
 
   return (
@@ -314,23 +323,30 @@ export function StructureDiagram({ width = 980 }: { width?: number }) {
                 stroke={last ? ACCENT : "rgba(251,250,247,0.22)"}
                 strokeWidth={2}
               />
+              {/* One line of sub sits centred under the title as before; two
+                  lines pull the title up so both fit inside the same box
+                  height, rather than growing the box and eating the gap the
+                  connector arrows need. */}
               <text
                 x={cx + 20}
-                y={n.y + 30}
+                y={n.y + (n.sub.length > 1 ? 26 : 30)}
                 fill={last ? "#0a1430" : TEXT}
                 fontSize={19}
                 fontWeight={650}
               >
                 {n.title}
               </text>
-              <text
-                x={cx + 20}
-                y={n.y + 54}
-                fill={last ? "rgba(10,20,48,0.78)" : TEXT_MUTED}
-                fontSize={14}
-              >
-                {n.sub}
-              </text>
+              {n.sub.map((line, li) => (
+                <text
+                  key={line}
+                  x={cx + 20}
+                  y={n.y + (n.sub.length > 1 ? 46 : 54) + li * 17}
+                  fill={last ? "rgba(10,20,48,0.78)" : TEXT_MUTED}
+                  fontSize={14}
+                >
+                  {line}
+                </text>
+              ))}
             </g>
           );
         })}
