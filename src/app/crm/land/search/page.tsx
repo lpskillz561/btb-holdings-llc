@@ -36,7 +36,12 @@ export const dynamic = "force-dynamic";
 export default async function LandSearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; minAcres?: string; maxPrice?: string }>;
+  searchParams: Promise<{
+    state?: string;
+    minAcres?: string;
+    maxPrice?: string;
+    county?: string;
+  }>;
 }) {
   const user = await getCrmPageUser();
   if (!user) notFound();
@@ -45,6 +50,7 @@ export default async function LandSearchPage({
   const state = (sp.state ?? "").toUpperCase() || null;
   const minAcres = Number(sp.minAcres) > 0 ? Number(sp.minAcres) : 5;
   const maxPrice = Number(sp.maxPrice) > 0 ? Number(sp.maxPrice) : undefined;
+  const wantCounty = (sp.county ?? "").trim();
 
   const availability = await parcelsAvailable();
 
@@ -77,9 +83,13 @@ export default async function LandSearchPage({
     rankCounties({ state, minAcres }).catch(() => []),
   ]);
 
-  // Parcels in the best-scoring county, so the page answers "where" and "which"
-  // in one screen rather than making someone search again.
-  const focus = counties[0];
+  // Parcels in the chosen county — the best-scoring one by default, so the page
+  // answers "where" and "which" in one screen, but any row in the ranking can be
+  // clicked to look inside it instead.
+  const focus =
+    (wantCounty
+      ? counties.find((c) => c.county.toLowerCase() === wantCounty.toLowerCase())
+      : undefined) ?? counties[0];
   const results = focus
     ? await searchArea(`${focus.county}, ${focus.state}`, 1, {
         landOnly: true,
@@ -88,6 +98,16 @@ export default async function LandSearchPage({
         sort: "acres_desc",
       }).catch(() => null)
     : null;
+
+  /** Preserve the current filters when linking to another county. */
+  const countyHref = (county: string) => {
+    const qs = new URLSearchParams();
+    if (state) qs.set("state", state);
+    if (sp.minAcres) qs.set("minAcres", String(minAcres));
+    if (maxPrice) qs.set("maxPrice", String(maxPrice));
+    qs.set("county", county);
+    return `/crm/land/search?${qs.toString()}`;
+  };
 
   return (
     <>
@@ -161,11 +181,20 @@ export default async function LandSearchPage({
                 <Table
                   head={["Rank", "County", "Score", "Candidates", "Median size", "Median value", "Pads", "Land per pad"]}
                 >
-                  {counties.map((c, i) => (
-                    <tr key={`${c.state}-${c.county}`} className="border-t border-ink-200">
+                  {counties.map((c, i) => {
+                    const active =
+                      focus && c.county === focus.county && c.state === focus.state;
+                    return (
+                    <tr
+                      key={`${c.state}-${c.county}`}
+                      className={`border-t border-ink-200 ${active ? "bg-sf-50" : ""}`}
+                    >
                       <Td>{i + 1}</Td>
                       <Td>
-                        <span className="font-medium text-ink-900">{c.county}</span>
+                        {/* Every county is openable, not just the top one. */}
+                        <Link href={countyHref(c.county)} className="font-medium text-ink-900 hover:text-sf-600 hover:underline">
+                          {c.county}
+                        </Link>
                         <span className="ml-1.5 text-ink-500">
                           {STATE_NAMES[c.state] ?? c.state}
                         </span>
@@ -190,7 +219,8 @@ export default async function LandSearchPage({
                           : fmtMoney(c.median_cost_per_pad_cents)}
                       </Td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </Table>
               </div>
             )}

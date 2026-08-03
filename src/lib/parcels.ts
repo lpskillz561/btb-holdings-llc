@@ -258,11 +258,24 @@ export async function searchArea(area: string, page: number, opts: AreaOpts = {}
     where = "p.situs_zip = $1";
     label = `ZIP ${trimmed}`;
   } else {
+    // A place name, which may be a CITY or a COUNTY — and the caller usually
+    // does not know which. Matching only `situs_city` is what made the land
+    // search return "0 match" for Volusia: the county holds 310,941 parcels and
+    // no parcel anywhere has a situs city of that name, because Volusia is a
+    // county. Match either, and let the trailing state narrow it.
     by = "radius";
-    const city = trimmed.split(",")[0].trim();
-    params.push(city);
-    where = "lower(p.situs_city) = lower($1)";
-    label = city;
+    const [namePart, statePart] = trimmed.split(",").map((s) => s.trim());
+    params.push(namePart);
+    where = "(lower(p.situs_city) = lower($1) OR lower(p.county) = lower($1))";
+    label = namePart;
+    // "Volusia, FL" used to discard the ", FL" entirely. It is the difference
+    // between one county and every same-named county in the country.
+    const suffix = (statePart ?? "").toUpperCase();
+    if (/^[A-Z]{2}$/.test(suffix) && STATE_NAMES[suffix]) {
+      params.push(suffix);
+      where += ` AND p.state = $${params.length}`;
+      label = `${namePart}, ${suffix}`;
+    }
   }
   if (landOnly) where += " AND p.is_land";
   // Price range on assessed (just/market) value. Pushed onto `params` before the
