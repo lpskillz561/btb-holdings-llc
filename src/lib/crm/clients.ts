@@ -115,8 +115,8 @@ export async function listClients(params: URLSearchParams = new URLSearchParams(
 
   return query<ClientListRow>(
     `SELECT c.*,
-            (SELECT count(*)::int FROM crm_proposals p WHERE p.client_id = c.id)  AS proposal_count,
-            (SELECT count(*)::int FROM crm_contracts k WHERE k.client_id = c.id)  AS contract_count,
+            (SELECT count(*)::int FROM crm_proposals p WHERE p.client_id = c.id AND p.archived_at IS NULL)  AS proposal_count,
+            (SELECT count(*)::int FROM crm_contracts k WHERE k.client_id = c.id AND k.archived_at IS NULL)  AS contract_count,
             (SELECT count(*)::int FROM crm_units u WHERE u.client_id = c.id)      AS unit_count,
             (SELECT count(*)::int FROM crm_properties r WHERE r.client_id = c.id) AS property_count,
             -- Every money aggregate is cast back to bigint. sum(bigint) returns
@@ -384,11 +384,11 @@ export async function getClientDetail(id: string): Promise<ClientDetail> {
     await Promise.all([
       query<CrmContact>(`SELECT * FROM crm_contacts WHERE client_id = $1 ORDER BY created_at`, [id]),
       query<CrmProposal>(
-        `SELECT * FROM crm_proposals WHERE client_id = $1 ORDER BY created_at DESC`,
+        `SELECT * FROM crm_proposals WHERE client_id = $1 AND archived_at IS NULL ORDER BY created_at DESC`,
         [id],
       ),
       query<CrmContract>(
-        `SELECT * FROM crm_contracts WHERE client_id = $1 ORDER BY created_at DESC`,
+        `SELECT * FROM crm_contracts WHERE client_id = $1 AND archived_at IS NULL ORDER BY created_at DESC`,
         [id],
       ),
       query<CrmProperty>(
@@ -494,11 +494,11 @@ export async function getCrmSummary(): Promise<CrmSummary> {
         `SELECT status,
                 coalesce(sum(total_investment_cents), 0)::bigint  AS total,
                 coalesce(sum(year_one_deduction_cents), 0)::bigint AS deduction
-         FROM crm_proposals GROUP BY status`,
+         FROM crm_proposals WHERE archived_at IS NULL GROUP BY status`,
       ),
       query<{ total: number }>(
         `SELECT coalesce(sum(value_cents), 0)::bigint AS total FROM crm_contracts
-         WHERE status IN ('signed','active')`,
+         WHERE status IN ('signed','active') AND archived_at IS NULL`,
       ),
       query<{ in_service: number; total: number }>(
         `SELECT count(*) FILTER (WHERE status = 'in_service')::int AS in_service,

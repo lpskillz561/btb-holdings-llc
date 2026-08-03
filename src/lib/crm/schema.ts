@@ -217,6 +217,14 @@ const TABLES: TableDef[] = [
       ["annual_cash_flow_cents", "BIGINT NOT NULL DEFAULT 0"],
       ["cash_on_cash_bps", "INTEGER"],
       ["payback_years", "DOUBLE PRECISION"],
+      // Archive, not delete. A proposal or contract entered against the wrong
+      // client is a mistake to withdraw, not history to destroy - the row may
+      // already be referenced by activity, and someone will ask what happened
+      // to it. Kept OUT of the status enum on purpose: status says where the
+      // document stands, and folding "archived" into it would erase the fact
+      // that a withdrawn proposal had been accepted.
+      ["archived_at", "TEXT"],
+      ["archived_by", "TEXT"],
       ["body_md", "TEXT NOT NULL DEFAULT ''"],
       ["valid_until", "TEXT"],
       ["created_by", "TEXT"],
@@ -245,6 +253,10 @@ const TABLES: TableDef[] = [
       ["end_date", "TEXT"],
       ["signed_at", "TEXT"],
       ["notes", "TEXT"],
+      // Archive, not delete — same reasoning as crm_proposals above, and for the
+      // same reason kept out of the status enum.
+      ["archived_at", "TEXT"],
+      ["archived_by", "TEXT"],
 
       // --- generated execution set -------------------------------------
       // Null on hand-recorded contracts; set on the three documents produced

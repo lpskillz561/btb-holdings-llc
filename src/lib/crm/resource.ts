@@ -60,6 +60,14 @@ export interface ResourceDef {
   orderBy: string;
   /** One-line description of a row, for the activity feed. */
   describe: (row: Row) => string;
+  /**
+   * Hide archived rows from the collection endpoint.
+   *
+   * Filtering only the page queries is not enough: the REST list is the same
+   * data by another door, and a row that has disappeared from one but not the
+   * other is worse than one that never disappeared at all.
+   */
+  archivable?: boolean;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -125,6 +133,7 @@ export const CONTRACTS: ResourceDef = {
   filters: ["client_id", "status", "type", "proposal_id"],
   orderBy: "created_at DESC",
   describe: (r) => String(r.title ?? "contract"),
+  archivable: true,
 };
 
 /** Land BTB owns. No client_id — that is the whole distinction from PROPERTIES. */
@@ -312,6 +321,9 @@ export async function listRows<T extends Row>(
 ): Promise<T[]> {
   const where: string[] = [];
   const binds: unknown[] = [];
+  if (def.archivable && params.get("archived") !== "true") {
+    where.push("archived_at IS NULL");
+  }
   for (const column of def.filters ?? []) {
     const value = params.get(column);
     if (value === null || value === "") continue;

@@ -19,6 +19,7 @@ export async function listContractsWithClient(): Promise<WithClient<CrmContract>
   return query<WithClient<CrmContract>>(
     `SELECT k.*, c.name AS client_name
      FROM crm_contracts k JOIN crm_clients c ON c.id = k.client_id
+     WHERE k.archived_at IS NULL
      ORDER BY k.created_at DESC LIMIT 300`,
   );
 }

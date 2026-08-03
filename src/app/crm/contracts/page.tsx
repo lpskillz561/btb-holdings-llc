@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RecordHeader } from "@/components/crm/RecordHeader";
+import { ArchiveButton } from "@/components/crm/ArchiveButton";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
@@ -32,6 +33,11 @@ export default async function ContractsPage() {
       <RecordHeader
         eyebrow="Commitments"
         title="Contracts"
+        actions={
+          <Link href="/crm/archive" className="sf-btn-neutral">
+            Archive
+          </Link>
+        }
         intro="What has actually been committed to, and what is still waiting on a signature."
       />
 
@@ -56,7 +62,7 @@ export default async function ContractsPage() {
           ) : (
             <div className="sf-card">
               <Table
-                head={["Contract", "Client", "Type", "Status", "Value", "Effective", "Signed"]}
+                head={["Contract", "Client", "Type", "Status", "Value", "Effective", "Signed", ""]}
               >
                 {contracts.map((row) => (
                   <tr key={row.id} className="transition hover:bg-white">
@@ -85,6 +91,9 @@ export default async function ContractsPage() {
                       {fmtDate(row.effective_date)}
                     </Td>
                     <Td className="whitespace-nowrap text-ink-600">{fmtDate(row.signed_at)}</Td>
+                    <Td className="whitespace-nowrap">
+                      <ArchiveButton kind="contract" id={row.id} title={row.title} />
+                    </Td>
                   </tr>
                 ))}
               </Table>

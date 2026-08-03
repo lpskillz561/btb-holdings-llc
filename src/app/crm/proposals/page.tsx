@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RecordHeader } from "@/components/crm/RecordHeader";
+import { ArchiveButton } from "@/components/crm/ArchiveButton";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
@@ -32,6 +33,11 @@ export default async function ProposalsPage() {
       <RecordHeader
         eyebrow="Pipeline"
         title="Proposals"
+        actions={
+          <Link href="/crm/archive" className="sf-btn-neutral">
+            Archive
+          </Link>
+        }
         intro="Every proposal across the book. Figures are frozen at drafting — a proposal says the same thing next month as it did the day it was sent."
       />
 
@@ -60,7 +66,7 @@ export default async function ProposalsPage() {
           ) : (
             <div className="sf-card">
               <Table
-                head={["Proposal", "Client", "Status", "Investment", "Deduction", "Tax benefit", "Created"]}
+                head={["Proposal", "Client", "Status", "Investment", "Deduction", "Tax benefit", "Created", ""]}
               >
                 {proposals.map((row) => (
                   <tr key={row.id} className="transition hover:bg-white">
@@ -89,6 +95,9 @@ export default async function ProposalsPage() {
                       {fmtMoney(row.year_one_tax_savings_cents)}
                     </Td>
                     <Td className="whitespace-nowrap text-ink-600">{fmtAgo(row.created_at)}</Td>
+                    <Td className="whitespace-nowrap">
+                      <ArchiveButton kind="proposal" id={row.id} title={row.title} />
+                    </Td>
                   </tr>
                 ))}
               </Table>

@@ -47,6 +47,10 @@ import { PROPOSAL_STATUSES, UNIT_USES, type CrmProposal, type UnitUse } from "./
 export async function listProposals(params: URLSearchParams = new URLSearchParams()): Promise<CrmProposal[]> {
   const where: string[] = [];
   const binds: unknown[] = [];
+  // Archived proposals are off the board here too. Filtering only the page
+  // query would leave the REST list showing rows that have "disappeared"
+  // everywhere else — the same data by another door.
+  if (params.get("archived") !== "true") where.push("p.archived_at IS NULL");
   const clientId = params.get("client_id");
   if (clientId) {
     binds.push(clientId);
@@ -70,6 +74,7 @@ export async function listProposalsWithClient(): Promise<(CrmProposal & { client
   return query<CrmProposal & { client_name: string }>(
     `SELECT p.*, c.name AS client_name
      FROM crm_proposals p JOIN crm_clients c ON c.id = p.client_id
+     WHERE p.archived_at IS NULL
      ORDER BY p.created_at DESC LIMIT 300`,
   );
 }
