@@ -1,8 +1,9 @@
-# btb-etl — parcel + auction importer
+# etl — parcel, auction and zoning importer
 
-Loads property/parcel data into the BTB Holdings CRM's Aurora database. **This
-repo owns itself**: it ships and runs on its own, via `./ship.sh` and the
-systemd timers in `deploy/`. It is not vendored into the CRM app.
+Loads property/parcel data into the BTB Holdings CRM's Aurora database. It lives
+in the CRM's repo but **ships and runs on its own path** — `./ship.sh` and the
+systemd timers in `deploy/` — never through the app's deploy and never inside
+the app container.
 
 See `CLAUDE.md` for the traps. Two pipelines share this directory:
 

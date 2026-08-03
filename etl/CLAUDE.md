@@ -1,23 +1,27 @@
 # btb-etl — working notes
 
-The parcel and auction importer for the BTB Holdings CRM. **This repo owns
-itself.** It ships to, and runs on, the CRM's EC2 instance, on its own schedule
-and through its own `ship.sh`. It is not vendored into the app and does not ride
-the app's deploy.
+The parcel and auction importer for the BTB Holdings CRM. It lives in this repo,
+under `etl/`, and **it deploys on its own path**: `./ship.sh` puts it in S3 and
+the host re-pulls it on every run. It does NOT ride the app's `deploy.sh`, is
+excluded from the app tarball, and never runs inside the app container.
 
 Read `README.md` for what it does. This file is what is not obvious from the
 code and has already cost time.
 
-## This repo is self-contained
+## Why it sits inside the app's repo
 
 **There is exactly one importer feeding BTB and it is this one.** It has no
-parent, no upstream and no sibling checkout. Do not add a submodule, a symlink
-or a shared directory to another project, and do not vendor this into the CRM
-app: an importer that writes production data from two places is two things to
-keep in step, and the one that drifts is the one nobody is watching.
+upstream and no sibling checkout. Do not add a submodule, a symlink or a shared
+directory to another project.
 
-The only thing outside this repo that it touches is the `parcels` table it
-writes, which the CRM reads. That contract is at the bottom of this file.
+It is a directory here rather than a repo of its own because the dependency runs
+**both ways**: `lib/common.mjs` defines the `parcels` columns that
+`src/lib/parcels.ts` in the app selects by name, and `zoning.mjs` reads
+`crm_saved_parcels`, which the app owns. Split across two repos, a rename on
+either side is a silent break discovered in production. In one tree it is one
+search.
+
+Sharing a repo is not sharing a deploy. See the header.
 
 ## How it runs
 

@@ -11,7 +11,7 @@ a pad in a BTB park, so `crm_parks` / `crm_pads` are BTB's inventory and carry n
 
 A standalone app, sharing nothing with any other project. It runs on AWS —
 Aurora PostgreSQL, EC2 behind an ALB — at **btbholdingsllc.com**. The parcel
-importer that feeds it is its own repo, `btb-etl`. See
+importer that feeds it is in `etl/`, deployed separately. See
 [`docs/AWS-MIGRATION.md`](docs/AWS-MIGRATION.md) for the deployment.
 
 ---
@@ -264,10 +264,10 @@ so the two cannot drift.
 **A new column added there must be nullable or have a default**, or the `ALTER`
 fails on a populated table.
 
-The parcel tables are **not** created by this app. They come from `btb-etl`
-(`import.mjs`, `auctions.mjs`), which is its own repo and runs itself on two
-systemd timers on the same instance. Without them the CRM works fine; land
-search returns nothing.
+The parcel tables are **not** created by `ensureAppSchema`. They come from the
+importer in `etl/` (`import.mjs`, `auctions.mjs`, `zoning.mjs`), which runs
+itself on three systemd timers on the same instance. Without them the CRM works
+fine; land search returns nothing.
 
 ### Invariants
 
@@ -321,9 +321,12 @@ Two systemd timers on the instance keep it current (`btb-etl-parcels.timer`
 monthly for every state, `btb-etl-auctions.timer` nightly). No second machine is
 in that path and no long-lived access key exists for it.
 
-**The ETL is not in this repo.** It is its own repo, `btb-etl`, which ships and
-schedules itself onto the same EC2 instance. Nothing is shared between the two
-beyond the `parcels` table it writes and this app reads. See
+**The ETL is `etl/`, and it deploys separately from the app.** It ships with
+`etl/ship.sh` (S3, seconds) and runs on systemd timers on the host, not in the
+app container — so an ETL fix never needs an image rebuild and never rides an
+unfinished app change. It is in this repo because the schema dependency runs
+both ways: it defines the `parcels` columns this app reads, and its zoning job
+reads `crm_saved_parcels`, which this app owns. See
 [`infra/etl/README.md`](infra/etl/README.md).
 
 Still to do: the nightly `pg_dump` backup, and North Carolina and Colorado have

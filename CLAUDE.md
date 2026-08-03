@@ -8,7 +8,7 @@ has already cost time.
 
 This CRM was extracted from an earlier in-house portal and is now a standalone
 app. **It shares nothing with anything else.** The last shared component was the
-parcel importer, which is its own repo (`btb-etl`) — see the AWS section.
+parcel importer, and it is now `etl/` in this repo — see the AWS section.
 
 Two consequences worth stating plainly, because both have caught people out:
 
@@ -504,10 +504,25 @@ ALB, listeners, Route53) are both up; the ACM cert is issued. See
 
 Not built yet: the parcel data itself, and the nightly backup.
 
-**The importer is its OWN REPO: `btb-etl`** (`~/Documents/Ziora/btb-etl`). It
-owns its source, its `run-etl.sh`, its four systemd units and its own
-`ship.sh`, and it deploys itself to the same EC2 instance on its own cadence —
-it does not ride this app's deploy. Its `CLAUDE.md` carries the ETL traps.
+**The importer is `etl/` IN THIS REPO, and it deploys separately.** One repo,
+two deploy paths — those are different things and the split is deliberate:
+
+- `etl/ship.sh` uploads the importer to S3; `run-etl.sh` on the host re-pulls it
+  on every run. Seconds, no image build, no restart.
+- `deploy.sh` rebuilds the container for the app. Minutes, and it restarts the
+  site.
+
+So an ETL fix never requires shipping whatever is half-finished in the app, and
+an app deploy never ships a half-finished adapter. `--exclude=./etl` in the app
+tarball and `etl` in `.dockerignore` are what keep them apart.
+
+It is in this repo rather than its own because **the dependency runs both
+ways**: `etl/lib/common.mjs` defines the `parcels` columns that
+`src/lib/parcels.ts` selects by name, and `etl/zoning.mjs` reads
+`crm_saved_parcels`, which this app owns. Two repos with a mutual schema
+dependency is the same invisible coupling that made the previous arrangement a
+hazard — a rename that is one search here would have been a silent break there.
+Read `etl/CLAUDE.md` before changing anything under it.
 
 **There is exactly one importer feeding this Aurora and it is that repo.** Do
 not re-introduce a shared checkout, a submodule or a symlink to any other

@@ -9,18 +9,24 @@ systemd timer (EC2)  ──▶  /opt/btb/run-etl.sh  ──▶  node import.mjs 
 
 ## Where the code lives
 
-**Its own repo: `btb-etl`** (`~/Documents/Ziora/btb-etl`). It owns its source,
-its `run-etl.sh`, its four systemd units and its own `ship.sh`. Read that repo's
-`CLAUDE.md` before changing anything in it.
+**`etl/` in this repo.** It owns its source, its `run-etl.sh`, its five systemd
+units and its own `ship.sh`. Read `etl/CLAUDE.md` before changing anything in it.
 
-**There is exactly one importer feeding this Aurora and it is that repo.** Do
-not re-introduce a shared checkout, a submodule or a symlink to any other
-project, and do not vendor it here.
+**It is in this repo, but it does NOT ride this app's deploy.** `etl/ship.sh`
+puts the importer in S3 and `run-etl.sh` re-pulls it on every run — seconds, no
+image build, no restart — while the app needs a container rebuild. Keeping those
+separate is why `--exclude=./etl` is in the app tarball and `etl` is in
+`.dockerignore`.
 
-The only remaining contract between the two repos is the **`parcels` table**:
-`lib/common.mjs` over there defines the columns, `src/lib/parcels.ts` here
-selects them by name. Adding a column is safe; renaming one is a breaking change
-that needs a search in this tree first.
+**Why one repo and not two.** The dependency runs both ways: `etl/lib/common.mjs`
+defines the `parcels` columns `src/lib/parcels.ts` selects by name, and
+`etl/zoning.mjs` reads `crm_saved_parcels`, which this app owns. Across a repo
+boundary that is a silent break waiting to happen — the same invisible coupling
+that made the old shared arrangement a hazard. In one tree a rename is one
+search.
+
+**There is exactly one importer feeding this Aurora.** Do not re-introduce a
+shared checkout, a submodule or a symlink to any other project.
 
 ## The schedule
 
@@ -28,6 +34,7 @@ that needs a search in this tree first.
 |---|---|---|
 | `btb-etl-parcels.timer` | Monthly, 1st at 07:00 UTC | `btb-etl@ALL.service` — every registered state |
 | `btb-etl-auctions.timer` | Nightly, 09:00 UTC | `btb-etl-auctions.service` — `auctions ALL` |
+| `btb-etl-zoning.timer` | Nightly, 10:00 UTC | `btb-etl-zoning@orange-fl.service` — county zoning |
 
 Both are `Persistent=true`, so a missed run fires on the next boot rather than
 being skipped.
@@ -65,12 +72,12 @@ a `COPY` sitting in `Client/ClientRead` with an hours-old `xact_start`.
 
 ## Shipping a new ETL
 
-From the `btb-etl` repo, not this one. `run-etl.sh` re-downloads the source on
-every run, so the next scheduled job picks it up and there is no deploy step
-beyond the upload.
+From `etl/`, and **not** with the app's `deploy.sh`. `run-etl.sh` re-downloads
+the source on every run, so the next scheduled job picks it up and there is no
+deploy step beyond the upload.
 
 ```bash
-cd ~/Documents/Ziora/btb-etl
+cd etl
 ./ship.sh           # source only — the common case
 ./ship.sh --units   # also reinstall run-etl.sh and the systemd units
 ```
@@ -79,11 +86,11 @@ cd ~/Documents/Ziora/btb-etl
 AppleDouble files. **Do not hand-roll the tarball** — the previous instructions
 did, and left eight `._*` files on the instance.
 
-`infra/aws/btb-crm-app.yaml` in this repo also writes `run-etl.sh` and the four
-units, but that is a **bootstrap copy only**, so a fresh instance has working
-timers before `btb-etl` has ever shipped to it. `ship.sh --units` overwrites it,
-and UserData does not re-run on an existing instance. `btb-etl/deploy/` is the
-source of truth.
+`infra/aws/btb-crm-app.yaml` also writes `run-etl.sh` and the units, but that is
+a **bootstrap copy only**, so a fresh instance has working timers before
+`etl/ship.sh` has ever run against it. `ship.sh --units` overwrites the lot, and
+UserData does not re-run on an existing instance. **`etl/deploy/` is the source
+of truth.**
 
 ## What was removed, and why
 
@@ -96,7 +103,7 @@ Two systemd timers on the instance do the same job with no second machine, so
 the dispatch path is gone:
 
 - `run-etl-on-ec2.sh` — deleted.
-- The three `n8n-*.json` workflow exports — deleted from the ETL repo.
+- The three `n8n-*.json` workflow exports — deleted.
 - The `btb-n8n-mini` IAM user, its inline policy and its access key — **deleted
   from AWS**. It had never been used: `get-access-key-last-used` reported no
   `LastUsedDate` at all, so the credential was issued and never exercised.

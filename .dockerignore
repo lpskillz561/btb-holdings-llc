@@ -7,3 +7,8 @@ node_modules
 npm-debug.log
 .DS_Store
 README.md
+
+# The ETL. It lives in this repo (etl/) but ships and runs on its own path -
+# S3 + systemd on the host, never inside this container - so copying it into
+# the image would only make the image bigger and imply it runs here.
+etl

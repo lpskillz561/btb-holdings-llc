@@ -71,8 +71,12 @@ Two steps, and no instance replacement:
 # concatenated 163 bytes of binary into every system prompt — no error, no
 # warning, just a corrupted prompt. The loader now skips dotfiles as well, but
 # not shipping them is the first line of defence.
+# --exclude=./etl keeps the importer out of the app image. It lives in this
+# repo but ships on its own path (etl/ship.sh -> S3 -> systemd on the host) and
+# never runs inside the container, so shipping it here would only make the
+# image bigger and imply otherwise.
 COPYFILE_DISABLE=1 tar --exclude=./.git --exclude=./node_modules --exclude=./.next \
-    --exclude=./docs --exclude=./tsconfig.tsbuildinfo --exclude='._*' \
+    --exclude=./docs --exclude=./etl --exclude=./tsconfig.tsbuildinfo --exclude='._*' \
     -czf /tmp/app.tar.gz -C . .
 aws s3 cp /tmp/app.tar.gz s3://btb-crm-deploy-761540266321/source/app.tar.gz --profile ziora
 
