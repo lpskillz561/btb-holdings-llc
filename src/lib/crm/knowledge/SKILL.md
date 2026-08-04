@@ -418,6 +418,23 @@ the deal. These are in the source documents themselves.
   this purpose. The excess becomes an **NOL carryforward** — deferred, not lost.
   **The deck names this itself**, so a first-year benefit quoted without it is a
   figure the sales material has already qualified.
+- **The marginal rate is assumed, never derived, and the default is FEDERAL
+  ONLY.** Where no rate is recorded on the client the model uses **37%** — the
+  top federal ordinary rate, with **no state component**. Do not describe that
+  default as a "combined federal and state" rate; it is not one. It is
+  deliberately conservative, because the structure is a Nevada series LLC and the
+  parks are in Florida and Montana, none of which tax individual income — a buyer
+  who files somewhere that does has a *higher* combined rate and a larger
+  benefit. When a client record carries its own rate, that one is theirs and is
+  meant to be the combined figure.
+- **The first-year tax benefit is a GROSS figure and is a ceiling.** It is the
+  whole deduction multiplied by the top marginal rate, which assumes two things
+  that are often false: that §461(l) lets the entire loss offset other income
+  this year, and that every dollar is absorbed at the top bracket instead of
+  stacking down through the lower ones. **These are two different haircuts** —
+  §461(l) decides how much of the loss is usable at all; bracket stacking decides
+  the rate the usable part earns. Never state the benefit as money received or
+  saved in year one without naming both.
 - **Recourse is what makes the leverage work.** Without a note guaranteed by and
   recourse to the Trust, §465 limits the loss to the cash at risk — the deposit —
   and the whole ratio collapses.

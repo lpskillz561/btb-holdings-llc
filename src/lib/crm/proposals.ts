@@ -199,8 +199,17 @@ function renderBody(g: Generated, e: Economics, clientName: string): string {
     `| Depreciable basis (excludes land) | ${fmtMoney(e.depreciableBasisCents)} |`,
     `| First-year deduction | ${fmtMoney(e.yearOneDeductionCents)} |`,
     `| Assumed marginal rate | ${fmtPct(e.marginalRateBps)} |`,
-    `| **Estimated first-year tax benefit** | **${fmtMoney(e.yearOneTaxSavingsCents)}** |`,
-    `| Net first-year outlay | ${fmtMoney(e.netYearOneOutlayCents)} |`,
+    // "gross, before limits" is load-bearing, not hedging. This figure is the
+    // whole deduction multiplied by the TOP marginal rate, which assumes two
+    // things that are usually false: that §461(l) lets the entire loss offset
+    // other income this year, and that every dollar of a seven-figure deduction
+    // is absorbed at the top bracket rather than stacking down through the lower
+    // ones. Both are disclosed in "What this depends on"; without the qualifier
+    // here the bolded row silently claims otherwise, and this is the row a CPA
+    // reads first. The net outlay is derived from it, so it carries the same
+    // qualifier or it inherits the optimism without the warning.
+    `| **Estimated first-year tax benefit (gross, before limits)** | **${fmtMoney(e.yearOneTaxSavingsCents)}** |`,
+    `| Net first-year outlay (against the gross benefit) | ${fmtMoney(e.netYearOneOutlayCents)} |`,
     `| Projected net operating income | ${fmtMoney(e.annualNoiCents)} / yr |`,
     `| Cash-on-cash on net outlay | ${fmtPct(e.cashOnCashBps)} |`,
     `| Payback on net outlay | ${e.paybackYears === null ? "—" : `${e.paybackYears} yrs`} |`,
@@ -291,8 +300,12 @@ export async function generateProposal(
     `- Depreciable basis: ${fmtMoney(economics.depreciableBasisCents)}`,
     `- First-year deduction: ${fmtMoney(economics.yearOneDeductionCents)}`,
     `- Assumed marginal rate: ${fmtPct(economics.marginalRateBps)}`,
-    `- Estimated first-year tax benefit: ${fmtMoney(economics.yearOneTaxSavingsCents)}`,
-    `- Net first-year outlay: ${fmtMoney(economics.netYearOneOutlayCents)}`,
+    // Named as gross HERE too, not only in the rendered table. The model writes
+    // the prose around these figures, and a fact labelled "estimated first-year
+    // tax benefit" invites "you save $X in year one" — the exact unqualified
+    // claim the table label was changed to stop making.
+    `- Estimated first-year tax benefit: ${fmtMoney(economics.yearOneTaxSavingsCents)} — GROSS, before the §461(l) limit and before bracket stacking. Never describe this as money the client receives or saves in year one without that qualification.`,
+    `- Net first-year outlay: ${fmtMoney(economics.netYearOneOutlayCents)} (derived from the gross benefit above, so it carries the same qualification)`,
     `- Projected annual net operating income: ${fmtMoney(economics.annualNoiCents)}`,
     `- Cash-on-cash on net outlay: ${fmtPct(economics.cashOnCashBps)}`,
     `- Payback: ${economics.paybackYears === null ? "not reached from operations alone" : `${economics.paybackYears} years`}`,

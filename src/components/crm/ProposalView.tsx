@@ -57,8 +57,8 @@ export function ProposalView({
     ["Recovery period", `${proposal.useful_life_years} yrs`],
     ["First-year deduction", fmtMoney(proposal.year_one_deduction_cents)],
     ["Marginal rate assumed", fmtPct(proposal.marginal_rate_bps)],
-    ["Est. first-year tax benefit", fmtMoney(proposal.year_one_tax_savings_cents)],
-    ["Net first-year outlay", fmtMoney(proposal.net_year_one_outlay_cents)],
+    ["Est. first-year tax benefit (gross)", fmtMoney(proposal.year_one_tax_savings_cents)],
+    ["Net first-year outlay (gross basis)", fmtMoney(proposal.net_year_one_outlay_cents)],
     ["Projected NOI", `${fmtMoney(proposal.annual_noi_cents)} / yr`],
     ["Cash-on-cash", fmtPct(proposal.cash_on_cash_bps)],
     [

@@ -142,7 +142,10 @@ export function ClientForm({
           <Field label="Files in (state)">
             <TextInput name="tax_state" maxLength={2} defaultValue={client?.tax_state ?? ""} placeholder="TX" />
           </Field>
-          <Field label="Combined marginal rate" hint="Federal + state, as a percent.">
+          <Field
+            label="Marginal rate"
+            hint="Federal + state combined, as a percent. Left blank this assumes 37% — the top federal rate, with no state component. Add theirs if they file somewhere that taxes income."
+          >
             <PercentInput name="marginal_rate_bps" defaultValue={bpsToInput(client?.marginal_rate_bps)} placeholder="37" />
           </Field>
           <Field label="Estimated annual income">

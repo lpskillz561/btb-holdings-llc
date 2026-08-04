@@ -473,10 +473,16 @@ export function buildSlides(
             taxSavingCents={headline.economics.yearOneTaxSavingsCents}
           />
           <p className="deck-note">
-            Tax saving shown at an assumed combined marginal rate of{" "}
-            {fmtPct(constants.marginalRateBps)}. Your actual rate, and the benefit, are
-            confirmed by your CPA. The deduction depends on the note being recourse to the
-            Trust and is subject to the §461(l) limit on the following slide.
+            {/* NOT "combined": this slide always renders the configured default,
+                which is the top FEDERAL rate with no state component. Naming a
+                state element that is not in the number is the mislabel this
+                deck's whole no-money-is-typed-into-a-slide rule exists to stop. */}
+            Tax saving shown at an assumed {fmtPct(constants.marginalRateBps)} top federal
+            marginal rate, before any state tax. Your own combined rate, and the benefit,
+            are confirmed by your CPA. The figure is gross: it assumes the whole deduction
+            is absorbed at that rate, where a deduction this size normally reduces income
+            through several brackets. The deduction depends on the note being recourse to
+            the Trust and is subject to the §461(l) limit on the following slide.
           </p>
         </Frame>
       ),

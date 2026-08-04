@@ -37,7 +37,29 @@ function envInt(name: string, fallback: number): number {
  */
 export const DEFAULT_BONUS_RATE_BPS = () => envInt("CRM_BONUS_DEPRECIATION_RATE_BPS", 10_000);
 
-/** Top combined federal + state marginal rate to assume when the client's isn't recorded. */
+/**
+ * Marginal rate to assume when the client's own is not recorded.
+ *
+ * 3700 is the top FEDERAL ordinary rate and contains NO STATE COMPONENT. That is
+ * deliberate, and the comment here used to claim it was a "combined federal +
+ * state" figure, which it never was — 37% is the federal rate exactly. The two
+ * disagreed, and a default described as combined while carrying no state element
+ * is the kind of thing a CPA finds.
+ *
+ * Federal-only is the right default for this business rather than an accident:
+ * the structure is a Nevada series LLC, the parks are in Florida and Montana,
+ * and neither Nevada nor Florida levies an individual income tax — so for the
+ * typical buyer there is no state component to add. Where a buyer files
+ * somewhere that does tax income, their combined rate is HIGHER than this and
+ * the benefit modelled here is conservative. That is the correct direction to be
+ * wrong in: every other assumption in this module leans the same way, and a
+ * default that silently added a state component would overstate the benefit for
+ * the majority of buyers.
+ *
+ * So: record the real combined rate on the client (`marginal_rate_bps`, beside
+ * `tax_state`) whenever the client files in a taxing state. This default is a
+ * floor, not an estimate of any particular person's rate.
+ */
 export const DEFAULT_MARGINAL_RATE_BPS = () => envInt("CRM_DEFAULT_MARGINAL_RATE_BPS", 3_700);
 
 /**
@@ -366,6 +388,23 @@ function buildCaveats(
   // a number the deck already qualifies.
   caveats.push(
     "Section 461(l) limits how much business loss can offset non-business income in one year — roughly $313,000 single / $626,000 married filing jointly for 2025, rising to about $325,000 / $650,000 for 2026. A deduction larger than that threshold does not vanish, but the excess is carried forward as a net operating loss rather than sheltering this year's income. Where the modelled deduction exceeds the client's cap, the first-year tax benefit shown here is the gross figure and their CPA must apply the limitation to it.",
+  );
+
+  // The SECOND reason the headline benefit is a ceiling, and a different
+  // mechanism from §461(l) above: that one decides how much of the loss is
+  // usable this year at all, this one decides the rate the usable part earns.
+  // The model multiplies the whole deduction by the top marginal rate, which is
+  // only true if the client's income clears the deduction AND the top bracket
+  // threshold. Below that the deduction stacks down through the lower brackets
+  // and the blended rate — and the benefit — is smaller. Left undisclosed, the
+  // "gross, before limits" label on the figures table would read as if §461(l)
+  // were the only haircut.
+  caveats.push(
+    `The tax benefit is modelled at a flat ${(
+      Math.min(10_000, Math.max(0, input.marginalRateBps)) / 100
+    ).toFixed(
+      1,
+    )}% marginal rate applied to the whole deduction. A deduction of this size normally reduces income through several brackets rather than being absorbed entirely at the top one, so unless the client's income comfortably exceeds both the deduction and the top-bracket threshold, the blended rate — and the benefit — will be lower than shown. The recorded rate should also be their combined federal and state rate; where none is recorded the figure assumes the top federal rate with no state component.`,
   );
 
   if (!ctx.deductible) {
