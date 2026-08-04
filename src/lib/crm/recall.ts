@@ -116,10 +116,18 @@ export interface RecallBot {
 /**
  * Send the notetaker into a call.
  *
- * `recallai_async` rather than the streaming provider: Phase 2 wants an accurate
- * post-call transcript, not a live feed. Live transcription is Phase 3 and is a
- * different provider plus a realtime endpoint on this same request — which is
- * why this integration was worth doing before the live panel rather than after.
+ * Deliberately NO `recording_config.transcript` on this request. That field only
+ * accepts at-recording providers (the streaming ones, platform captions, and
+ * AssemblyAI's chunked mode) — Recall rejects `recallai_async` there with a 400
+ * naming that list, which is how this was discovered in production. Phase 2
+ * wants an accurate post-call transcript, not a live feed, and the async path
+ * is a separate call on the FINISHED recording: the `recording.done` webhook
+ * fires, the ingest route calls `requestTranscript`, and `transcript.done`
+ * brings the result. The bot itself just records, which is the default.
+ *
+ * Live transcription is Phase 3: a streaming provider in this request's
+ * `recording_config` plus a realtime endpoint — which is why this integration
+ * was worth doing before the live panel rather than after.
  */
 export async function sendNotetaker(meetingUrl: string): Promise<RecallBot> {
   return call<RecallBot>("/bot", {
@@ -127,9 +135,6 @@ export async function sendNotetaker(meetingUrl: string): Promise<RecallBot> {
     body: {
       meeting_url: meetingUrl,
       bot_name: notetakerName(),
-      recording_config: {
-        transcript: { provider: { recallai_async: { language_code: "auto" } } },
-      },
     },
   });
 }
