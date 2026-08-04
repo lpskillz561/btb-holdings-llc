@@ -119,7 +119,7 @@ export function illustrate(label: string, priceCents: number, depositCents?: num
     opexBps: 0,
     // Transient lodging, let for under 30 days. Not `long_term_rental`: that is
     // a different asset, a different test and a different answer.
-    unitUse: "short_term_rental",
+    unitUse: "transient_rental",
   });
 
   return { label, terms, economics, driftCents: roundingDriftCents(terms) };

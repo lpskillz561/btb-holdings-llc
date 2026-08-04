@@ -138,6 +138,18 @@ to the owner**. Note the debt payment comes off the top, *before* the split.
    to the Trust and through to the grantor. *Frank Aragona Trust* (142 T.C. 165)
    and *Mattie K. Carter*; PLRs 201317010 and 201029014.
 
+**`unit_use` is `transient_rental`, and there is no `short_term_rental`.** The
+value was renamed and the default moved off `long_term_rental`, because that
+default was the single answer that breaks the lodging exception — every unit or
+proposal recorded without a deliberate choice argued against its own tax
+position, and the model dutifully flagged the contradiction on every draft. Two
+values named for two different day-counts is an invitation to pick the wrong
+one, so there is one and it is the accurate one. Existing rows are migrated by
+an `alters` entry on `crm_units` — and that entry **drops the CHECK first**,
+because `alters` run before the constraint is re-derived but the OLD constraint
+is still live, so the UPDATE would otherwise fail `23514`, `ensureAppSchema`
+would throw, and the app would answer 500 to everything.
+
 **The two day-counts are different tests and must not be conflated.** The
 **30-day** figure is the transient-lodging exception that makes the asset
 *eligible* at all. The familiar **7-day** short-term-rental figure is the §469

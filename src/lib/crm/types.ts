@@ -169,7 +169,21 @@ export type UnitStatus = (typeof UNIT_STATUSES)[number];
  * case: only business/rental use supports a depreciation deduction, so
  * `personal` zeroes the write-off in ./economics rather than quietly inflating it.
  */
-export const UNIT_USES = ["long_term_rental", "short_term_rental", "farm_ag", "commercial", "personal"] as const;
+/**
+ * How a unit is used — and the difference between the first two decides
+ * whether the deal works at all.
+ *
+ * `transient_rental` is the ONLY one the structure in docs/ is sold on: it
+ * clears the §50(b)(2) lodging exclusion through the transient exception at
+ * rentals normally UNDER 30 DAYS (Reg. 1.48-1(h)(2)(ii)). It was called
+ * `short_term_rental`, which is a different and dangerous idea — "short-term
+ * rental" is the familiar §469 SEVEN-day route to non-passive treatment
+ * through the taxpayer's own hours, which this structure explicitly does not
+ * use, because participation comes from the trustee instead. Two names for two
+ * tests invites picking the wrong one, so there is one name and it is the
+ * accurate one. See CLAUDE.md, "The two day-counts are different tests".
+ */
+export const UNIT_USES = ["transient_rental", "long_term_rental", "farm_ag", "commercial", "personal"] as const;
 export type UnitUse = (typeof UNIT_USES)[number];
 
 export const TX_KINDS = ["income", "expense"] as const;
@@ -728,8 +742,8 @@ export const LABELS = {
     retired: "Retired",
   } satisfies Record<UnitStatus, string>,
   unitUse: {
+    transient_rental: "Transient rental (under 30 days)",
     long_term_rental: "Long-term rental",
-    short_term_rental: "Short-term rental",
     farm_ag: "Farm / agricultural",
     commercial: "Commercial",
     personal: "Personal use",

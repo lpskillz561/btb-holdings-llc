@@ -246,7 +246,11 @@ export async function generateProposal(
 
   const marginalRateBps =
     bps(input.marginal_rate) ?? client.marginal_rate_bps ?? DEFAULT_MARGINAL_RATE_BPS();
-  const unitUse = oneOf<UnitUse>(input.unit_use, UNIT_USES, "long_term_rental");
+  // Transient, not long-term. The default used to be long_term_rental, which
+  // is the single answer that breaks the lodging exception the whole deduction
+  // rests on — so every proposal generated without an explicit choice argued
+  // against itself, and the model dutifully flagged the contradiction.
+  const unitUse = oneOf<UnitUse>(input.unit_use, UNIT_USES, "transient_rental");
 
   const economics = computeEconomics({
     unitCount,

@@ -68,7 +68,7 @@ export function ProposalGenerator({
       ? String(Math.round((client.target_writeoff_cents * defaults.depositBps) / 10_000 / 100))
       : "",
     monthly_rent: "",
-    unit_use: "long_term_rental" as UnitUse,
+    unit_use: "transient_rental" as UnitUse,
     marginal_rate: String(defaults.marginalRateBps / 100),
     bonus_rate: String(defaults.bonusRateBps / 100),
     useful_life_years: String(defaults.usefulLifeYears),

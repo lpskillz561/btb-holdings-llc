@@ -437,7 +437,11 @@ const TABLES: TableDef[] = [
       ["build_method", "TEXT"],
       ["label", "TEXT NOT NULL"],
       ["status", "TEXT NOT NULL DEFAULT 'planned'"],
-      ["unit_use", "TEXT NOT NULL DEFAULT 'long_term_rental'"],
+      // Transient is the default because it is the only use the deal is sold on.
+      // It defaulted to long_term_rental, which is the one answer that breaks
+      // the lodging exception — so every unit recorded without a deliberate
+      // choice silently contradicted the tax position.
+      ["unit_use", "TEXT NOT NULL DEFAULT 'transient_rental'"],
       ["manufacturer", "TEXT"],
       ["model", "TEXT"],
       ["serial_number", "TEXT"],
@@ -460,7 +464,23 @@ const TABLES: TableDef[] = [
     // The one thing ADD COLUMN IF NOT EXISTS cannot do: an install created
     // before BTB started holding its own homes already has client_id NOT NULL,
     // and the ADD COLUMN above is a no-op on an existing column.
-    alters: ["ALTER TABLE crm_units ALTER COLUMN client_id DROP NOT NULL"],
+    alters: [
+      "ALTER TABLE crm_units ALTER COLUMN client_id DROP NOT NULL",
+      // short_term_rental -> transient_rental.
+      //
+      // THE DROP IS NOT OPTIONAL AND MUST COME FIRST. `alters` run before the
+      // CHECKs are re-derived, but "before" means before the DROP as well as
+      // the ADD — so the OLD constraint is still live here and rejects the new
+      // value. Without this line the UPDATE fails 23514, ensureAppSchema
+      // throws, and because it runs on first query the whole app answers 500
+      // to everything. Caught by migrating a fixture rather than by reading.
+      //
+      // Both statements are safe to re-run: IF EXISTS covers the dropped
+      // constraint, the generated DROP/ADD below restores it with the new
+      // values, and once converged the UPDATE matches no rows.
+      "ALTER TABLE crm_units DROP CONSTRAINT IF EXISTS crm_units_unit_use_chk",
+      "UPDATE crm_units SET unit_use = 'transient_rental' WHERE unit_use = 'short_term_rental'",
+    ],
     checks: [
       { column: "status", values: UNIT_STATUSES },
       { column: "unit_use", values: UNIT_USES },

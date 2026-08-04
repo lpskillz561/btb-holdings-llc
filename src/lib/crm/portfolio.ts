@@ -346,7 +346,7 @@ export async function placeClientOnPad(
     pad_id: padId,
     label: label.trim() || `Home on ${pad.park_name}`,
     status: "planned",
-    unit_use: "short_term_rental",
+    unit_use: "transient_rental",
     created_at: stamp,
     updated_at: stamp,
   });

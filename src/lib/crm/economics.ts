@@ -380,7 +380,7 @@ function buildCaveats(
     );
   }
 
-  if (input.unitUse === "short_term_rental") {
+  if (input.unitUse === "transient_rental") {
     // Two separate tests, and it matters which one this business runs on.
     //
     // The familiar "seven days or less" figure is the §469 short-term-rental
