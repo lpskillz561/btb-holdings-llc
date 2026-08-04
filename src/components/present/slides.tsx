@@ -569,6 +569,7 @@ export function buildSlides(
           lede="The deal is sized from the deduction you need. These are the common sizes; a fractional interest lets several buyers share one unit."
         >
           <TierTable
+            taxRateLabel={fmtPct(constants.marginalRateBps, { digits: 0 })}
             rows={tiers.map((tier) => ({
               label: tier.label,
               priceCents: tier.terms.purchasePriceCents,
@@ -577,15 +578,21 @@ export function buildSlides(
               financedCents: tier.terms.financedCents,
               monthlyCents: tier.terms.monthlyPaymentCents,
               deductionCents: tier.economics.yearOneDeductionCents,
+              taxSavedCents: tier.economics.yearOneTaxSavingsCents,
+              // The module computes net OUTLAY (cash less tax saved); the
+              // column shows the same figure as the year-one net position.
+              netCents: -tier.economics.netYearOneOutlayCents,
             }))}
           />
           <p className="deck-note">
             Each price is also the year-one deduction, at {fmtPct(constants.bonusRateBps, { digits: 0 })}{" "}
-            bonus depreciation on the full basis. The deposit steps down with size: a
-            smaller entry carries proportionally more of the setup and management
-            overhead, and a multi-unit purchase earns our best rate
+            bonus depreciation on the full basis. Tax saved assumes a{" "}
+            {fmtPct(constants.marginalRateBps, { digits: 0 })} top federal marginal rate and is
+            gross of the §461(l) limit on the limits slide; net year one is that saving less
+            the cash down. The deposit steps down with size — a multi-unit purchase earns
+            our best rate
             {multiUnitCashSavedCents > 0
-              ? ` — the same purchase made as single units would need ${fmtMoney(multiUnitCashSavedCents)} more cash down`
+              ? ` and needs ${fmtMoney(multiUnitCashSavedCents)} less cash down than the same purchase made as single units`
               : ""}
             . The deposit on your own deal is fixed in your proposal.
           </p>

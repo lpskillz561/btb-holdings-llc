@@ -412,6 +412,10 @@ export interface TierRow {
   financedCents: number;
   monthlyCents: number;
   deductionCents: number;
+  /** Year-one federal tax offset at the assumed marginal rate. */
+  taxSavedCents: number;
+  /** Tax saved less cash down — the year-one net position. */
+  netCents: number;
 }
 
 /**
@@ -422,27 +426,29 @@ export interface TierRow {
  * in a glance. The single bar per row encodes deposit against price, which is
  * the one comparison that is genuinely visual.
  */
-export function TierTable({ rows }: { rows: TierRow[] }) {
+export function TierTable({ rows, taxRateLabel }: { rows: TierRow[]; taxRateLabel: string }) {
   const max = Math.max(...rows.map((r) => r.priceCents), 1);
 
   return (
     <div className="overflow-hidden rounded-lg border border-white/15">
       <table className="w-full border-collapse text-left">
         <thead>
-          <tr className="bg-white/[0.06] text-[0.82rem] uppercase tracking-wider text-paper-50/60">
-            <th className="px-5 py-3 font-medium">Size</th>
-            <th className="px-5 py-3 font-medium">Purchase price</th>
-            <th className="px-5 py-3 font-medium">Cash down</th>
-            <th className="px-5 py-3 font-medium">Financed at 0%</th>
-            <th className="px-5 py-3 font-medium">Monthly note</th>
+          <tr className="bg-white/[0.06] text-[0.78rem] uppercase tracking-wider text-paper-50/60">
+            <th className="px-4 py-3 font-medium">Size</th>
+            <th className="px-4 py-3 font-medium">Purchase price</th>
+            <th className="px-4 py-3 font-medium">Cash down</th>
+            <th className="px-4 py-3 font-medium">Financed at 0%</th>
+            <th className="px-4 py-3 font-medium">Monthly note</th>
+            <th className="px-4 py-3 font-medium">Tax saved ({taxRateLabel})</th>
+            <th className="px-4 py-3 font-medium">Net year one</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.label} className="border-t border-white/10 align-middle">
-              <td className="px-5 py-4">
-                <div className="text-[1.05rem] font-semibold text-paper-50">{row.label}</div>
-                <svg viewBox="0 0 200 10" className="mt-2 h-[10px] w-[9rem]" aria-hidden>
+              <td className="px-4 py-4">
+                <div className="text-[1rem] font-semibold text-paper-50">{row.label}</div>
+                <svg viewBox="0 0 200 10" className="mt-2 h-[10px] w-[6.5rem]" aria-hidden>
                   <rect x={0} y={0} width={200} height={10} rx={4} fill="rgba(251,250,247,0.10)" />
                   <rect
                     x={0}
@@ -454,18 +460,22 @@ export function TierTable({ rows }: { rows: TierRow[] }) {
                   />
                 </svg>
               </td>
-              <td className="px-5 py-4 text-[1.05rem] text-paper-50">{money(row.priceCents)}</td>
-              <td className="px-5 py-4">
-                <div className="text-[1.05rem] text-paper-50">{money(row.downCents)}</div>
+              <td className="px-4 py-4 text-[1rem] text-paper-50">{money(row.priceCents)}</td>
+              <td className="px-4 py-4">
+                <div className="text-[1rem] text-paper-50">{money(row.downCents)}</div>
                 <div className="mt-0.5 text-[0.72rem] text-paper-50/55">
                   {row.downPctLabel} of price
                 </div>
               </td>
-              <td className="px-5 py-4 text-[1.05rem] text-paper-50/80">
+              <td className="px-4 py-4 text-[1rem] text-paper-50/80">
                 {money(row.financedCents)}
               </td>
-              <td className="px-5 py-4 text-[1.05rem] font-semibold text-paper-50">
+              <td className="px-4 py-4 text-[1rem] text-paper-50/80">
                 {money(row.monthlyCents, { cents: true })}
+              </td>
+              <td className="px-4 py-4 text-[1rem] text-paper-50">{money(row.taxSavedCents)}</td>
+              <td className="px-4 py-4 text-[1rem] font-semibold text-gold-300">
+                {money(row.netCents)}
               </td>
             </tr>
           ))}
