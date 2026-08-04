@@ -315,6 +315,13 @@ async function main() {
 }
 
 async function markProcessed(client, releases, itemCount) {
+  // A dry run must not consume anything. Marking a release processed here would
+  // mean the real run never sees it, so a rehearsal would silently cancel the
+  // send it was rehearsing.
+  if (DRY_RUN) {
+    console.log(`[digest] (dry run — not recording ${releases.length} release(s) as processed)`);
+    return;
+  }
   for (const r of releases) {
     await client.query(
       `INSERT INTO crm_release_log (sha, shipped_at, item_count) VALUES ($1,$2,$3)
