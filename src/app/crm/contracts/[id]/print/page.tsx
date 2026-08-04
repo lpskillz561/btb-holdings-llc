@@ -57,6 +57,24 @@ export default async function ContractPrintPage({
         <PrintButton />
       </div>
 
+      {/* PRINTS. Deliberately not `no-print`: this page is what gets turned
+          into the PDF that reaches a counterparty, so a warning that vanished
+          on paper would be worthless — the screen is not where the mistake
+          happens. Red, at the top of the packet, before any document. */}
+      {documents.some((d) => d.not_for_execution) && (
+        <div className="mb-8 border-2 border-red-700 bg-red-50 px-5 py-4">
+          <p className="font-serif text-lg font-semibold text-red-800">
+            NOT FOR EXECUTION — do not send or sign
+          </p>
+          <p className="mt-1.5 text-sm leading-relaxed text-red-900">
+            This packet was generated before the seller and wire details were configured. Its
+            wire instructions read <code>[[ SET … ]]</code> rather than an account number, so no
+            money can or should be sent against it. Configure the details and generate a fresh
+            set — this one does not become valid once they are.
+          </p>
+        </div>
+      )}
+
       {documents.length > 1 ? (
         <header className="mb-10 border-b border-paper-300 pb-6">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gold-600">

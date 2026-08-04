@@ -101,19 +101,24 @@ export async function generateContractSet(
   if (!clientId) throw new CrmError("A client is required to generate contracts.", 400);
   const client = await getClient(clientId);
 
-  // 1. The party block must be real before anything is rendered. A purchase
-  //    agreement carrying a placeholder account number is worse than no
-  //    agreement at all, so this refuses rather than producing a draft someone
-  //    might skim and send.
+  // 1. The party and wire block.
+  //
+  //    This used to REFUSE outright, which was right when the only reason to
+  //    generate was to send. It is wrong while there is no bank account yet
+  //    and the workflow needs exercising end to end, so it now generates and
+  //    marks the result NOT FOR EXECUTION instead.
+  //
+  //    What makes that safe is that the danger was never a missing wire block,
+  //    it was a PLAUSIBLE one. `missing()` in parties.ts renders unset fields
+  //    as `[[ SET CRM_WIRE_ACCOUNT_NUMBER ]]` — something nobody can mistake
+  //    for an account number and type into a bank. A blank line or a zero
+  //    would be the dangerous version.
+  //
+  //    The flag is stored on the row, not recomputed, because configuring the
+  //    environment later does NOT make a document generated today safe: the
+  //    copy someone already downloaded still carries the marker.
   const configIssues = sellerConfigIssues();
-  if (configIssues.length > 0) {
-    throw new CrmError(
-      `These contracts name ${getSeller().legalName} as Seller, Creditor and Agent, but the following are not configured: ${configIssues.join(
-        ", ",
-      )}. Set the CRM_SELLER_* and CRM_WIRE_* variables before generating.`,
-      400,
-    );
-  }
+  const notForExecution = configIssues.length > 0;
 
   // 2. The figures, inherited from the proposal wherever there is one.
   //
@@ -206,6 +211,15 @@ export async function generateContractSet(
   };
 
   const warnings = collectWarnings(ctx);
+  if (notForExecution) {
+    // First, and worded so it cannot be read as one more thing to tidy up.
+    warnings.unshift(
+      `NOT FOR EXECUTION — do not send. These documents were generated before the ` +
+        `seller and wire details existed, so the wire instructions read ` +
+        `"[[ SET … ]]" instead of an account. Unset: ${configIssues.join(", ")}. ` +
+        `Set those, then generate a fresh set; this one does not become valid retroactively.`,
+    );
+  }
 
   // 4. Render, then insert as one set.
   const bodies: Record<(typeof ORDER)[number], string> = {
@@ -225,6 +239,8 @@ export async function generateContractSet(
       // The proposal these execute. Stored on every document in the set so the
       // link survives even if one is opened on its own.
       proposal_id: proposal?.id ?? null,
+      not_for_execution: notForExecution,
+      config_issues: notForExecution ? configIssues.join("; ") : null,
       title: TITLES[type],
       type: type as ContractType,
       status: "draft",

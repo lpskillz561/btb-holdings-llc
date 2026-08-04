@@ -282,6 +282,19 @@ const TABLES: TableDef[] = [
       /** The rendered document. Never model-written - see contract-templates.ts. */
       ["body_md", "TEXT"],
       ["generated_at", "TEXT"],
+      /**
+       * Generated while the seller or wire block was still unconfigured.
+       *
+       * Such a document is complete and correct in every respect EXCEPT that
+       * its wire instructions read `[[ SET CRM_WIRE_ACCOUNT_NUMBER ]]` rather
+       * than an account. It exists so the workflow can be exercised end to end
+       * before a bank account does; it must never be sent. Stored rather than
+       * recomputed because the environment can be configured later, and a
+       * document generated before that happened does NOT retroactively become
+       * safe - the copy someone already downloaded still has the marker.
+       */
+      ["not_for_execution", "BOOLEAN NOT NULL DEFAULT false"],
+      ["config_issues", "TEXT"],
       ...TIMESTAMPS,
     ],
     checks: [

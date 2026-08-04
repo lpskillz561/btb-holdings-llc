@@ -176,9 +176,30 @@ and `BASE_PROMPT` in `ai.ts` spells the two tests out — it used to teach the
   sample Schedule A does not mention and a CPA will find.
 - `lib/crm/parties.ts` — who is named. **BTB Holdings stands where the samples
   said MH Services**, which moved the wire instructions and the trustee role
-  with it. Everything is `CRM_SELLER_*` / `CRM_WIRE_*` configuration, and
-  generation **refuses outright** while the wire block is unset rather than
-  emitting a document with a placeholder account number.
+  with it. Everything is `CRM_SELLER_*` / `CRM_WIRE_*` configuration.
+
+  **THERE IS NO BANK ACCOUNT YET, so generation no longer refuses — it marks.**
+  It used to throw while the wire block was unset, which was right when the only
+  reason to generate was to send, and wrong when the workflow needs exercising
+  before a bank exists. A set generated without it carries
+  `not_for_execution = true`, `config_issues` naming what was missing, a leading
+  warning, and a red **NOT FOR EXECUTION** banner on the contract page and — the
+  one that matters — **inside the printed packet**, because the PDF is what
+  reaches a counterparty and a warning that vanished on paper would be useless.
+
+  What makes that safe is that the hazard was never a *missing* wire block, it
+  was a *plausible* one. `missing()` renders unset fields as
+  `[[ SET CRM_WIRE_ACCOUNT_NUMBER ]]` — nobody types that into a bank. A blank
+  line or a zero would be the dangerous version, so do not "tidy" it.
+
+  **The flag is stored, not recomputed.** Configuring the environment later does
+  not make an already-generated document safe: the copy someone downloaded still
+  carries the marker. Set the values, then generate a fresh set.
+
+  **TODO once the bank account exists:** set `CRM_SELLER_ADDRESS1/CITY/STATE/
+  POSTAL`, `CRM_SELLER_SIGNATORY`, and `CRM_WIRE_BANK_NAME/BANK_ADDRESS/
+  ACCOUNT_NUMBER/ROUTING_NUMBER` in SSM under `/btb-crm/`, redeploy, and
+  regenerate any set that is still `not_for_execution`.
 - `lib/crm/contract-templates.ts` — the legal text, transcribed. Not generated,
   and the frozen columns are absent from the PATCH allow-list in `resource.ts`.
 - Print with `<Markdown variant="document">`. The default components flatten

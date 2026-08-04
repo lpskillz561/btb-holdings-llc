@@ -381,6 +381,10 @@ export interface CrmContract {
 
   created_at: string;
   updated_at: string;
+  /** True when generated before the seller/wire block was configured. */
+  not_for_execution?: boolean;
+  /** What was unset at generation time, for the banner. */
+  config_issues?: string | null;
 }
 
 /** A land holding. `parcel_key` links back to the parcel database when known. */

@@ -69,6 +69,17 @@ export default async function ContractPage({ params }: { params: Promise<{ id: s
 
       <section className="section">
         <div className="container-x space-y-6">
+          {contract.not_for_execution && (
+            <div className="rounded-lg border-2 border-err-500 bg-err-100 px-5 py-4">
+              <p className="text-sm font-bold text-err-700">NOT FOR EXECUTION — do not send</p>
+              <p className="mt-1 text-sm text-ink-800">
+                Generated before the seller and wire details existed, so the wire instructions
+                are placeholders rather than an account. Set{" "}
+                <code className="text-xs">{contract.config_issues ?? "the missing values"}</code>{" "}
+                and generate a fresh set; this one does not become valid retroactively.
+              </p>
+            </div>
+          )}
           <div className="sf-card p-5">
             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Detail label="Status">
