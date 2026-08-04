@@ -35,6 +35,7 @@ shared checkout, a submodule or a symlink to any other project.
 | `btb-etl-parcels.timer` | Monthly, 1st at 07:00 UTC | `btb-etl@ALL.service` — every registered state |
 | `btb-etl-auctions.timer` | Nightly, 09:00 UTC | `btb-etl-auctions.service` — `auctions ALL` |
 | `btb-etl-zoning.timer` | Nightly, 10:00 UTC | `btb-etl-zoning@orange-fl.service` — county zoning |
+| `btb-digest.timer` | Daily, 13:00 UTC | `btb-digest.service` — the "what shipped" email |
 
 Both are `Persistent=true`, so a missed run fires on the next boot rather than
 being skipped.

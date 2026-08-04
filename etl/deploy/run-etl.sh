@@ -51,6 +51,19 @@ case "$JOB" in
     DATABASE_URL="$DATABASE_URL" STATE="$STATE" node import.mjs ;;
   auctions)
     DATABASE_URL="$DATABASE_URL" AUCTION_STATE="$STATE" node auctions.mjs ;;
+  digest)
+    # The "what shipped" email needs OPENAI_* and AUTH_USERS/CRM_ADMINS as well
+    # as the database, so the whole of app.env is exported rather than picked
+    # apart value by value.
+    #
+    # BUT app.env carries the CONTAINER's DATABASE_URL, whose sslrootcert points
+    # at /etc/ssl/rds-ca.pem — a path that does not exist out here on the host.
+    # Sourcing it would quietly undo the rewrite done above and every run would
+    # die with ENOENT on the certificate before opening a connection. So the
+    # host value is held and put back afterwards.
+    HOST_DB_URL="$DATABASE_URL"
+    set -a; . /opt/btb/app.env; set +a
+    DATABASE_URL="$HOST_DB_URL" node digest.mjs ;;
   zoning)
     # STATE carries the county key here ("orange-fl"), not a state code - the
     # unit is templated on one argument and zoning is published per county.

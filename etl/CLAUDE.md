@@ -32,6 +32,7 @@ Nothing here runs on a laptop against production. The instance runs it:
 | `btb-etl-parcels.timer` | monthly, 1st at 07:00 UTC | `btb-etl@ALL.service` |
 | `btb-etl-auctions.timer` | nightly at 09:00 UTC | `btb-etl-auctions.service` |
 | `btb-etl-zoning.timer` | nightly at 10:00 UTC | `btb-etl-zoning@orange-fl.service` |
+| `btb-digest.timer` | daily at 13:00 UTC | `btb-digest.service` — the "what shipped" email |
 
 Both are `Persistent=true`, so a run missed while the box was down fires at
 boot. `deploy/` holds the units and `run-etl.sh`; `./ship.sh --units` installs
@@ -148,3 +149,46 @@ whatever you ask, so the job is driven by our parcels rather than by crawling
 theirs (thirteen hours). `ZONING_CODE <> ''` and `PARCEL > 'x'` both draw a
 **403 with an HTML body** from the filter in front of it; `IN (...)`,
 `IS NOT NULL`, `orderByFields` and `resultOffset` are fine.
+
+## The "what shipped" email (`digest.mjs`)
+
+Sends staff an email when a deploy contains something they would notice. Three
+properties matter more than the code:
+
+**Silence is the default.** No email unless a deploy happened AND it contained a
+user-visible change. Most days that is nothing and nobody hears anything. A
+digest that arrives daily saying "no changes" is the thing people filter, and
+once filtered the one that matters is filtered too.
+
+**Shipped means DEPLOYED, not committed.** The input is release manifests
+written to `s3://…/releases/<sha>.json` by `scripts/ship-app.sh` in the app
+repo, never `git log`. The app tarball excludes `.git`, so the server has no
+commit history — and a commit that has not been deployed is not shipped. That
+distinction cost an hour once already, when a rename was pushed and stayed
+invisible.
+
+**A feature is never announced twice**, guarded three ways because a repeat is
+what makes people stop reading:
+
+1. A release SHA is processed once — `crm_release_log`.
+2. The model is shown everything announced in the last 120 days and told to skip
+   it, including follow-up fixes to it.
+3. Every item carries a stable `key` slug, and that key is the PRIMARY KEY of
+   `crm_announcements`. If the model ignores rule 2 the insert conflicts and the
+   item is dropped before sending. **This is the guard that does not depend on
+   the model behaving**, and it is why the key must describe the FEATURE rather
+   than the commit — never put a date or a SHA in it.
+
+Announcements are recorded only **after** a successful send, so a send failure
+leaves the feature unannounced and retryable rather than silently suppressed.
+
+Recipients are people who can actually reach the CRM: `portal_users` that are
+not blocked, plus the `AUTH_USERS` built-ins, intersected with `CRM_ADMINS` when
+that is set. Someone awaiting access would get a 404 on everything described.
+
+Mail goes out through SES from `notifications@btbholdingsllc.com` with Reply-To
+`info@ziora.io`. See the app repo's `CLAUDE.md` for why it is not sent from
+ziora.io — the short version is that ziora.io's DNS is on Cloudflare, not
+Route53.
+
+`DRY_RUN=1` renders and logs without sending.

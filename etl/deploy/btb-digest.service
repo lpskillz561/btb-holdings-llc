@@ -1,0 +1,11 @@
+[Unit]
+Description=BTB "what shipped" email
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=900
+ExecStart=/opt/btb/run-etl.sh digest
+StandardOutput=journal
+StandardError=journal

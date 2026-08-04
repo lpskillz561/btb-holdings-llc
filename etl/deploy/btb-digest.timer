@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily "what shipped" email
+
+[Timer]
+# 13:00 UTC — mid-morning US Eastern, so it lands when people are working
+# rather than at 3am. Well clear of the auction (09:00) and zoning (10:00)
+# jobs, which take the same /var/lock/btb-etl.lock.
+OnCalendar=*-*-* 13:00:00 UTC
+Persistent=true
+Unit=btb-digest.service
+
+[Install]
+WantedBy=timers.target
