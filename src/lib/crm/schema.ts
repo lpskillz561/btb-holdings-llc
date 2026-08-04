@@ -480,6 +480,13 @@ const TABLES: TableDef[] = [
       // values, and once converged the UPDATE matches no rows.
       "ALTER TABLE crm_units DROP CONSTRAINT IF EXISTS crm_units_unit_use_chk",
       "UPDATE crm_units SET unit_use = 'transient_rental' WHERE unit_use = 'short_term_rental'",
+      // And the column DEFAULT, which the column list cannot change: ADD COLUMN
+      // IF NOT EXISTS is a no-op once the column exists, so editing the type
+      // string beside it moves nothing on an install that already ran. Without
+      // this the database still defaults to long_term_rental and any INSERT
+      // that omits unit_use — a hand-written one, a future code path — gets the
+      // use that breaks the lodging exception.
+      "ALTER TABLE crm_units ALTER COLUMN unit_use SET DEFAULT 'transient_rental'",
     ],
     checks: [
       { column: "status", values: UNIT_STATUSES },

@@ -233,7 +233,8 @@ export const UNITS: ResourceDef = {
     build_method: str,
     label: str,
     status: enumOf(UNIT_STATUSES, "planned"),
-    unit_use: enumOf(UNIT_USES, "long_term_rental"),
+    // Transient: the only use the deal is sold on. See UNIT_USES.
+    unit_use: enumOf(UNIT_USES, "transient_rental"),
     manufacturer: str,
     model: str,
     serial_number: str,
@@ -255,7 +256,7 @@ export const UNITS: ResourceDef = {
   // client_id is no longer required: a home with none is one BTB owns and rents
   // on its own book.
   required: ["label"],
-  defaults: { status: "planned", unit_use: "long_term_rental" },
+  defaults: { status: "planned", unit_use: "transient_rental" },
   filters: ["client_id", "status", "property_id", "pad_id", "build_method"],
   orderBy: "created_at DESC",
   describe: (r) => String(r.label ?? "tiny home"),
