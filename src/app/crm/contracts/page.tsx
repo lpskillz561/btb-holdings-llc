@@ -67,7 +67,14 @@ export default async function ContractsPage() {
                 {contracts.map((row) => (
                   <tr key={row.id} className="transition hover:bg-white">
                     <Td>
-                      <span className="font-medium text-ink-900">{row.title}</span>
+                      {/* The list was a dead end: every row named a document
+                          with no way to open it. */}
+                      <Link
+                        href={`/crm/contracts/${row.id}`}
+                        className="font-medium text-sf-600 hover:underline"
+                      >
+                        {row.title}
+                      </Link>
                       {row.counterparty && (
                         <span className="mt-0.5 block text-xs text-ink-500">
                           {row.counterparty}

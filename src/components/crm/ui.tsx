@@ -11,6 +11,7 @@
 // globals.css.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { Tone } from "@/lib/crm/tone";
 
 /* -------------------------------------------------------------------------- */
@@ -279,9 +280,21 @@ export function Dialog({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  // Mounted flag, because document.body does not exist during SSR.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  return (
+  if (!open || !mounted) return null;
+
+  // PORTALLED TO document.body, not rendered where it is written.
+  //
+  // `position: fixed` is relative to the nearest ancestor that creates a
+  // stacking context, and z-index only competes inside it. A dialog opened
+  // from a button in RecordHeader was therefore painted UNDER the page body —
+  // visible, half-covered, and unusable, with no error anywhere. Nothing about
+  // the call site can guard against that, so the primitive escapes to the body
+  // and the problem cannot recur.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 py-10"
       onMouseDown={(e) => {
@@ -310,7 +323,8 @@ export function Dialog({
         </div>
         <div className="px-6 py-5">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

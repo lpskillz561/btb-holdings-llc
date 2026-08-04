@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { RecordHeader } from "@/components/crm/RecordHeader";
 import { ProposalView } from "@/components/crm/ProposalView";
+import { GenerateContracts } from "@/components/crm/GenerateContracts";
+import { query } from "@/lib/crm/db";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { getClient } from "@/lib/crm/clients";
 import { CrmError } from "@/lib/crm/db";
@@ -25,6 +27,12 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
     throw err;
   });
   const client = await getClient(proposal.client_id);
+  // Only to word the button — "Generate another set" reads very differently
+  // from "Generate contracts" when a set already exists.
+  const [{ n: contractCount }] = await query<{ n: number }>(
+    `SELECT count(*)::int n FROM crm_contracts WHERE proposal_id = $1 AND archived_at IS NULL`,
+    [proposal.id],
+  ).catch(() => [{ n: 0 }]);
 
   return (
     <>
@@ -36,6 +44,18 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
           { href: "/crm", label: "CRM" },
           { href: `/crm/clients/${client.id}`, label: client.name },
         ]}
+        actions={
+          // The ONLY route to a contract set that carries the proposal's own
+          // figures. Generation was previously reachable by API alone, which
+          // meant the safe path was the one nobody could take.
+          <GenerateContracts
+            clientId={client.id}
+            proposalId={proposal.id}
+            investmentCents={proposal.total_investment_cents}
+            depositCents={proposal.down_payment_cents}
+            existingCount={contractCount}
+          />
+        }
       />
       <section className="section pt-12">
         <div className="container-x">
