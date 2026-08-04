@@ -644,6 +644,50 @@ Things about that deployment that are not visible from the code:
 - **`next build` needs the swapfile** that the bootstrap adds. A `t4g.medium` has
   4 GB, and an OOM kill mid-build reads as a hung deploy, not an error.
 
+## Email — SES, and why NOT from ziora.io
+
+Outbound notification mail sends from **`notifications@btbholdingsllc.com`** via
+SES in `us-east-1`, with **Reply-To `info@ziora.io`** so replies still land in
+the Google Workspace inbox. Inbound and outbound are independent; nothing about
+this touches the Workspace mailbox.
+
+**SES is already out of the sandbox** on this account — production access, 50,000
+a day, 14/sec, enforcement HEALTHY. That is normally the long pole (a support
+ticket) and it is already done.
+
+**Sending from `info@ziora.io` is NOT possible from here, and the reason is not
+obvious.** There is a Route53 hosted zone for `ziora.io` in this account, but it
+is **not authoritative** — the domain delegates to Cloudflare
+(`faye.ns.cloudflare.com`). Records written to that Route53 zone resolve when you
+query Route53 directly and are invisible to the internet, which looks exactly
+like DNS that has not propagated. The three SES DKIM CNAMEs for `ziora.io` are
+sitting in that dead zone now; to actually use that domain they must be added in
+**Cloudflare**.
+
+`btbholdingsllc.com` *is* authoritative in Route53 (`Z04363912WJVD2S7E35SL`),
+which is why it is the sending domain. Published there:
+
+- three `<token>._domainkey` CNAMEs — SES DKIM, verified
+- `v=spf1 include:amazonses.com ~all`
+- `_dmarc` at `p=none` with `rua=mailto:info@ziora.io`
+
+DMARC starts at `p=none` deliberately: it reports without quarantining, so a
+misconfiguration cannot silently bin real mail. Tighten it once the reports are
+clean.
+
+**`ziora.io`'s own SPF is broken, and this predates any of the above.** The TXT
+record reads `include:sender.zohoinvoice.com ~all` with **no `v=spf1` prefix**,
+so it is not an SPF record at all and resolvers ignore it. With `_dmarc.ziora.io`
+at `p=quarantine`, everything sending as ziora.io rides on Google's DKIM alone —
+Workspace mail passes, and Zoho Invoice almost certainly does not. Fixing it is a
+Cloudflare edit, not an AWS one.
+
+**Permission is scoped by From address.** The instance role carries an inline
+policy `BtbSendNotifications` allowing `ses:SendEmail` only when
+`ses:FromAddress` is `notifications@btbholdingsllc.com`. It was attached with
+`put-role-policy`, so it is **drift** against `infra/aws/btb-crm-app.yaml` until
+that template carries it — a stack rebuild would drop it.
+
 ## Open items
 
 - **Aurora has no automated backup job.** The S3 bucket, the lifecycle rule and
