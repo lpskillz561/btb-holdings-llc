@@ -61,6 +61,7 @@ export function ClientCard({
   proposalDefaults,
   aiEnabled,
   timeZone,
+  notetaker,
 }: {
   detail: ClientDetail;
   states: StateOption[];
@@ -72,6 +73,12 @@ export function ClientCard({
    * calendar cannot put the same call on two different days. See lib/crm/tz.ts.
    */
   timeZone: string;
+  /**
+   * The notetaker bot's display name, or null when RECALL_API_KEY is unset.
+   * Resolved server-side for the same reason as `timeZone` — `process.env` is
+   * not readable from a client component.
+   */
+  notetaker: string | null;
 }) {
   const [detail, setDetail] = useState(initial);
   const [tab, setTab] = useState<Tab>("Overview");
@@ -128,9 +135,11 @@ export function ClientCard({
           {tab === "Meetings" && (
             <MeetingsTab
               clientId={client.id}
+              clientName={client.name}
               meetings={detail.meetings}
               aiEnabled={aiEnabled}
               timeZone={timeZone}
+              notetaker={notetaker}
               onChanged={(rows) => patchDetail("meetings", rows)}
             />
           )}

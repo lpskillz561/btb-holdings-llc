@@ -18,22 +18,28 @@ import { statusTone } from "@/lib/crm/tone";
 import { LABELS, type CrmMeeting } from "@/lib/crm/types";
 import { apiPost } from "./api";
 import { MEETING_SPEC, RecordDialog } from "./RecordForm";
+import { SendNotetaker } from "./SendNotetaker";
 import { Badge, EmptyState, ErrorNote, SectionHeading, useDialog } from "./ui";
 
 type Row = Record<string, unknown>;
 
 export function MeetingsTab({
   clientId,
+  clientName,
   meetings,
   aiEnabled,
   timeZone,
+  notetaker,
   onChanged,
 }: {
   clientId: string;
+  clientName: string;
   meetings: CrmMeeting[];
   aiEnabled: boolean;
   /** The office zone, resolved server-side. See lib/crm/tz.ts. */
   timeZone: string;
+  /** Null when RECALL_API_KEY is unset; otherwise the bot's display name. */
+  notetaker: string | null;
   onChanged: (rows: CrmMeeting[]) => void;
 }) {
   const [open, openDialog, closeDialog] = useDialog();
@@ -75,6 +81,15 @@ export function MeetingsTab({
       </div>
 
       <ErrorNote>{error}</ErrorNote>
+
+      {notetaker && (
+        <SendNotetaker
+          clientId={clientId}
+          clientName={clientName}
+          botName={notetaker}
+          onSent={upsert}
+        />
+      )}
 
       {meetings.length === 0 ? (
         <EmptyState

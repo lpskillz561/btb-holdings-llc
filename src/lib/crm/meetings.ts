@@ -6,9 +6,14 @@
 // the ingest webhook is a later, separable piece. A meeting typed in by hand and
 // one delivered by a notetaker are the same row and render identically.
 
-import { CrmError, logActivity, nowIso, query, queryOne } from "./db";
+import { CrmError, logActivity, newId, nowIso, query, queryOne } from "./db";
 import { MODEL, buildSystemPrompt, isAiConfigured, structuredChat } from "./ai";
-import type { CrmMeeting } from "./types";
+import type {
+  CrmMeeting,
+  MeetingPlatform,
+  MeetingSource,
+  MeetingStatus,
+} from "./types";
 
 /* -------------------------------------------------------------------------- */
 /* Transcript retention                                                        */
@@ -178,6 +183,104 @@ export async function attachMeeting(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Notetaker rows                                                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Record a call we have just sent the notetaker into.
+ *
+ * `client_id` is known here, because the bot is dispatched FROM a client card —
+ * which is why the unassigned queue mostly stays empty in practice. It exists
+ * for calls that arrive by some other route, not as the normal path.
+ */
+export async function createNotetakerMeeting(entry: {
+  clientId: string | null;
+  botId: string;
+  meetingUrl: string;
+  title: string;
+  platform: MeetingPlatform;
+  actor?: string | null;
+}): Promise<CrmMeeting> {
+  const now = nowIso();
+  const [row] = await query<CrmMeeting>(
+    `INSERT INTO crm_meetings
+       (id, client_id, title, status, platform, source, external_id, meeting_url,
+        occurred_at, created_by, created_at, updated_at)
+     VALUES ($1, $2, $3, 'scheduled', $4, 'notetaker', $5, $6, $7, $8, $7, $7)
+     RETURNING *`,
+    [newId(), entry.clientId, entry.title, entry.platform, entry.botId, entry.meetingUrl, now, entry.actor ?? null],
+  );
+
+  await logActivity({
+    entity_type: "crm_meetings",
+    entity_id: row.id,
+    client_id: entry.clientId,
+    verb: "dispatched",
+    summary: `Sent the notetaker to "${entry.title}"`,
+    actor_email: entry.actor,
+  });
+  return row;
+}
+
+/** The row a webhook is about, by the vendor's id for the bot. */
+export async function meetingByExternalId(
+  source: MeetingSource,
+  externalId: string,
+): Promise<CrmMeeting | null> {
+  return queryOne<CrmMeeting>(
+    `SELECT * FROM crm_meetings WHERE source = $1 AND external_id = $2`,
+    [source, externalId],
+  );
+}
+
+/**
+ * Move a call's status, without letting a late webhook walk it backwards.
+ *
+ * Webhook ordering is not guaranteed and deliveries retry for 24 hours, so a
+ * `bot.in_call_recording` retry can land after `bot.done`. Terminal states are
+ * therefore sticky: once a call is completed or failed, only an explicit
+ * re-ingest changes it. Without this a finished, summarised call would flip back
+ * to "in progress" on the calendar hours later.
+ */
+export async function setMeetingStatus(id: string, status: MeetingStatus): Promise<void> {
+  await query(
+    `UPDATE crm_meetings SET status = $1, updated_at = $2
+     WHERE id = $3 AND status NOT IN ('completed', 'canceled', 'failed')`,
+    [status, nowIso(), id],
+  );
+}
+
+/**
+ * Attach a finished transcript to a call.
+ *
+ * The retention flag is applied HERE, at the point of storage, rather than at
+ * the point of display — the difference matters, because a row written while the
+ * flag was on keeps its transcript when the flag is later turned off, and
+ * filtering on read would have quietly hidden rather than not-stored it. What is
+ * always kept is the attendee list, the duration and the summary.
+ */
+export async function storeTranscript(
+  id: string,
+  transcript: string,
+  attendees: { name: string | null; email: string | null }[],
+  transcriptUrl?: string | null,
+): Promise<void> {
+  await query(
+    `UPDATE crm_meetings
+     SET transcript = $1, transcript_url = $2, attendees_json = $3,
+         status = 'completed', updated_at = $4
+     WHERE id = $5`,
+    [
+      storeTranscripts() ? transcript : null,
+      transcriptUrl ?? null,
+      attendees.length ? JSON.stringify(attendees) : null,
+      nowIso(),
+      id,
+    ],
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 /* Summarising                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -251,10 +354,6 @@ Rules:
  * what wrote it.
  */
 export async function summarizeMeeting(id: string, actor?: string | null): Promise<MeetingRow> {
-  if (!isAiConfigured()) {
-    throw new CrmError("AI is not configured on this environment.", 503);
-  }
-
   const meeting = await getMeeting(id);
   const body = meeting.transcript?.trim();
   if (!body) {
@@ -264,6 +363,26 @@ export async function summarizeMeeting(id: string, actor?: string | null): Promi
         : "This call has no transcript to summarise yet.",
       400,
     );
+  }
+  return summarizeFromText(meeting, body, actor);
+}
+
+/**
+ * Summarise from transcript text held in memory rather than from the row.
+ *
+ * This exists because of the retention flag, and the ordering it forces. With
+ * CRM_STORE_TRANSCRIPTS off there IS no stored transcript — so the summary has
+ * to be written from the text while the ingest still has it, before it is
+ * dropped. Reading the column back would summarise NULL on exactly the
+ * configuration that is the default.
+ */
+export async function summarizeFromText(
+  meeting: MeetingRow,
+  body: string,
+  actor?: string | null,
+): Promise<MeetingRow> {
+  if (!isAiConfigured()) {
+    throw new CrmError("AI is not configured on this environment.", 503);
   }
 
   const attendees = meetingAttendees(meeting)
@@ -300,17 +419,17 @@ export async function summarizeMeeting(id: string, actor?: string | null): Promi
     `UPDATE crm_meetings
      SET summary_md = $1, summary_model = $2, summarized_at = $3, updated_at = $3
      WHERE id = $4`,
-    [summary_md, MODEL, now, id],
+    [summary_md, MODEL, now, meeting.id],
   );
 
   await logActivity({
     entity_type: "crm_meetings",
-    entity_id: id,
+    entity_id: meeting.id,
     client_id: meeting.client_id,
     verb: "summarised",
     summary: `Summarised call "${meeting.title}"`,
     actor_email: actor,
   });
 
-  return getMeeting(id);
+  return getMeeting(meeting.id);
 }

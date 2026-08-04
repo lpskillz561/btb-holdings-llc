@@ -15,6 +15,7 @@ import {
 } from "@/lib/crm/economics";
 import { isAiConfigured } from "@/lib/crm/ai";
 import { fmtMoney } from "@/lib/crm/format";
+import { isRecallConfigured, notetakerName } from "@/lib/crm/recall";
 import { officeTimeZone } from "@/lib/crm/tz";
 import { LABELS } from "@/lib/crm/types";
 import { listStates } from "@/lib/parcels";
@@ -88,6 +89,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         proposalDefaults={proposalDefaults}
         aiEnabled={isAiConfigured()}
         timeZone={officeTimeZone()}
+        notetaker={isRecallConfigured() ? notetakerName() : null}
       />
     </>
   );

@@ -344,15 +344,65 @@ nothing here knows about a vendor.
   threaded to `ClientCard` as a **prop**, because `process.env` is unreadable in
   a client component.
 
-**Not built:** the bot integration itself. When it lands it is a webhook that
-upserts on the `(source, external_id)` unique index — webhooks retry, and a
-retried delivery must update the row rather than add a second copy of the call.
-It must **not** be wrapped in `withCrm`: there is no session on a webhook, so it
-needs its own shared-secret or signature gate. Vendor recommendation and the
-reasoning are in the conversation that produced this section — Recall.ai for the
-bot layer, because Google sells no bot API (Gemini's notetaker is a Workspace
-feature you cannot name or control) and OpenAI sells only the transcription layer
-beneath it.
+### The notetaker — Recall.ai, and `lib/crm/recall.ts` is the only file that knows
+
+**Recall.ai is the bot layer, and it is bought rather than built.** Google sells
+no bot API at all — Gemini's notetaker is a Workspace feature you cannot name,
+control or get audio out of — and OpenAI sells only the transcription layer
+underneath. The intelligence is ours (`SKILL.md`); only the "join the call and
+give me audio" part is a purchase.
+
+**`lib/crm/recall.ts` is the ONLY file that knows a vendor exists.** Everything
+else deals in `crm_meetings` rows. That was the point of building Phase 1
+source-agnostic: a second vendor, or a swap, is this file plus a `source` value.
+
+- **`RECALL_REGION` must match the workspace the key was issued in.** The API is
+  region-scoped (`us-east-1`, `us-west-2`, `eu-central-1`, `ap-northeast-1`) and
+  a key against the wrong host returns **401 — indistinguishable from a bad
+  key**, which is how someone spends an afternoon rotating a good one. An
+  unrecognised value throws with the list rather than defaulting quietly.
+- **Dispatch is a BUTTON, not a calendar sync.** "Send notetaker" on the client
+  card. Auto-dispatching to every event with a Meet link would put a bot into
+  internal calls and calls with counsel; and because the button lives on a
+  client's card, `client_id` is known at dispatch, so the call files itself and
+  the unassigned queue stays for exceptions.
+- **`/api/crm/meetings/ingest` is the one route in the CRM with no session
+  behind it.** `/api` is outside the middleware matcher and `withCrm` cannot help
+  — a webhook has no user. `verifyWebhook` is the entire gate and **fails
+  closed**: no `RECALL_WEBHOOK_SECRET` means nothing is accepted, not everything.
+  It supports Svix (`whsec_` secret, `svix-id`/`svix-timestamp`/`svix-signature`,
+  HMAC over `{id}.{timestamp}.{body}`, five-minute replay window) or a static
+  bearer token — **whichever is configured is the only one accepted**, or the
+  weaker would always be available. The body is read as **text before parsing**,
+  because the signature covers the exact bytes and a re-serialised body never
+  verifies. Never add a path that skips this.
+- **Everything in the webhook is idempotent.** Recall retries for 24 hours and
+  does not guarantee ordering. Terminal statuses are sticky in `setMeetingStatus`
+  (a `bot.in_call_recording` retry landing after `bot.done` would otherwise flip
+  a finished call back to "in progress" hours later), and a `transcript.done`
+  redelivery returns early when `summary_md` is already set rather than
+  re-billing the model over a summary someone has read.
+- **The summary is written from the text IN HAND, not from the column.** This is
+  the ordering the retention flag forces: with `CRM_STORE_TRANSCRIPTS` off the
+  transcript is never stored, so reading it back to summarise would summarise
+  NULL — on the default configuration. Hence `summarizeFromText`. The flag is
+  applied at the point of **storage**, not display, so a row written while it was
+  on keeps its transcript afterwards.
+- The presigned download URL is **fetched once**; the text and the attendee list
+  both come out of that one payload.
+
+**Config, all under `/btb-crm/` (SSM write + redeploy, no rebuild):**
+`RECALL_API_KEY` (SecureString), `RECALL_REGION`, `RECALL_WEBHOOK_SECRET`,
+`RECALL_BOT_NAME` (default `AI Notetaker` — the client sees it in the participant
+list), plus `CRM_STORE_TRANSCRIPTS` and `CRM_TIMEZONE` from Phase 1.
+
+**Not built: live coaching.** Phase 3 is the same vendor — swap the
+`recallai_async` transcript provider for a streaming one and add a
+`realtime_endpoints` webhook to the same create-bot call. That is why the
+integration was worth doing before the live panel rather than after. The design
+constraint on it stands: suggestions must be **quoted from the knowledge base and
+attributed**, never freely composed. An AI inventing a supporting authority in
+front of a taxpayer's CPA is worse than no panel.
 
 ## Two looks, on purpose
 
