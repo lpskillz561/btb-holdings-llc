@@ -269,7 +269,10 @@ presentation's three entry points use **BTB's own schedule, decided August
 entries covers BTB's setup and management overhead, and the bulk rate means a
 multi-unit buyer puts down $100,000 less cash than the same purchase made as
 four single units. The loan balance and note payment are derived from the
-deposit, so the rows reconcile. This schedule supersedes the deck's published
+deposit, so the rows reconcile. A presentation sized to a specific client's
+write-off uses the rate of the band the target falls in (under $1.25m →
+13%, under $5m → 12%, at or above → 10%), so the terms and leverage slides
+match the Sizes slide. This schedule supersedes the deck's published
 downs (12% / 10.8% / 11%). There is **no separate management fee** anywhere in
 the documents: the Agent's entire compensation is the 50/50 split, and the
 Management Agreement's clause 4(c) bars charging the Owner anything beyond it.

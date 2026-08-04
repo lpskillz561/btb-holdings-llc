@@ -278,7 +278,10 @@ write-off on their record.
   is always cheaper in cash — `multiUnitCashSavedCents` computes that saving
   ($100,000 at defaults) and the slide shows it only while it is positive. Only
   the rate is input; loan balance and note payment are derived, so every row
-  reconciles. **There is no management fee line item**: no document in `docs/`
+  reconciles. `depositBpsForPrice()` bands a sized-to-target presentation into
+  the same schedule, so the terms and leverage slides quote the rate the Sizes
+  slide implies for a deal that big. **There is no management fee line item**:
+  no document in `docs/`
   names one — the Management Agreement's whole compensation is the 50/50 split
   and clause 4(c) bars charging the Owner anything else, so the overhead is
   priced inside the down payment and must never be shown as a fee. Note the

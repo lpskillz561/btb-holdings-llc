@@ -137,8 +137,9 @@ export interface DealIllustration {
 /**
  * Size a deal from the write-off the buyer is trying to achieve.
  *
- * The unit is priced at the target, the deposit is the configured share of it
- * and the balance is the 0% note — which is the whole shape of the offer. Rent
+ * The unit is priced at the target, the deposit is the caller's (falling back
+ * to the configured default share) and the balance is the 0% note — which is
+ * the whole shape of the offer. Rent
  * is left at zero: the presentation quotes the pro forma from `docs/` for
  * income and never implies a per-client rent projection we have not underwritten.
  */
@@ -178,6 +179,19 @@ export function illustrate(label: string, priceCents: number, depositCents?: num
 /** One entry-point row: the deposit is the tier's own rate, not the default. */
 function tier(label: string, priceCents: number, depositBps: number): DealIllustration {
   return illustrate(label, priceCents, Math.round((priceCents * depositBps) / 10_000));
+}
+
+/**
+ * The tier rate a deal of this size falls under. Banded by the tier prices
+ * themselves: below a single unit is fractional territory, below the multi
+ * ticket is a single unit, at or above it is bulk. Used for the sized-to-target
+ * illustration so the terms and leverage slides quote the same rate the Sizes
+ * slide implies for a deal that big.
+ */
+export function depositBpsForPrice(priceCents: number): number {
+  if (priceCents >= 500_000_000) return TIER_DEPOSIT_BPS.multi();
+  if (priceCents >= 125_000_000) return TIER_DEPOSIT_BPS.single();
+  return TIER_DEPOSIT_BPS.fractional();
 }
 
 export interface PresentationFigures {
@@ -238,7 +252,11 @@ export function buildPresentationFigures(targetWriteoffCents?: number | null): P
     executed: illustrate("Executed example", EXECUTED_PRICE_CENTS, EXECUTED_DOWN_CENTS),
     sized:
       targetWriteoffCents && targetWriteoffCents > 0
-        ? illustrate("Sized to your target", targetWriteoffCents)
+        ? illustrate(
+            "Sized to your target",
+            targetWriteoffCents,
+            Math.round((targetWriteoffCents * depositBpsForPrice(targetWriteoffCents)) / 10_000),
+          )
         : null,
     tiers,
     multiUnitCashSavedCents: Math.max(0, Math.round(singlyCents - multi.terms.downPaymentCents)),
