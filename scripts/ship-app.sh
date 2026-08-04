@@ -54,7 +54,11 @@ else
 fi
 
 COMMITS=$(git log "$RANGE" --no-merges --format=%H | wc -l | tr -d ' ')
-echo "[ship] $SHORT — $COMMITS commit(s) since ${PREV:0:7:-none}"
+# Truncate first, default second. Bash has no combined "substring with a
+# default" form: ${PREV:0:7:-none} is a syntax error, and it printed one on
+# every ship because the echo still ran.
+SINCE="${PREV:0:7}"
+echo "[ship] $SHORT — $COMMITS commit(s) since ${SINCE:-none}"
 
 python3 - "$SHA" "$RANGE" > /tmp/release.json <<'PY'
 import json, subprocess, sys, datetime
