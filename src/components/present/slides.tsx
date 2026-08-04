@@ -112,11 +112,14 @@ export function buildSlides(
   figures: PresentationFigures,
   opts: { clientName?: string | null } = {},
 ): Slide[] {
-  const { executed, sized, tiers, proForma, lossLimitation, constants } = figures;
+  const { executed, sized, tiers, multiUnitCashSavedCents, proForma, lossLimitation, constants } =
+    figures;
   // The sized illustration when we know what the prospect is solving for,
   // otherwise the deal that has actually been signed. Never an invented number.
   const headline = sized ?? executed;
   const years = Math.round(constants.noteTermMonths / 12);
+  // Whole rates print clean ("11%"); the executed 12.4% keeps its decimal.
+  const pctLabel = (bps: number) => fmtPct(bps, { digits: bps % 100 === 0 ? 0 : 1 });
 
   const slides: Slide[] = [
     {
@@ -434,7 +437,7 @@ export function buildSlides(
               {
                 value: fmtMoney(headline.terms.downPaymentCents),
                 label: "Cash down",
-                sub: `${fmtPct(constants.depositBps, { digits: 0 })} of the price, wired before delivery`,
+                sub: `${pctLabel(headline.depositBps)} of the price, wired before delivery`,
               },
               {
                 value: fmtMoney(headline.terms.financedCents),
@@ -566,11 +569,11 @@ export function buildSlides(
           lede="The deal is sized from the deduction you need. These are the common sizes; a fractional interest lets several buyers share one unit."
         >
           <TierTable
-            depositLabel={fmtPct(constants.depositBps, { digits: 0 })}
             rows={tiers.map((tier) => ({
               label: tier.label,
               priceCents: tier.terms.purchasePriceCents,
               downCents: tier.terms.downPaymentCents,
+              downPctLabel: pctLabel(tier.depositBps),
               financedCents: tier.terms.financedCents,
               monthlyCents: tier.terms.monthlyPaymentCents,
               deductionCents: tier.economics.yearOneDeductionCents,
@@ -578,8 +581,13 @@ export function buildSlides(
           />
           <p className="deck-note">
             Each price is also the year-one deduction, at {fmtPct(constants.bonusRateBps, { digits: 0 })}{" "}
-            bonus depreciation on the full basis. Deposits shown at our current{" "}
-            {fmtPct(constants.depositBps, { digits: 0 })}.
+            bonus depreciation on the full basis. The deposit steps down with size: a
+            smaller entry carries proportionally more of the setup and management
+            overhead, and a multi-unit purchase earns our best rate
+            {multiUnitCashSavedCents > 0
+              ? ` — the same purchase made as single units would need ${fmtMoney(multiUnitCashSavedCents)} more cash down`
+              : ""}
+            . The deposit on your own deal is fixed in your proposal.
           </p>
         </Frame>
       ),

@@ -407,6 +407,8 @@ export interface TierRow {
   label: string;
   priceCents: number;
   downCents: number;
+  /** The deposit rate for THIS row — the schedule varies by size. */
+  downPctLabel: string;
   financedCents: number;
   monthlyCents: number;
   deductionCents: number;
@@ -420,7 +422,7 @@ export interface TierRow {
  * in a glance. The single bar per row encodes deposit against price, which is
  * the one comparison that is genuinely visual.
  */
-export function TierTable({ rows, depositLabel }: { rows: TierRow[]; depositLabel: string }) {
+export function TierTable({ rows }: { rows: TierRow[] }) {
   const max = Math.max(...rows.map((r) => r.priceCents), 1);
 
   return (
@@ -430,7 +432,7 @@ export function TierTable({ rows, depositLabel }: { rows: TierRow[]; depositLabe
           <tr className="bg-white/[0.06] text-[0.82rem] uppercase tracking-wider text-paper-50/60">
             <th className="px-5 py-3 font-medium">Size</th>
             <th className="px-5 py-3 font-medium">Purchase price</th>
-            <th className="px-5 py-3 font-medium">Cash down ({depositLabel})</th>
+            <th className="px-5 py-3 font-medium">Cash down</th>
             <th className="px-5 py-3 font-medium">Financed at 0%</th>
             <th className="px-5 py-3 font-medium">Monthly note</th>
           </tr>
@@ -453,7 +455,12 @@ export function TierTable({ rows, depositLabel }: { rows: TierRow[]; depositLabe
                 </svg>
               </td>
               <td className="px-5 py-4 text-[1.05rem] text-paper-50">{money(row.priceCents)}</td>
-              <td className="px-5 py-4 text-[1.05rem] text-paper-50">{money(row.downCents)}</td>
+              <td className="px-5 py-4">
+                <div className="text-[1.05rem] text-paper-50">{money(row.downCents)}</div>
+                <div className="mt-0.5 text-[0.72rem] text-paper-50/55">
+                  {row.downPctLabel} of price
+                </div>
+              </td>
               <td className="px-5 py-4 text-[1.05rem] text-paper-50/80">
                 {money(row.financedCents)}
               </td>

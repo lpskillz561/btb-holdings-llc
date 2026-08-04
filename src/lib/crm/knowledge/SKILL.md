@@ -262,7 +262,19 @@ and refer the client to their CPA.
 **BTB's standing deposit is 10%** (`CRM_DEFAULT_DEPOSIT_BPS`), a business
 decision, not a constant. The sources disagree — the deck says "13% Down", its own
 three tiers work out to 10.8% / 12% / 11%, and the executed agreements are 12.4%.
-Ten percent is what the business has settled on and what the CRM quotes.
+Ten percent is the default a generated proposal starts from. The client
+presentation's three entry points use **BTB's own schedule, decided August
+2026: fractional 13% ($32,500), single unit 12% ($150,000), multi-unit 10%
+($500,000)** — it steps down with size, deliberately: the premium on smaller
+entries covers BTB's setup and management overhead, and the bulk rate means a
+multi-unit buyer puts down $100,000 less cash than the same purchase made as
+four single units. The loan balance and note payment are derived from the
+deposit, so the rows reconcile. This schedule supersedes the deck's published
+downs (12% / 10.8% / 11%). There is **no separate management fee** anywhere in
+the documents: the Agent's entire compensation is the 50/50 split, and the
+Management Agreement's clause 4(c) bars charging the Owner anything beyond it.
+The overhead is priced inside the down payment, not a fee — never present it
+as one.
 
 **The deal is sized from the write-off, and it is FINANCED.** A client says they
 need to shelter $1m, so the unit is priced at $1m, the deposit is 10% of that and

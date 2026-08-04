@@ -269,10 +269,22 @@ write-off on their record.
 - **`lib/crm/presentation.ts` computes every figure** through `deal.ts` and
   `economics.ts`. No money is typed into a slide, so a slide cannot disagree with
   the contract it becomes.
-- **It does NOT reproduce the strategy deck's arithmetic.** The tiers are
-  computed at `CRM_DEFAULT_DEPOSIT_BPS`, because the deck's own FULL PURCHASE
-  column does not reconcile ($1,250,000 − $135,000 is $1,115,000, not the
-  $1,110,000 it prints). Nor does it repeat the FAQ's claim that there is "no
+- **The tier deposit schedule is a partner decision (August 2026): 13% / 12% /
+  10%, stepping down with size.** `TIER_DEPOSIT_BPS` in `presentation.ts`,
+  overridable via `CRM_TIER_DEPOSIT_BPS_FRACTIONAL/SINGLE/MULTI`. It supersedes
+  both a flat 10% and the deck's published downs (12% / 10.8% / 11%, not
+  monotonic, FULL column doesn't reconcile). The premium on smaller entries
+  covers setup and management overhead; multi sits at the standing 10% so bulk
+  is always cheaper in cash — `multiUnitCashSavedCents` computes that saving
+  ($100,000 at defaults) and the slide shows it only while it is positive. Only
+  the rate is input; loan balance and note payment are derived, so every row
+  reconciles. **There is no management fee line item**: no document in `docs/`
+  names one — the Management Agreement's whole compensation is the 50/50 split
+  and clause 4(c) bars charging the Owner anything else, so the overhead is
+  priced inside the down payment and must never be shown as a fee. Note the
+  tier rates are **presentation pricing only** — a generated proposal still
+  defaults to `CRM_DEFAULT_DEPOSIT_BPS` at any size, so a tier-sized proposal
+  must have its deposit typed to match the slide. Nor does it repeat the FAQ's claim that there is "no
   depreciation recapture to plan for" — recapture on an actual sale or conversion
   is on the limits slide.
 - **The pro forma is transcribed, not derived.** `PRO_FORMA` in that module is

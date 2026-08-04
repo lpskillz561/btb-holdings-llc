@@ -29,6 +29,14 @@ import {
   type Economics,
 } from "./economics";
 
+/** Read an integer env override, falling back when unset or malformed. */
+function envInt(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.round(n) : fallback;
+}
+
 /* -------------------------------------------------------------------------- */
 /* The executed example, from docs/                                            */
 /* -------------------------------------------------------------------------- */
@@ -68,6 +76,35 @@ export const PRO_FORMA = {
   ownerShareCents: 110_950,
 } as const;
 
+/**
+ * The deposit schedule for the three entry points, in basis points.
+ *
+ * 13% / 12% / 10%, stepping DOWN with size — a partner decision (August 2026)
+ * that supersedes both a flat `CRM_DEFAULT_DEPOSIT_BPS` and the deck's own
+ * published downs (12% / 10.8% / 11%, which are not monotonic and whose FULL
+ * PURCHASE column does not reconcile). The premium on the smaller entries
+ * covers BTB's setup and management overhead; the multi tier sits at the
+ * standing 10%, so the largest ticket is the one that shows the headline 10:1
+ * and a multi buyer always puts down less cash than the same exposure bought
+ * as single units — `multiUnitCashSavedCents` below is that saving, computed
+ * so the slide can prove it rather than assert it.
+ *
+ * There is still NO management fee as a line item: no document in docs/ names
+ * one. The Management Agreement's entire compensation is the 50/50 revenue
+ * split, and its clause 4(c) says the Owner is never liable for anything
+ * beyond it. The overhead the premium covers lives INSIDE the down payment —
+ * breaking it out as a "fee" on a slide would name a charge a CPA cannot find
+ * in the paperwork.
+ *
+ * Same rule as every other assumption: configuration, not constants. An SSM
+ * write and a redeploy reprice the slide; nobody edits a component.
+ */
+export const TIER_DEPOSIT_BPS = {
+  fractional: () => envInt("CRM_TIER_DEPOSIT_BPS_FRACTIONAL", 1_300),
+  single: () => envInt("CRM_TIER_DEPOSIT_BPS_SINGLE", 1_200),
+  multi: () => envInt("CRM_TIER_DEPOSIT_BPS_MULTI", 1_000),
+} as const;
+
 /** §461(l) excess business loss caps. From the strategy deck's own appendix. */
 export const LOSS_LIMITATION = {
   currentYear: 2026,
@@ -88,6 +125,13 @@ export interface DealIllustration {
   economics: Economics;
   /** 720 × the payment, less the principal. Rounding, surfaced rather than hidden. */
   driftCents: number;
+  /**
+   * The deposit as a share of the price, DERIVED from the two figures shown —
+   * never the rate that was asked for. The executed example is $155,000 on
+   * $1,250,000, and a label that said "10%" beside those two numbers would be
+   * the deck contradicting itself on one slide.
+   */
+  depositBps: number;
 }
 
 /**
@@ -122,7 +166,18 @@ export function illustrate(label: string, priceCents: number, depositCents?: num
     unitUse: "transient_rental",
   });
 
-  return { label, terms, economics, driftCents: roundingDriftCents(terms) };
+  return {
+    label,
+    terms,
+    economics,
+    driftCents: roundingDriftCents(terms),
+    depositBps: price > 0 ? Math.round((down / price) * 10_000) : 0,
+  };
+}
+
+/** One entry-point row: the deposit is the tier's own rate, not the default. */
+function tier(label: string, priceCents: number, depositBps: number): DealIllustration {
+  return illustrate(label, priceCents, Math.round((priceCents * depositBps) / 10_000));
 }
 
 export interface PresentationFigures {
@@ -130,8 +185,15 @@ export interface PresentationFigures {
   executed: DealIllustration;
   /** Sized to whatever this prospect says they need to shelter. */
   sized: DealIllustration | null;
-  /** Three illustrative sizes, at the deposit the CRM actually quotes. */
+  /** Three illustrative sizes, each at its own rate from `TIER_DEPOSIT_BPS`. */
   tiers: DealIllustration[];
+  /**
+   * Cash a multi-unit buyer keeps versus assembling the same purchase from
+   * single units at the single-unit rate. The bulk discount, as a dollar
+   * figure the slide can show — zero if the schedule is ever configured so
+   * that bulk is not cheaper, in which case the slide says nothing.
+   */
+  multiUnitCashSavedCents: number;
   proForma: typeof PRO_FORMA;
   lossLimitation: typeof LOSS_LIMITATION;
   constants: {
@@ -154,24 +216,32 @@ export interface PresentationFigures {
  * is sized from the write-off, so a pitch that already knows it should show it
  * rather than a generic tier.
  *
- * The tiers are computed at `CRM_DEFAULT_DEPOSIT_BPS`, NOT at the deposits
- * printed in the strategy deck. The deck's own FULL PURCHASE column does not
- * reconcile — $1,250,000 less $135,000 is $1,115,000, not the $1,110,000 it
- * shows — and a slide that reproduces it hands a CPA an arithmetic error on
- * first contact.
+ * The tiers are computed at `TIER_DEPOSIT_BPS` — see the note on that constant.
+ * The deposit rate is the only input per row; the financed balance and the note
+ * payment are derived from it, so every row reconciles by construction.
  */
 export function buildPresentationFigures(targetWriteoffCents?: number | null): PresentationFigures {
+  const tiers = [
+    tier("Fractional", 25_000_000, TIER_DEPOSIT_BPS.fractional()),
+    tier("Single unit", 125_000_000, TIER_DEPOSIT_BPS.single()),
+    tier("Multi-unit", 500_000_000, TIER_DEPOSIT_BPS.multi()),
+  ];
+  const [, single, multi] = tiers;
+  // What the multi price would cost in cash down if bought as single units.
+  const singlyCents =
+    single.terms.purchasePriceCents > 0
+      ? (multi.terms.purchasePriceCents / single.terms.purchasePriceCents) *
+        single.terms.downPaymentCents
+      : 0;
+
   return {
     executed: illustrate("Executed example", EXECUTED_PRICE_CENTS, EXECUTED_DOWN_CENTS),
     sized:
       targetWriteoffCents && targetWriteoffCents > 0
         ? illustrate("Sized to your target", targetWriteoffCents)
         : null,
-    tiers: [
-      illustrate("Fractional", 25_000_000),
-      illustrate("Single unit", 125_000_000),
-      illustrate("Multi-unit", 500_000_000),
-    ],
+    tiers,
+    multiUnitCashSavedCents: Math.max(0, Math.round(singlyCents - multi.terms.downPaymentCents)),
     proForma: PRO_FORMA,
     lossLimitation: LOSS_LIMITATION,
     constants: {
