@@ -61,6 +61,56 @@ export function fmtDate(value: string | null | undefined): string {
   });
 }
 
+/**
+ * A full instant, with the time of day — "Mar 14, 2026, 2:30 PM".
+ *
+ * Unlike `fmtDate`, which pins to UTC because a plain date is a calendar fact,
+ * this is a moment and needs a zone. Pass the office zone from `./tz` wherever a
+ * meeting is shown: without it this falls back to the runtime's own zone, which
+ * is UTC on the server and the reader's laptop in the browser — the two disagree,
+ * and the same call ends up labelled with two different days. See ./tz.
+ */
+export function fmtDateTime(value: string | null | undefined, timeZone?: string): string {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
+}
+
+/** Just the clock part of an instant — "2:30 PM". For the calendar grid. */
+export function fmtTime(value: string | null | undefined, timeZone?: string): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone });
+}
+
+/**
+ * Stored ISO instant → the "YYYY-MM-DDTHH:mm" a `datetime-local` input wants.
+ *
+ * Local, not UTC: the control has no timezone of its own, so a UTC string put
+ * into it displays as the wrong wall-clock time and then round-trips back as a
+ * different instant than the one that was stored. Built from the local getters
+ * rather than sliced off `toISOString()` for exactly that reason.
+ */
+export function isoToDatetimeInput(value: string | null | undefined): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
+}
+
 /** Relative age for the activity feed — "3 days ago". */
 export function fmtAgo(value: string | null | undefined): string {
   if (!value) return "—";

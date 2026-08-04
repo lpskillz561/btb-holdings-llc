@@ -42,6 +42,9 @@ const SECTIONS = [
   // day, so it sits with the dashboard rather than filed after the views of the
   // book. The dashboard's own list links here too.
   { href: "/crm/todos", label: "Board", icon: "board" },
+  // With the board rather than filed with the documents: what is on today and
+  // what was said yesterday is work-in-hand, not a view of the book.
+  { href: "/crm/meetings", label: "Meetings", icon: "calendar" },
   { href: "/crm/proposals", label: "Proposals", icon: "doc" },
   { href: "/crm/contracts", label: "Contracts", icon: "pen" },
   // BTB's own land, distinct from Holdings, which is the client-owned homes.
@@ -61,6 +64,7 @@ const ICON_PATHS: Record<IconName, string> = {
   unit: "M3 20h18M5 20V9.5L12 4l7 5.5V20M9.5 20v-6h5v6",
   chart: "M4 4v16h16M8 16v-5M12 16V8M16 16v-8",
   board: "M4 5h16v14H4zM9.33 5v14M14.67 5v14",
+  calendar: "M4 6h16v14H4zM4 10h16M8.5 4v3M15.5 4v3",
   users: "M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.5 2.9-5 5.5-5s5 1.5 5.5 5M15.5 10.5a3 3 0 1 0-1.4-5.8M15.8 15.3c2.3.3 4.2 1.7 4.7 4.7",
   exit: "M14 4h6v16h-6M10 8l-4 4 4 4M6 12h11",
 };

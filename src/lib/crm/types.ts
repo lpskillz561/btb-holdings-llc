@@ -225,6 +225,43 @@ export const SAVED_PARCEL_STATUSES = [
 export type SavedParcelStatus = (typeof SAVED_PARCEL_STATUSES)[number];
 
 /**
+ * Where a meeting stands. `scheduled` is the only forward-looking value, and it
+ * is what the calendar draws as upcoming; everything else is history.
+ *
+ * `failed` is separate from `canceled` on purpose: a call that happened but
+ * whose recording or transcript never arrived is not the same as one that never
+ * happened, and only the first is worth chasing.
+ */
+export const MEETING_STATUSES = [
+  "scheduled",
+  "in_progress",
+  "completed",
+  "canceled",
+  "failed",
+] as const;
+export type MeetingStatus = (typeof MEETING_STATUSES)[number];
+
+/** Where the call happened. Display only — nothing branches on it. */
+export const MEETING_PLATFORMS = [
+  "google_meet",
+  "zoom",
+  "teams",
+  "phone",
+  "in_person",
+  "other",
+] as const;
+export type MeetingPlatform = (typeof MEETING_PLATFORMS)[number];
+
+/**
+ * How the record got here, which is a different question from where the call
+ * happened. `notetaker` rows arrive from a bot vendor's webhook and are keyed by
+ * `external_id`; `manual` rows are typed in. Nothing but a notetaker row should
+ * ever carry a transcript.
+ */
+export const MEETING_SOURCES = ["manual", "notetaker", "calendar"] as const;
+export type MeetingSource = (typeof MEETING_SOURCES)[number];
+
+/**
  * Columns on the shared kanban board, in board order.
  *
  * Three, not five. A board the whole office shares is only useful if a card's
@@ -604,6 +641,66 @@ export interface CrmSavedParcel {
   updated_at: string;
 }
 
+/**
+ * A call with a client, and what was said on it.
+ *
+ * `client_id` is NULLABLE, and that is the useful part: a notetaker webhook
+ * arrives with attendee email addresses, not with our id for the account, and a
+ * first call is often with someone who is not a row yet. An unmatched meeting
+ * lands unassigned and is attached by hand rather than guessed at — guessing
+ * files a stranger's call under a real client, which is worse than filing it
+ * nowhere.
+ *
+ * `summary_md` is written by the model from the transcript and stamped with
+ * which model wrote it and when. It is NOT patchable, for the same reason
+ * `crm_parks.area_analysis` is not: an AI artifact that can be hand-edited stops
+ * being a record of what the model said about the call. Corrections go in
+ * `notes`, which sits beside it and is plainly a human's.
+ */
+export interface CrmMeeting {
+  id: string;
+  /** NULL means unassigned — matched by hand from the meetings list. */
+  client_id: string | null;
+  title: string;
+  status: MeetingStatus;
+  platform: MeetingPlatform;
+  source: MeetingSource;
+
+  /**
+   * The vendor's id for this recording. Webhooks retry, so this plus `source`
+   * carries a UNIQUE index and ingestion upserts on it.
+   */
+  external_id: string | null;
+  meeting_url: string | null;
+  recording_url: string | null;
+
+  /** When the call starts (scheduled) or started (happened). Drives the calendar. */
+  occurred_at: string;
+  ended_at: string | null;
+  duration_minutes: number | null;
+  /** JSON array of {name, email}, as `crm_saved_parcels.fit_json` is stored. */
+  attendees_json: string | null;
+
+  /** Written by the model from the transcript. See the note above. */
+  summary_md: string | null;
+  summary_model: string | null;
+  summarized_at: string | null;
+
+  /**
+   * The verbatim transcript, stored only when CRM_STORE_TRANSCRIPTS is on.
+   * Otherwise this is NULL and `transcript_url` points at the vendor's copy —
+   * see lib/crm/meetings.ts for why that is the default.
+   */
+  transcript: string | null;
+  transcript_url: string | null;
+
+  /** A human's own notes. The editable counterpart to `summary_md`. */
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CrmActivity {
   id: string;
   entity_type: string;
@@ -788,4 +885,24 @@ export const LABELS = {
     doing: "In progress",
     done: "Done",
   } satisfies Record<TodoStatus, string>,
+  meetingStatus: {
+    scheduled: "Scheduled",
+    in_progress: "In progress",
+    completed: "Completed",
+    canceled: "Canceled",
+    failed: "Recording failed",
+  } satisfies Record<MeetingStatus, string>,
+  meetingPlatform: {
+    google_meet: "Google Meet",
+    zoom: "Zoom",
+    teams: "Microsoft Teams",
+    phone: "Phone",
+    in_person: "In person",
+    other: "Other",
+  } satisfies Record<MeetingPlatform, string>,
+  meetingSource: {
+    manual: "Entered by hand",
+    notetaker: "AI notetaker",
+    calendar: "Calendar sync",
+  } satisfies Record<MeetingSource, string>,
 } as const;

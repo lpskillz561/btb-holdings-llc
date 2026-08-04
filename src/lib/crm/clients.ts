@@ -31,6 +31,7 @@ import {
   type CrmClient,
   type CrmContact,
   type CrmContract,
+  type CrmMeeting,
   type CrmProperty,
   type CrmProposal,
   type CrmSavedParcel,
@@ -95,6 +96,18 @@ function coerce(body: Record<string, unknown>): Record<string, unknown> {
  * inflate every SUM. At this cardinality (hundreds of clients) the subqueries
  * are the cheaper mistake to avoid making.
  */
+/**
+ * Just id and name, alphabetically — for the "file this call under…" dropdown
+ * and anything else that needs to pick a client rather than describe one.
+ * `listClients` carries rollups over four joins, which is a lot of work to fill
+ * a `<select>`.
+ */
+export async function listClientOptions(): Promise<{ id: string; name: string }[]> {
+  return query<{ id: string; name: string }>(
+    `SELECT id, name FROM crm_clients ORDER BY lower(name)`,
+  );
+}
+
 export async function listClients(params: URLSearchParams = new URLSearchParams()): Promise<ClientListRow[]> {
   const where: string[] = [];
   const binds: unknown[] = [];
@@ -286,6 +299,8 @@ export interface ClientDetail {
   units: CrmUnit[];
   transactions: CrmTransaction[];
   savedParcels: CrmSavedParcel[];
+  /** Calls on this account. The transcript column is included — see below. */
+  meetings: CrmMeeting[];
   activity: CrmActivity[];
   finance: FinanceSummary;
   cost: CostBasis;
@@ -380,7 +395,7 @@ export async function clientCostBasis(clientId: string): Promise<CostBasis> {
 export async function getClientDetail(id: string): Promise<ClientDetail> {
   const client = await getClient(id);
 
-  const [contacts, proposals, contracts, properties, units, transactions, savedParcels, activity, finance, cost, footprint] =
+  const [contacts, proposals, contracts, properties, units, transactions, savedParcels, meetings, activity, finance, cost, footprint] =
     await Promise.all([
       query<CrmContact>(`SELECT * FROM crm_contacts WHERE client_id = $1 ORDER BY created_at`, [id]),
       query<CrmProposal>(
@@ -404,6 +419,15 @@ export async function getClientDetail(id: string): Promise<ClientDetail> {
         `SELECT * FROM crm_saved_parcels WHERE client_id = $1 ORDER BY created_at DESC`,
         [id],
       ),
+      // `SELECT *` deliberately, transcript and all: the Meetings tab offers to
+      // show it, and a call whose transcript has to be fetched separately is a
+      // second round trip for the one thing the tab exists to display. The
+      // column is usually NULL anyway — retention is off unless
+      // CRM_STORE_TRANSCRIPTS is set. See lib/crm/meetings.ts.
+      query<CrmMeeting>(
+        `SELECT * FROM crm_meetings WHERE client_id = $1 ORDER BY occurred_at DESC LIMIT 100`,
+        [id],
+      ),
       query<CrmActivity>(
         `SELECT * FROM crm_activity WHERE client_id = $1 ORDER BY created_at DESC LIMIT 40`,
         [id],
@@ -423,6 +447,7 @@ export async function getClientDetail(id: string): Promise<ClientDetail> {
     units,
     transactions,
     savedParcels,
+    meetings,
     activity,
     finance,
     cost,

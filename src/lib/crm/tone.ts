@@ -27,9 +27,14 @@ export function statusTone(status: string): Tone {
     // A pad earning money and a park full of them are the same good news.
     case "occupied":
     case "operating":
+    // Shared by a finished contract and a call that happened. Both are the
+    // ordinary good end-state of their record, which is what green means here.
+    case "completed":
       return "green";
     // Ready but empty: capacity that exists and isn't working yet.
     case "available":
+    // Happening right now.
+    case "in_progress":
       return "navy";
     case "contracted":
     case "proposal_sent":
@@ -42,17 +47,23 @@ export function statusTone(status: string): Tone {
     case "reserved":
     case "developing":
     case "building":
+    // On the books but not yet happened.
+    case "scheduled":
       return "gold";
     case "lost":
     case "declined":
     case "terminated":
     case "rejected":
     case "overdue":
+    // A call that happened but whose recording never arrived — deliberately not
+    // the same as one that was called off. Only this one is worth chasing.
+    case "failed":
       return "red";
     case "dormant":
     case "expired":
     case "void":
     case "retired":
+    case "canceled":
       return "amber";
     default:
       return "neutral";

@@ -23,6 +23,7 @@ import {
 import { AdvisorTab } from "./AdvisorTab";
 import { ClientForm, type StateOption } from "./ClientForm";
 import { LandSearchTab } from "./LandSearchTab";
+import { MeetingsTab } from "./MeetingsTab";
 import { ProposalGenerator, type ProposalDefaults } from "./ProposalGenerator";
 import { apiPatch } from "./api";
 import {
@@ -42,6 +43,9 @@ type Row = Record<string, unknown>;
 
 const TABS = [
   "Overview",
+  // Ahead of the paperwork on purpose: what was said on the last call is the
+  // thing you want before dialling, and it is the context the rest is read in.
+  "Meetings",
   "Proposals",
   "Contracts",
   "Holdings",
@@ -56,11 +60,18 @@ export function ClientCard({
   states,
   proposalDefaults,
   aiEnabled,
+  timeZone,
 }: {
   detail: ClientDetail;
   states: StateOption[];
   proposalDefaults: ProposalDefaults;
   aiEnabled: boolean;
+  /**
+   * The office zone, resolved server-side — `process.env` is not readable here.
+   * Meeting times are shown in it rather than the reader's, so this card and the
+   * calendar cannot put the same call on two different days. See lib/crm/tz.ts.
+   */
+  timeZone: string;
 }) {
   const [detail, setDetail] = useState(initial);
   const [tab, setTab] = useState<Tab>("Overview");
@@ -111,6 +122,16 @@ export function ClientCard({
               onClientSaved={(saved) => patchDetail("client", saved)}
               onContactsChanged={(rows) => patchDetail("contacts", rows)}
               upsert={upsert}
+            />
+          )}
+
+          {tab === "Meetings" && (
+            <MeetingsTab
+              clientId={client.id}
+              meetings={detail.meetings}
+              aiEnabled={aiEnabled}
+              timeZone={timeZone}
+              onChanged={(rows) => patchDetail("meetings", rows)}
             />
           )}
 

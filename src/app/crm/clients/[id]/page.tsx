@@ -15,6 +15,7 @@ import {
 } from "@/lib/crm/economics";
 import { isAiConfigured } from "@/lib/crm/ai";
 import { fmtMoney } from "@/lib/crm/format";
+import { officeTimeZone } from "@/lib/crm/tz";
 import { LABELS } from "@/lib/crm/types";
 import { listStates } from "@/lib/parcels";
 
@@ -86,6 +87,7 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         states={states}
         proposalDefaults={proposalDefaults}
         aiEnabled={isAiConfigured()}
+        timeZone={officeTimeZone()}
       />
     </>
   );

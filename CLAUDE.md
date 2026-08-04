@@ -292,6 +292,68 @@ write-off on their record.
   `cqw` units). A deck that reflows shows the presenter and the room different
   line breaks.
 
+### Meetings and call summaries — `/crm/meetings`
+
+Calls with clients, on a month calendar and on a **Meetings** tab on the client
+card. Phase 1 of the notetaker work: the table and the surfaces exist and are
+**source-agnostic**, so a call typed in by hand and one delivered later by a
+meeting-bot webhook are the same row. There is no bot integration yet, and
+nothing here knows about a vendor.
+
+- **`crm_meetings.client_id` is NULLABLE, and that is the feature.** A notetaker
+  webhook knows attendee email addresses, not our id for the account, and a
+  first call is often with someone who is not a row yet. Unmatched calls land in
+  a visible **"Not filed under a client"** queue on `/crm/meetings` and are
+  attached by hand. Nothing guesses: filing a stranger's call under a real
+  client is worse than filing it nowhere, and an unfiled call is also absent
+  from that client's AI context, which is the loud version of the failure.
+- **Attaching has its own endpoint** (`POST /api/crm/meetings/[id]/attach`)
+  because the generic PATCH path strips `client_id` from *every* resource — that
+  rule is right for a proposal, whose reassignment would rewrite one client's
+  holdings into another's, and wrong for a meeting, where assignment is the
+  whole operation. One deliberate logged door beats a hole in the rule.
+- **The summary is written here, not taken from a vendor.** `summarizeMeeting`
+  in `lib/crm/meetings.ts` runs the transcript through the ordinary scoped prompt
+  — `BASE_PROMPT` + `SKILL.md` + the client's record — which is the entire reason
+  to do it in-house. The fixed third heading is **"Points to check"**, and it is
+  what earns the feature: it flags the 7-day test described where the 30-day one
+  applies, a non-recourse characterisation of the note, a first-year figure
+  quoted without §461(l), a deposit that disagrees with the frozen proposal. A
+  generic notetaker cannot do that because it has never read `docs/`.
+- **`summary_md` / `summary_model` / `summarized_at` are NOT in the PATCH
+  allow-list**, on the same principle as `crm_parks.area_analysis`: a
+  hand-editable AI artifact stops being a record of what the model said, and the
+  stamp beside it becomes a lie. `OPENAI_MODEL` is an SSM value that changes
+  without a rebuild, so the stamp is how an old summary can be judged at all.
+  Human corrections go in `notes`, which sits beside it and is plainly a
+  person's. `transcript` *is* writable — it is the input, and pasting one in is a
+  deliberate act by someone looking at what they are pasting.
+- **`CRM_STORE_TRANSCRIPTS` is OFF by default.** A transcript of one of these
+  calls is a named taxpayer discussing their income, in a database with **no
+  automated backup** — the largest open risk in the system, listed below. The
+  summary carries nearly all the working value at a fraction of that exposure.
+  The AI client context takes **summaries only**, never transcripts, even when
+  this is on: `buildClientContext` does not select the column at all, so a long
+  call cannot silently blow out the prompt.
+- **`CRM_TIMEZONE` (default `America/New_York`) is what the calendar buckets
+  by**, not the container's zone and not the reader's. `occurred_at` is a UTC
+  instant, and a call at 01:00 UTC is the previous evening on the east coast —
+  so a server-side grid and a browser-side label would put one call on two
+  different days. `lib/crm/tz.ts` is the single rule; it also removes the
+  hydration mismatch that reader-local formatting would cause. The zone is
+  threaded to `ClientCard` as a **prop**, because `process.env` is unreadable in
+  a client component.
+
+**Not built:** the bot integration itself. When it lands it is a webhook that
+upserts on the `(source, external_id)` unique index — webhooks retry, and a
+retried delivery must update the row rather than add a second copy of the call.
+It must **not** be wrapped in `withCrm`: there is no session on a webhook, so it
+needs its own shared-secret or signature gate. Vendor recommendation and the
+reasoning are in the conversation that produced this section — Recall.ai for the
+bot layer, because Google sells no bot API (Gemini's notetaker is a Workspace
+feature you cannot name or control) and OpenAI sells only the transcription layer
+beneath it.
+
 ## Two looks, on purpose
 
 **Internal screens are Salesforce Lightning. Client documents are not.**

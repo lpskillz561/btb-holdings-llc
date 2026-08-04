@@ -183,6 +183,26 @@ export function date(v: unknown): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
+/**
+ * A full ISO-8601 instant, or null. The counterpart to `date` for the columns
+ * that need a time of day — a meeting at 09:00 and one at 16:00 are the same row
+ * to `date`, which would collapse a day's calls into one point on the calendar.
+ *
+ * Normalised through `toISOString()` so it matches TS_DEFAULT in ./schema
+ * exactly. These columns are TEXT and are sorted and compared as TEXT, so a
+ * value with an offset ("…+01:00") rather than a "Z" would sort into the wrong
+ * place rather than fail loudly.
+ */
+export function timestamp(v: unknown): string | null {
+  const s = str(v);
+  if (!s) return null;
+  // A bare 'YYYY-MM-DD' is read as UTC midnight, matching `date` above; anything
+  // else is left to Date to interpret, including a local-time form from a
+  // datetime-local input.
+  const d = new Date(s.length === 10 ? `${s}T00:00:00Z` : s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 /** Narrow an untrusted value to a member of an enum array, else fall back. */
 export function oneOf<T extends string>(v: unknown, allowed: readonly T[], fallback: T): T {
   return typeof v === "string" && (allowed as readonly string[]).includes(v) ? (v as T) : fallback;

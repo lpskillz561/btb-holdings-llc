@@ -24,11 +24,15 @@ import {
   query,
   queryOne,
   str,
+  timestamp,
 } from "./db";
 import {
   CONTACT_ROLES,
   CONTRACT_STATUSES,
   CONTRACT_TYPES,
+  MEETING_PLATFORMS,
+  MEETING_SOURCES,
+  MEETING_STATUSES,
   PAD_STATUSES,
   PARK_STATUSES,
   PROPERTY_STATUSES,
@@ -283,6 +287,50 @@ export const TRANSACTIONS: ResourceDef = {
   filters: ["client_id", "kind", "category", "status", "property_id", "unit_id"],
   orderBy: "occurred_on DESC, created_at DESC",
   describe: (r) => String(r.description ?? "transaction"),
+};
+
+export const MEETINGS: ResourceDef = {
+  table: "crm_meetings",
+  entity: "Meeting",
+  fields: {
+    // Present on create; the engine strips it from every PATCH. Re-filing a call
+    // under a different client is a real and necessary operation, so it has its
+    // own logged door — `attachMeeting` in ./meetings — rather than being let in
+    // here, where it would also apply to proposals and contracts.
+    client_id: str,
+    title: str,
+    status: enumOf(MEETING_STATUSES, "scheduled"),
+    platform: enumOf(MEETING_PLATFORMS, "google_meet"),
+    source: enumOf(MEETING_SOURCES, "manual"),
+    external_id: str,
+    meeting_url: str,
+    recording_url: str,
+    occurred_at: timestamp,
+    ended_at: timestamp,
+    duration_minutes: int,
+    attendees_json: str,
+    transcript_url: str,
+    // Writable, unlike the summary below. This is the *input*, and pasting one in
+    // is a deliberate act by someone looking at what they are pasting — which is
+    // a different thing from CRM_STORE_TRANSCRIPTS, which governs whether every
+    // call is retained verbatim, unattended, forever. It is also what makes this
+    // useful before any notetaker exists: paste what you have, get a house
+    // summary out of it.
+    transcript: str,
+    notes: str,
+    // summary_md / summary_model / summarized_at are deliberately absent, on the
+    // same principle as crm_parks.area_analysis: they are written by the
+    // summarise endpoint and stamped with which model wrote them and when. A
+    // hand-patched AI artifact is no longer a record of what the model said, and
+    // the stamp beside it would then be a lie. Human corrections go in `notes`.
+  },
+  required: ["title"],
+  defaults: { status: "scheduled", platform: "google_meet", source: "manual" },
+  filters: ["client_id", "status", "platform", "source"],
+  // By when the call happened, not when the row was written — a meeting entered
+  // after the fact still belongs in its own place in the history.
+  orderBy: "occurred_at DESC",
+  describe: (r) => String(r.title ?? "meeting"),
 };
 
 export const SAVED_PARCELS: ResourceDef = {

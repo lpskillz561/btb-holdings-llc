@@ -29,6 +29,9 @@ import {
   HEALTHS,
   BUILD_METHODS,
   LEAD_SOURCES,
+  MEETING_PLATFORMS,
+  MEETING_SOURCES,
+  MEETING_STATUSES,
   PAD_STATUSES,
   PARK_STATUSES,
   PROPERTY_STATUSES,
@@ -555,6 +558,71 @@ const TABLES: TableDef[] = [
       // Saving the same parcel twice for one client is a duplicate, not a second
       // candidate — the save endpoint relies on this for its upsert.
       "CREATE UNIQUE INDEX IF NOT EXISTS crm_saved_parcels_uniq ON crm_saved_parcels (client_id, parcel_key)",
+    ],
+  },
+  // Calls with clients, and what was said on them.
+  //
+  // `client_id` is NULLABLE and that is deliberate — see the note on CrmMeeting
+  // in ./types. A notetaker webhook knows attendee email addresses, not our id
+  // for the account, so an unmatched call lands unassigned and is attached by
+  // hand. Filing a stranger's call under a real client is worse than filing it
+  // nowhere.
+  //
+  // The cascade IS right here, unlike on crm_activity, which deliberately has no
+  // foreign key so the audit trail outlives the record. A meeting is not audit:
+  // it is a verbatim record of a private conversation about someone's tax
+  // position, and when the client goes it should go with them.
+  {
+    name: "crm_meetings",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["client_id", "TEXT REFERENCES crm_clients(id) ON DELETE CASCADE"],
+      ["title", "TEXT NOT NULL"],
+      ["status", "TEXT NOT NULL DEFAULT 'scheduled'"],
+      ["platform", "TEXT NOT NULL DEFAULT 'google_meet'"],
+      ["source", "TEXT NOT NULL DEFAULT 'manual'"],
+      // The vendor's id for the recording. Paired with `source` in the unique
+      // index below, because two vendors could plausibly mint the same string.
+      ["external_id", "TEXT"],
+      ["meeting_url", "TEXT"],
+      ["recording_url", "TEXT"],
+      // TEXT ISO, like every other timestamp here — see the note on crm_todos.
+      // NOT NULL with a default so the calendar can always place a row: a
+      // meeting with no time cannot be drawn, and silently dropping it from the
+      // grid is how a call goes missing.
+      ["occurred_at", TS_DEFAULT],
+      ["ended_at", "TEXT"],
+      ["duration_minutes", "INTEGER"],
+      ["attendees_json", "TEXT"],
+      // Written by the model, stamped with which one and when. Not patchable —
+      // see PATCH allow-list in ./resource.
+      ["summary_md", "TEXT"],
+      ["summary_model", "TEXT"],
+      ["summarized_at", "TEXT"],
+      // NULL unless CRM_STORE_TRANSCRIPTS is on; see ./meetings.
+      ["transcript", "TEXT"],
+      ["transcript_url", "TEXT"],
+      ["notes", "TEXT"],
+      ["created_by", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [
+      { column: "status", values: MEETING_STATUSES },
+      { column: "platform", values: MEETING_PLATFORMS },
+      { column: "source", values: MEETING_SOURCES },
+    ],
+    indexes: [
+      // Matches the client card's ORDER BY: one account, newest call first.
+      "CREATE INDEX IF NOT EXISTS crm_meetings_client_idx ON crm_meetings (client_id, occurred_at DESC)",
+      // The calendar's range scan, and the unassigned queue's ordering.
+      "CREATE INDEX IF NOT EXISTS crm_meetings_occurred_idx ON crm_meetings (occurred_at DESC)",
+      // Webhooks retry, and a retried delivery must update the row rather than
+      // add a second copy of the same call. Partial, because `external_id` is
+      // NULL for every hand-entered meeting and NULLs are not distinct enough
+      // here to be relied on — two manual rows would collide on (source, NULL)
+      // under some Postgres configurations, and this states the intent outright.
+      `CREATE UNIQUE INDEX IF NOT EXISTS crm_meetings_external_idx
+         ON crm_meetings (source, external_id) WHERE external_id IS NOT NULL`,
     ],
   },
   // The shared team to-do on the dashboard.

@@ -37,6 +37,7 @@ import {
   type CrmContract,
   type CrmProperty,
   type CrmProposal,
+  type CrmMeeting,
   type CrmUnit,
 } from "./types";
 
@@ -93,7 +94,7 @@ function describeClient(c: CrmClient): string {
     c.state && `Based in: ${[c.city, c.state].filter(Boolean).join(", ")}`,
     c.tax_state && `Files in: ${c.tax_state}`,
     c.marginal_rate_bps != null &&
-      `Assumed combined marginal rate: ${fmtPct(c.marginal_rate_bps)}`,
+      `Assumed marginal rate: ${fmtPct(c.marginal_rate_bps)}`,
     c.est_annual_income_cents != null &&
       `Estimated annual income: ${fmtMoney(c.est_annual_income_cents)}`,
     c.target_writeoff_cents != null &&
@@ -214,6 +215,35 @@ function describeHistory(
   return sections.join("\n\n");
 }
 
+/**
+ * What was said on the calls, as opposed to what is on the record.
+ *
+ * The SUMMARIES only — never the transcripts, even when CRM_STORE_TRANSCRIPTS is
+ * on. A verbatim transcript would crowd out the rest of this context on length
+ * alone, and it is the most sensitive text in the database; the summary is
+ * already the distilled version and it is what the advisor actually needs.
+ *
+ * This is the piece the advisor was missing. It knew the client's proposals,
+ * contracts and units, and nothing at all about what anyone had promised them.
+ */
+function describeMeetings(meetings: CrmMeeting[]): string {
+  const summarised = meetings.filter((m) => m.summary_md?.trim());
+  if (!summarised.length) {
+    // Say so explicitly. Silence here reads to the model as "no calls have
+    // happened", which is a different and wrong claim from "none are summarised".
+    return meetings.length
+      ? `## Calls\n${meetings.length} call(s) are on this account, none of them summarised yet. Do not assume what was said on them.`
+      : "";
+  }
+  const lines = summarised.slice(0, 4).map((m) => {
+    const when = m.occurred_at.slice(0, 10);
+    // Trimmed: four summaries at full length would dominate the context.
+    const body = m.summary_md!.trim().slice(0, 2500);
+    return `### ${when} — ${m.title}\n${body}`;
+  });
+  return `## What was said on recent calls\nThese are AI summaries of recorded calls, not transcripts and not a record anyone has signed. Where a summary and the frozen figures on a proposal disagree, the proposal is what was actually quoted.\n\n${lines.join("\n\n")}`;
+}
+
 /** Everything the model should know about one client, as prompt text. */
 export async function buildClientContext(clientId: string): Promise<string> {
   const client = await queryOne<CrmClient>(`SELECT * FROM crm_clients WHERE id = $1`, [clientId]);
@@ -223,7 +253,7 @@ export async function buildClientContext(clientId: string): Promise<string> {
   // and every total: a withdrawn proposal is not part of what this account is,
   // and an advisor that reasons from one is reasoning about a deal nobody is
   // doing. The row is still there; it is just not context.
-  const [contacts, properties, units, proposals, contracts, cost] = await Promise.all([
+  const [contacts, properties, units, proposals, contracts, meetings, cost] = await Promise.all([
     query<CrmContact>(`SELECT * FROM crm_contacts WHERE client_id = $1 ORDER BY created_at`, [
       clientId,
     ]),
@@ -241,6 +271,15 @@ export async function buildClientContext(clientId: string): Promise<string> {
        ORDER BY deal_group_id NULLS LAST, created_at DESC LIMIT 12`,
       [clientId],
     ),
+    // Summaries only — the transcript column is not selected here at all, so a
+    // long call cannot silently blow out this prompt. See describeMeetings.
+    query<CrmMeeting>(
+      `SELECT id, client_id, title, status, platform, source, occurred_at,
+              summary_md, summary_model, summarized_at
+       FROM crm_meetings WHERE client_id = $1
+       ORDER BY occurred_at DESC LIMIT 8`,
+      [clientId],
+    ),
     clientCostBasis(clientId),
   ]);
 
@@ -250,6 +289,7 @@ export async function buildClientContext(clientId: string): Promise<string> {
     describeHoldings(properties, units),
     describeCostPosition(cost),
     describeHistory(proposals, contracts, contacts),
+    describeMeetings(meetings),
   ].filter(Boolean);
 
   return `\n\n---\n\nContext for this client:\n\n${sections.join("\n\n")}`;

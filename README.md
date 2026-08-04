@@ -21,7 +21,8 @@ importer that feeds it is in `etl/`, deployed separately. See
 | Section | Route | What it answers |
 |---|---|---|
 | **Overview** | `/crm` | Pipeline by stage, open vs. contracted value, units in service, the client list |
-| **Client card** | `/crm/clients/[id]` | Everything about one account, across seven tabs |
+| **Client card** | `/crm/clients/[id]` | Everything about one account, across eight tabs |
+| **Meetings** | `/crm/meetings` | Calls on a month calendar, and the ones that arrived without a client on them |
 | **Proposals** | `/crm/proposals` | Every proposal, its frozen figures, and where it stands |
 | **Contracts** | `/crm/contracts` | What is committed, and what is still waiting on a signature |
 | **Our land** | `/crm/land` | The parks **BTB** owns, the pads on them, and how much capacity is earning |
@@ -36,8 +37,17 @@ Overview carries a read-only summary of what is still open, linking straight to
 the card you click.
 
 Each client card carries **Overview** (record, people, tax profile, land
-criteria, cost position, activity), **Proposals**, **Contracts**, **Holdings**,
-**Financials**, **Land search**, and an **AI advisor**.
+criteria, cost position, activity), **Meetings**, **Proposals**, **Contracts**,
+**Holdings**, **Financials**, **Land search**, and an **AI advisor**.
+
+**Meetings** holds the calls and what was said on them. Paste or ingest a
+transcript and the in-house model summarises it against the same knowledge base
+the proposals use — so the summary's "Points to check" section flags anything on
+the call that disagrees with the deal we actually sell or with the client's own
+frozen figures. Those summaries also become context for the advisor, which
+previously knew every document on an account and nothing about what anyone had
+promised on the phone. Verbatim transcripts are **not** retained unless
+`CRM_STORE_TRANSCRIPTS` is set.
 
 Both views are load-bearing. The client card answers *"where does this account
 stand"* — the question you have with someone on the phone. The global sections

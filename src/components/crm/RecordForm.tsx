@@ -11,12 +11,14 @@
 // whole percents under the API's own column names, and lib/crm/db.ts converts.
 
 import { useState, type FormEvent } from "react";
-import { bpsToInput, centsToInput } from "@/lib/crm/format";
+import { bpsToInput, centsToInput, isoToDatetimeInput } from "@/lib/crm/format";
 import {
   CONTACT_ROLES,
   CONTRACT_STATUSES,
   CONTRACT_TYPES,
   LABELS,
+  MEETING_PLATFORMS,
+  MEETING_STATUSES,
   PROPERTY_STATUSES,
   TX_CATEGORIES,
   TX_KINDS,
@@ -46,6 +48,8 @@ export interface FieldSpec {
     | "percent"
     | "number"
     | "date"
+    /** A full instant, not a calendar day — see `isoToDatetimeInput`. */
+    | "datetime"
     | "select"
     | "textarea"
     /** A dropdown of other records — options come from `choices[choiceKey]`. */
@@ -209,6 +213,29 @@ export const TRANSACTION_SPEC: RecordSpec = {
   ],
 };
 
+export const MEETING_SPEC: RecordSpec = {
+  endpoint: "/api/crm/meetings",
+  title: "Meeting",
+  fields: [
+    { name: "title", label: "Title", type: "text", required: true, span: true, placeholder: "Intro call — structure and tiers" },
+    { name: "occurred_at", label: "When", type: "datetime", required: true },
+    { name: "duration_minutes", label: "Duration (minutes)", type: "number" },
+    { name: "status", label: "Status", type: "select", options: MEETING_STATUSES, labels: LABELS.meetingStatus },
+    { name: "platform", label: "Platform", type: "select", options: MEETING_PLATFORMS, labels: LABELS.meetingPlatform },
+    { name: "meeting_url", label: "Meeting link", type: "text", span: true },
+    { name: "recording_url", label: "Recording link", type: "text" },
+    { name: "transcript_url", label: "Transcript link", type: "text" },
+    {
+      name: "transcript",
+      label: "Transcript",
+      type: "textarea",
+      span: true,
+      hint: "Paste one in and the summary can be generated from it. Nothing is summarised without one.",
+    },
+    { name: "notes", label: "Your notes", type: "textarea", span: true, hint: "Yours, not the model's — the AI summary sits separately and is not editable." },
+  ],
+};
+
 /* -------------------------------------------------------------------------- */
 /* Renderer                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -222,6 +249,7 @@ function initialValue(spec: FieldSpec, row: Row | undefined): string {
   if (raw === null || raw === undefined) return "";
   if (spec.type === "money") return centsToInput(Number(raw));
   if (spec.type === "percent") return bpsToInput(Number(raw));
+  if (spec.type === "datetime") return isoToDatetimeInput(String(raw));
   return String(raw);
 }
 
@@ -243,6 +271,8 @@ function Control({ spec, row, choices }: { spec: FieldSpec; row?: Row; choices?:
       return <TextInput {...shared} inputMode="decimal" />;
     case "date":
       return <TextInput {...shared} type="date" />;
+    case "datetime":
+      return <TextInput {...shared} type="datetime-local" />;
     case "email":
       return <TextInput {...shared} type="email" />;
     case "textarea":
