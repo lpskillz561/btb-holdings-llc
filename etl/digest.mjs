@@ -150,6 +150,8 @@ EXCLUDE, always:
 - Infrastructure: deploys, DNS, IAM, schema migrations, timers, scripts.
 - Documentation and comments.
 - Fixes to code that was never released, or to a bug introduced and fixed between deploys.
+- COSMETIC AND VISUAL POLISH: alignment, spacing, wording, colour, a label that overflowed. Only include a fix if someone was actually blocked, got a wrong number, or lost work. "It looks right now" is not worth an email.
+- Anything a reader could not act on. If there is no useful answer to "how do I use this", it does not belong in the email.
 - Anything already in the "already announced" list.
 - Anything that is only a follow-up, fix or tweak to something in that list. If zoning was announced, a later fix to the zoning importer is NOT a new item.
 
@@ -157,7 +159,7 @@ MERGE related commits. Several commits building one feature are ONE item, descri
 
 For each item you do return:
 - key: a stable lowercase slug for the FEATURE, e.g. "zoning-on-land-search". It must be the slug you would pick for this feature no matter which commit introduced it, because it is used to prevent re-announcing. Never include a date or a commit id.
-- tag: "New" for a capability that did not exist, "Improved" for something better, "Fixed" for a user-visible bug that was hurting people.
+- tag: "New" for a capability that did not exist, "Improved" for something better, "Fixed" for a bug that was actually costing someone time or accuracy.
 - title: a short plain sentence. No jargon, no file names, no function names.
 - what: 1-2 sentences on what it is and why it matters to their work. Plain English. Never mention code, commits, tables or columns.
 - how: concrete steps to use it, naming what they click. Refer to real navigation: the left sidebar has Overview, Board, Proposals, Contracts, Our land, Holdings, Financials. You may use <b> for emphasis.
