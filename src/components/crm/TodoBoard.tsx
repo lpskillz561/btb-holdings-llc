@@ -30,6 +30,11 @@
  * Cards are not hand-orderable within a column — that needs a position column
  * and fractional indexing to survive two people dragging at once, which is a
  * bigger change than it looks. Newest first, per column.
+ *
+ * Every colour on the board comes from TONE below, keyed on status. Nothing
+ * here hard-codes `sf-` any more: a card, its avatar chip and its move arrows
+ * all recolour together when it moves column, and adding a fourth status is one
+ * entry in that map.
  */
 
 import { useEffect, useState } from "react";
@@ -46,15 +51,72 @@ export interface BoardUser {
 }
 
 /**
- * Column accent: To do blue, In progress grey, Done green.
+ * Status colour: To do blue, In progress amber, Done green.
  *
- * The rule carries the heading too, so the colour is legible to anyone reading
- * the words rather than only to whoever can tell two greys apart at a glance.
+ * THE WHOLE CARD carries it — fill, border and a heavy left rail — not just a
+ * dot or a badge, so the state of the board is readable from across a room and
+ * a card that has been dragged into the wrong column looks wrong immediately.
+ *
+ * In progress was GREY and could not stay grey. A grey wash on a card sitting
+ * in a grey column (`bg-ink-100`) is the one status that would have read as
+ * "no colour applied" rather than as a state, and the middle column is the one
+ * people actually scan. Amber also reads as "in flight" without competing with
+ * Lightning blue for the primary-action slot.
+ *
+ * The rule carries the column heading and its count too, so the colour is
+ * legible to anyone reading the words rather than only to whoever can tell two
+ * pale tints apart at a glance. Every fill here is a `50`, chosen so ink-900
+ * body text still clears contrast on it — see the palette note in
+ * `tailwind.config.ts`.
+ *
+ * `avatar` is deliberately the 600/700 and not the 500: white initials on
+ * `warn-500` (#fe9339) is about 2.3:1, which is not a legible chip.
  */
-const COLUMN_TONE: Record<TodoStatus, { rule: string; heading: string }> = {
-  todo: { rule: "border-t-sf-500", heading: "text-sf-600" },
-  doing: { rule: "border-t-ink-400", heading: "text-ink-600" },
-  done: { rule: "border-t-ok-500", heading: "text-ok-700" },
+const TONE: Record<
+  TodoStatus,
+  {
+    rule: string;
+    heading: string;
+    count: string;
+    card: string;
+    title: string;
+    avatar: string;
+    control: string;
+    over: string;
+  }
+> = {
+  todo: {
+    rule: "border-t-sf-500",
+    heading: "text-sf-700",
+    count: "bg-sf-100 text-sf-700",
+    card: "border-ink-200 border-l-sf-500 bg-sf-50 hover:border-sf-200 hover:border-l-sf-500 hover:bg-sf-100",
+    title: "text-sf-900",
+    avatar: "bg-sf-600",
+    control: "text-sf-700 hover:bg-white hover:text-sf-800",
+    over: "bg-sf-50 ring-2 ring-sf-300",
+  },
+  doing: {
+    rule: "border-t-warn-500",
+    heading: "text-warn-700",
+    count: "bg-warn-100 text-warn-700",
+    card: "border-ink-200 border-l-warn-500 bg-warn-50 hover:border-warn-200 hover:border-l-warn-500 hover:bg-warn-100",
+    title: "text-ink-900",
+    avatar: "bg-warn-700",
+    control: "text-warn-700 hover:bg-white hover:text-warn-700",
+    over: "bg-warn-50 ring-2 ring-warn-200",
+  },
+  done: {
+    rule: "border-t-ok-500",
+    heading: "text-ok-700",
+    count: "bg-ok-100 text-ok-700",
+    card: "border-ink-200 border-l-ok-500 bg-ok-50 hover:border-ok-200 hover:border-l-ok-500 hover:bg-ok-100",
+    // ink-500 was 2.86:1 on this fill. The strike-through is what says "done";
+    // the grey does not also have to, and at ink-500 it stopped being legible.
+    title: "text-ink-700 line-through",
+    avatar: "bg-ok-700",
+    control: "text-ok-700 hover:bg-white hover:text-ok-700",
+    over: "bg-ok-50 ring-2 ring-ok-200",
+  },
 };
 
 /** "David Belousov" -> DB; an email with no name -> its first two letters. */
@@ -215,15 +277,21 @@ export function TodoBoard({
               onDragLeave={() => setOverColumn((c) => (c === status ? null : c))}
               onDrop={() => onDrop(status)}
               aria-label={`${LABELS.todoStatus[status]} column`}
-              className={`rounded border border-t-4 border-ink-200 ${COLUMN_TONE[status].rule} bg-ink-100/60 p-2 transition ${
-                overColumn === status ? "bg-sf-50 ring-2 ring-sf-200" : ""
+              className={`rounded border border-t-4 border-ink-200 ${TONE[status].rule} bg-ink-100/60 p-2 transition ${
+                overColumn === status ? TONE[status].over : ""
               }`}
             >
-              <h3 className="flex items-baseline justify-between px-1 pb-2 pt-1">
-                <span className={`text-sm font-bold ${COLUMN_TONE[status].heading}`}>
+              <h3 className="flex items-center justify-between px-1 pb-2 pt-1">
+                <span
+                  className={`text-xs font-bold uppercase tracking-wider ${TONE[status].heading}`}
+                >
                   {LABELS.todoStatus[status]}
                 </span>
-                <span className="sf-meta">{cards.length}</span>
+                <span
+                  className={`inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[0.7rem] font-bold ${TONE[status].count}`}
+                >
+                  {cards.length}
+                </span>
               </h3>
 
               <ul className="space-y-2 empty:hidden">
@@ -238,9 +306,9 @@ export function TodoBoard({
                         setDragId(null);
                         setOverColumn(null);
                       }}
-                      className={`group rounded border border-ink-200 bg-white ${
-                        dragId === todo.id ? "opacity-40" : ""
-                      }`}
+                      className={`group rounded border border-l-4 shadow-sm transition hover:shadow-md ${
+                        TONE[status].card
+                      } ${dragId === todo.id ? "opacity-40 shadow-none" : ""}`}
                     >
                       {/* The card body is the click target; the controls below
                           are not, so moving a card never opens it. */}
@@ -249,14 +317,11 @@ export function TodoBoard({
                         onClick={() => setOpenId(todo.id)}
                         className="block w-full cursor-grab p-2.5 text-left active:cursor-grabbing"
                       >
-                        <p
-                          className={`text-sm ${
-                            status === "done" ? "text-ink-500 line-through" : "text-ink-900"
-                          }`}
-                        >
-                          {todo.title}
-                        </p>
-                        <p className="sf-meta mt-1">
+                        <p className={`text-sm font-medium ${TONE[status].title}`}>{todo.title}</p>
+                        {/* text-ink-700 over .sf-meta's ink-600: the class is
+                            tuned for white cards, and on a tinted fill it falls
+                            to ~4.2:1. Small text, so that is under AA. */}
+                        <p className="sf-meta mt-1 text-ink-700">
                           {status === "done"
                             ? `Done by ${todo.done_by ?? "someone"} ${fmtAgo(todo.done_at)}`
                             : `Added by ${todo.created_by ?? "someone"} ${fmtAgo(todo.created_at)}`}
@@ -266,19 +331,19 @@ export function TodoBoard({
                             {todo.assignee && (
                               <span
                                 title={label(person, todo.assignee)}
-                                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sf-500 text-[0.6rem] font-bold text-white"
+                                className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[0.6rem] font-bold text-white ${TONE[status].avatar}`}
                               >
                                 {initials(person, todo.assignee)}
                               </span>
                             )}
                             {todo.notes && (
-                              <span className="sf-meta" title="Has notes">
+                              <span className="sf-meta text-ink-700" title="Has notes">
                                 ≡ notes
                               </span>
                             )}
                             {(todo.comment_count ?? 0) > 0 && (
                               <span
-                                className="sf-meta"
+                                className="sf-meta text-ink-700"
                                 title={`${todo.comment_count} comment${todo.comment_count === 1 ? "" : "s"}`}
                               >
                                 💬 {todo.comment_count}
@@ -295,7 +360,7 @@ export function TodoBoard({
                             onClick={() => void move(todo, prev)}
                             aria-label={`Move "${todo.title}" to ${LABELS.todoStatus[prev]}`}
                             title={`Move to ${LABELS.todoStatus[prev]}`}
-                            className="rounded px-1.5 py-0.5 text-xs text-ink-600 hover:bg-ink-100 hover:text-sf-600"
+                            className={`rounded px-1.5 py-0.5 text-xs ${TONE[status].control}`}
                           >
                             ←
                           </button>
@@ -306,7 +371,7 @@ export function TodoBoard({
                             onClick={() => void move(todo, next)}
                             aria-label={`Move "${todo.title}" to ${LABELS.todoStatus[next]}`}
                             title={`Move to ${LABELS.todoStatus[next]}`}
-                            className="rounded px-1.5 py-0.5 text-xs text-ink-600 hover:bg-ink-100 hover:text-sf-600"
+                            className={`rounded px-1.5 py-0.5 text-xs ${TONE[status].control}`}
                           >
                             →
                           </button>
@@ -315,7 +380,7 @@ export function TodoBoard({
                           type="button"
                           onClick={() => setOpenId(todo.id)}
                           aria-label={`Open "${todo.title}"`}
-                          className="ml-auto rounded px-1.5 py-0.5 text-xs text-ink-500 hover:bg-ink-100 hover:text-sf-600"
+                          className={`ml-auto rounded px-1.5 py-0.5 text-xs ${TONE[status].control}`}
                         >
                           Details
                         </button>

@@ -73,9 +73,14 @@ export default {
           800: "#444444",
           900: "#181818",
         },
-        ok: { 100: "#d5f2dd", 500: "#2e844a", 700: "#1b5b2c" },
-        warn: { 100: "#fef1e0", 500: "#fe9339", 700: "#a75200" },
-        err: { 100: "#feded8", 500: "#ea001e", 700: "#8e021b" },
+        // The 50s are card-fill tints, added for the kanban: a whole card
+        // washed in its status colour needs a wash light enough that ink-900
+        // body text still reads on it. The 100s are badge fills and are too
+        // saturated for that; a `/60` of one composites over the column's grey
+        // and goes muddy rather than lighter.
+        ok: { 50: "#eefaf1", 100: "#d5f2dd", 200: "#b0e4c1", 500: "#2e844a", 700: "#1b5b2c" },
+        warn: { 50: "#fff8ef", 100: "#fef1e0", 200: "#fcd9b2", 500: "#fe9339", 700: "#a75200" },
+        err: { 50: "#fff2ef", 100: "#feded8", 500: "#ea001e", 700: "#8e021b" },
       },
       fontFamily: {
         sans: ["var(--font-sans)", "system-ui", "sans-serif"],
