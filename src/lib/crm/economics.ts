@@ -194,6 +194,16 @@ export function computeEconomics(input: EconomicsInput): Economics {
     usefulLifeYears > 0 ? Math.round(remainingBasisCents / usefulLifeYears) : 0;
 
   const yearOneDeductionCents = bonusDeductionCents + firstYearRemainderCents;
+  // Clamping silently is how "3700" typed for 37% became a 100% marginal rate
+  // and a proposal claiming the tax saving equalled the entire deduction. No
+  // real marginal rate is above 60%, so anything past that is a data-entry
+  // error and is refused rather than quietly reinterpreted.
+  if (input.marginalRateBps > 6_000) {
+    throw new Error(
+      `A marginal rate of ${(input.marginalRateBps / 100).toFixed(0)}% is not plausible — ` +
+        "rates are basis points, so 37% is 3700. Check what was entered.",
+    );
+  }
   const marginalRateBps = Math.min(10_000, Math.max(0, input.marginalRateBps));
   const yearOneTaxSavingsCents = pctOf(yearOneDeductionCents, marginalRateBps);
 
@@ -208,8 +218,15 @@ export function computeEconomics(input: EconomicsInput): Economics {
   // Getting this backwards quoted "cash down $0, seller-financed $102,000" on a
   // blank field whose own hint promised an all-cash deal — and with no cash in
   // it, leverage and cash-on-cash both collapsed to "—".
+  // ABSENT is not ZERO. Absent means "nobody has said", so the deposit tracks
+  // the price at the configured default; an explicit 0 means a deliberate
+  // all-cash deal and leaves the note out entirely. Conflating the two quoted a
+  // client paying the full price in cash for a deduction of the same size,
+  // which reads as a 1:1 rather than the 10:1 the whole pitch rests on.
+  const defaultedDeposit =
+    input.downPaymentCents ?? pctOf(totalInvestmentCents, DEFAULT_DEPOSIT_BPS());
   const downPaymentCents = Math.min(
-    Math.max(0, Math.round(input.downPaymentCents ?? 0)),
+    Math.max(0, Math.round(defaultedDeposit)),
     totalInvestmentCents,
   );
   const financedCents = downPaymentCents > 0 ? totalInvestmentCents - downPaymentCents : 0;

@@ -9,7 +9,20 @@
 // text and `deal.ts` computes the figures; this module only assembles them,
 // refuses to produce a set that would be unsafe to send, and freezes the result.
 
-import { CrmError, buildInsert, cents, date, logActivity, newId, nowIso, query, str } from "./db";
+import {
+  CrmError,
+  bool,
+  buildInsert,
+  cents,
+  date,
+  logActivity,
+  newId,
+  nowIso,
+  query,
+  queryOne,
+  str,
+} from "./db";
+import { fmtMoney } from "./format";
 import { getClient } from "./clients";
 import { computeDealTerms } from "./deal";
 import {
@@ -19,13 +32,34 @@ import {
   type ContractContext,
 } from "./contract-templates";
 import { formatAddress, getSeller, sellerConfigIssues } from "./parties";
-import type { ContractType, CrmContract } from "./types";
+import type { ContractType, CrmContract, CrmProposal } from "./types";
+
+/** `bool` returns null for absent; here absent means "do not override". */
+const truthy = (v: unknown) => bool(v) === true;
 
 export interface GenerateContractsInput {
   client_id?: unknown;
-  /** Whole dollars, coerced to cents by `cents()` — see CLAUDE.md. */
+  /**
+   * The proposal these contracts execute.
+   *
+   * STRONGLY PREFERRED over passing figures directly. A proposal's economics
+   * are computed and frozen on its row; passing its id makes the contract
+   * inherit exactly those numbers, so the document and the offer the client
+   * was actually shown cannot disagree. Typing the price again is how they
+   * drift — one person copies $155,000 from the sample deposit onto a
+   * $1,000,000 deal and nothing anywhere objects.
+   */
+  proposal_id?: unknown;
+  /**
+   * Whole dollars, coerced to cents by `cents()` — see CLAUDE.md.
+   *
+   * With `proposal_id` these are OVERRIDES, and disagreeing with the proposal
+   * is refused unless `allow_override` says otherwise.
+   */
   purchase_price?: unknown;
   down_payment?: unknown;
+  /** Deliberately generate terms that differ from the linked proposal. */
+  allow_override?: unknown;
 
   /** The Series that actually buys. Falls back to the client's legal name. */
   buyer_legal_name?: unknown;
@@ -81,12 +115,69 @@ export async function generateContractSet(
     );
   }
 
-  // 2. The figures.
-  const purchasePriceCents = cents(input.purchase_price) ?? 0;
-  const downPaymentCents = cents(input.down_payment) ?? 0;
+  // 2. The figures, inherited from the proposal wherever there is one.
+  //
+  //    The proposal's economics are computed once and frozen on its row; taking
+  //    them from there is what makes the executed document and the offer the
+  //    client saw the same numbers. An explicit price or deposit is treated as
+  //    an OVERRIDE and refused when it disagrees, because a contract quietly
+  //    differing from its proposal is the failure this is here to prevent —
+  //    and it fails silently, in front of the one audience that checks.
+  const proposalId = str(input.proposal_id);
+  let proposal: CrmProposal | null = null;
+  let purchasePriceCents = cents(input.purchase_price) ?? 0;
+  let downPaymentCents = cents(input.down_payment) ?? 0;
+
+  if (proposalId) {
+    proposal = await queryOne<CrmProposal>(
+      `SELECT * FROM crm_proposals WHERE id = $1 AND client_id = $2`,
+      [proposalId, clientId],
+    );
+    if (!proposal) {
+      throw new CrmError("That proposal does not exist for this client.", 404);
+    }
+    if (proposal.archived_at) {
+      throw new CrmError(
+        "That proposal has been archived. Generating contracts from a withdrawn offer is almost certainly a mistake.",
+        400,
+      );
+    }
+    const fromProposal = {
+      price: proposal.total_investment_cents ?? 0,
+      deposit: proposal.down_payment_cents ?? 0,
+    };
+    const override = !truthy(input.allow_override);
+    if (purchasePriceCents > 0 && purchasePriceCents !== fromProposal.price && override) {
+      throw new CrmError(
+        `The purchase price given (${fmtMoney(purchasePriceCents)}) is not the ${fmtMoney(
+          fromProposal.price,
+        )} on this proposal. The client was shown the proposal's figure. Send allow_override to sign off a different one deliberately.`,
+        400,
+      );
+    }
+    if (downPaymentCents > 0 && downPaymentCents !== fromProposal.deposit && override) {
+      throw new CrmError(
+        `The deposit given (${fmtMoney(downPaymentCents)}) is not the ${fmtMoney(
+          fromProposal.deposit,
+        )} on this proposal. Send allow_override to sign off a different one deliberately.`,
+        400,
+      );
+    }
+    if (purchasePriceCents <= 0) purchasePriceCents = fromProposal.price;
+    if (downPaymentCents <= 0) downPaymentCents = fromProposal.deposit;
+  }
+
   const terms = computeDealTerms({ purchasePriceCents, downPaymentCents });
   if (terms.problems.length > 0) {
-    throw new CrmError(terms.problems.join(" "), 400);
+    // Name the proposal in the error when there is one: "the down payment is
+    // zero" is a puzzle until you know it came from a proposal generated
+    // without a deposit, which is itself the thing to go and fix.
+    throw new CrmError(
+      proposal
+        ? `${terms.problems.join(" ")} These figures came from proposal "${proposal.title}".`
+        : terms.problems.join(" "),
+      400,
+    );
   }
 
   // 3. The merge context.
@@ -131,6 +222,9 @@ export async function generateContractSet(
     const values = {
       id: newId(),
       client_id: client.id,
+      // The proposal these execute. Stored on every document in the set so the
+      // link survives even if one is opened on its own.
+      proposal_id: proposal?.id ?? null,
       title: TITLES[type],
       type: type as ContractType,
       status: "draft",

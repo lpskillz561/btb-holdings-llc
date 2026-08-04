@@ -254,7 +254,11 @@ export async function generateProposal(
     siteWorkCents: cents(input.site_work) ?? 0,
     softCostsCents: cents(input.soft_costs) ?? 0,
     landCostCents: cents(input.land_cost) ?? 0,
-    downPaymentCents: cents(input.down_payment) ?? 0,
+    // undefined, NOT 0, when nobody supplied one. computeEconomics reads
+    // absent as "use the configured default deposit" and an explicit 0 as a
+    // deliberate all-cash deal; collapsing both to 0 here made every
+    // API-generated proposal all-cash and destroyed the 10:1.
+    downPaymentCents: cents(input.down_payment) ?? undefined,
     marginalRateBps,
     bonusRateBps: bps(input.bonus_rate) ?? DEFAULT_BONUS_RATE_BPS(),
     usefulLifeYears: num(input.useful_life_years) ?? DEFAULT_USEFUL_LIFE_YEARS(),
