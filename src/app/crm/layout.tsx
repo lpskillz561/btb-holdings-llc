@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
+import { cookies } from "next/headers";
 import { AskAi } from "@/components/crm/AskAi";
 import { CrmChrome } from "@/components/crm/CrmChrome";
 import { NavProgress } from "@/components/crm/NavProgress";
 import { getCrmPageUser, isSuperUser } from "@/lib/crm/access";
 import { isAiConfigured } from "@/lib/crm/ai";
+import { RAIL_COOKIE, isRailCollapsed } from "@/lib/crm/rail";
 
 /**
  * The internal application shell.
@@ -43,6 +45,12 @@ export default async function CrmLayout({ children }: { children: ReactNode }) {
   // application with an error inside it. This is a cookie check, not a query.
   const user = await getCrmPageUser();
 
+  // The rail's width has to be decided HERE, before any HTML is emitted, or a
+  // collapsed rail renders at 240px and snaps to 64px once the client mounts.
+  // That is why the preference is a cookie — see lib/crm/rail.ts. This layout
+  // already reads cookies for the session, so it costs nothing extra.
+  const railCollapsed = isRailCollapsed((await cookies()).get(RAIL_COOKIE)?.value);
+
   return (
     <div className="sf-page">
       {user ? <NavProgress /> : null}
@@ -51,7 +59,7 @@ export default async function CrmLayout({ children }: { children: ReactNode }) {
           wrapper stacks. On the client-facing routes (print, present) CrmChrome
           renders nothing, so the content simply takes the full width. */}
       <div className="lg:flex">
-        {user ? <CrmChrome isSuperUser={isSuperUser(user)} /> : null}
+        {user ? <CrmChrome isSuperUser={isSuperUser(user)} defaultCollapsed={railCollapsed} /> : null}
         <div className="min-w-0 flex-1">{children}</div>
       </div>
       {user ? <AskAi aiEnabled={isAiConfigured()} /> : null}

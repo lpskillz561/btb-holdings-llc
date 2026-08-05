@@ -19,12 +19,19 @@
  * it. Below lg it renders a compact top bar plus a drawer, and the pages render
  * below it. The navy is deliberate — the one place the brand survives indoors —
  * and the body of every screen stays Lightning grey/white/blue.
+ *
+ * The rail COLLAPSES to icons on lg+, and the preference is a cookie the server
+ * reads — see lib/crm/rail.ts for why it is not localStorage. Collapsing is an
+ * lg+ idea only: below lg the nav is already a drawer that is closed by default,
+ * so a second way to make it smaller would just be a second thing to be stuck
+ * in. The drawer therefore always renders the full-width column.
  */
 
 import { useEffect, useState } from "react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { BtbMark } from "@/components/Logo";
+import { RAIL_COOKIE, RAIL_COOKIE_MAX_AGE, railCookieValue } from "@/lib/crm/rail";
 import { isClientFacingRoute } from "@/lib/crm/routes";
 import { site } from "@/lib/site";
 
@@ -61,7 +68,7 @@ const SECTIONS = [
   { href: "/crm/financials", label: "Financials", icon: "chart" },
 ] as const;
 
-type IconName = (typeof SECTIONS)[number]["icon"] | "shield" | "exit";
+type IconName = (typeof SECTIONS)[number]["icon"] | "shield" | "exit" | "collapse" | "expand";
 
 /** Minimal 1.5-stroke line icons; currentColor so state styling is free. */
 const ICON_PATHS: Record<IconName, string> = {
@@ -80,6 +87,8 @@ const ICON_PATHS: Record<IconName, string> = {
   // under one symbol, which is the one confusion worth avoiding on this rail.
   shield: "M12 3.2l7 2.8v5.4c0 4.1-2.9 7.4-7 8.6-4.1-1.2-7-4.5-7-8.6V6zM9.3 12l1.9 1.9 3.5-3.6",
   exit: "M14 4h6v16h-6M10 8l-4 4 4 4M6 12h11",
+  collapse: "M13 7l-5 5 5 5M18.5 7l-5 5 5 5",
+  expand: "M11 7l5 5-5 5M5.5 7l5 5-5 5",
 };
 
 function NavIcon({ name }: { name: IconName }) {
@@ -114,11 +123,23 @@ function isCurrent(pathname: string, href: string): boolean {
  * on a slow dynamic render this is the only immediate acknowledgement, since
  * the CRM deliberately has no loading.tsx (see app/crm/layout.tsx).
  */
-function ItemBody({ label, icon, active }: { label: string; icon: IconName; active: boolean }) {
+function ItemBody({
+  label,
+  icon,
+  active,
+  collapsed = false,
+}: {
+  label: string;
+  icon: IconName;
+  active: boolean;
+  collapsed?: boolean;
+}) {
   const { pending } = useLinkStatus();
   return (
     <span
-      className={`relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
+      className={`relative flex items-center rounded-md py-2 text-sm transition-colors ${
+        collapsed ? "justify-center px-0" : "gap-2.5 px-3"
+      } ${
         active
           ? "bg-white/10 font-medium text-white"
           : pending
@@ -132,54 +153,127 @@ function ItemBody({ label, icon, active }: { label: string; icon: IconName; acti
         className={`absolute -left-2 h-5 w-0.5 rounded-full ${active ? "bg-gold-500" : ""}`}
       />
       <NavIcon name={icon} />
-      {label}
+      {/* Collapsed, the label is dropped from the flow but never from the
+          accessible name — the <Link> above carries aria-label and title, so
+          the row still announces itself and still has a hover tooltip. */}
+      {collapsed ? null : label}
     </span>
   );
 }
 
-/** The nav column itself; shared verbatim by the rail and the mobile drawer. */
-function NavColumn({ pathname, isSuperUser }: { pathname: string; isSuperUser: boolean }) {
+/**
+ * The nav column itself; shared by the rail and the mobile drawer.
+ *
+ * `onToggle` is what distinguishes the two. The rail passes one and gets the
+ * collapse control in its footer; the drawer passes none and gets no control,
+ * because there is nothing there to collapse.
+ */
+function NavColumn({
+  pathname,
+  isSuperUser,
+  collapsed = false,
+  onToggle,
+}: {
+  pathname: string;
+  isSuperUser: boolean;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}) {
+  // Collapsed, the row IS the icon, so the tooltip is the only label there is.
+  const tip = (label: string) => (collapsed ? { title: label, "aria-label": label } : {});
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <nav className="mt-1 flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
         {SECTIONS.map((s) => (
-          <Link key={s.href} href={s.href} aria-current={isCurrent(pathname, s.href) ? "page" : undefined} className="block">
-            <ItemBody label={s.label} icon={s.icon} active={isCurrent(pathname, s.href)} />
+          <Link
+            key={s.href}
+            href={s.href}
+            aria-current={isCurrent(pathname, s.href) ? "page" : undefined}
+            className="block"
+            {...tip(s.label)}
+          >
+            <ItemBody label={s.label} icon={s.icon} active={isCurrent(pathname, s.href)} collapsed={collapsed} />
           </Link>
         ))}
       </nav>
       <div className="space-y-0.5 border-t border-white/10 px-3 py-3">
         {isSuperUser ? (
-          <Link href="/crm/admin" className="block">
-            <ItemBody label="Users" icon="shield" active={isCurrent(pathname, "/crm/admin")} />
+          <Link href="/crm/admin" className="block" {...tip("Users")}>
+            <ItemBody label="Users" icon="shield" active={isCurrent(pathname, "/crm/admin")} collapsed={collapsed} />
           </Link>
         ) : null}
         {/* A plain <a>: logout is an API route, not a client navigation. */}
         <a
           href="/api/auth/logout"
-          className="flex items-center gap-2.5 rounded-md px-3 py-2 text-sm text-paper-50/60 transition-colors hover:bg-white/5 hover:text-paper-50"
+          className={`flex items-center rounded-md py-2 text-sm text-paper-50/60 transition-colors hover:bg-white/5 hover:text-paper-50 ${
+            collapsed ? "justify-center px-0" : "gap-2.5 px-3"
+          }`}
+          {...tip("Sign out")}
         >
           <NavIcon name="exit" />
-          Sign out
+          {collapsed ? null : "Sign out"}
         </a>
+        {onToggle ? (
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
+            title={collapsed ? "Expand navigation" : "Collapse navigation"}
+            className={`flex w-full items-center rounded-md py-2 text-sm text-paper-50/60 transition-colors hover:bg-white/5 hover:text-paper-50 ${
+              collapsed ? "justify-center px-0" : "gap-2.5 px-3"
+            }`}
+          >
+            <NavIcon name={collapsed ? "expand" : "collapse"} />
+            {collapsed ? null : "Collapse"}
+          </button>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function Brand() {
+function Brand({ collapsed = false }: { collapsed?: boolean }) {
   return (
-    <Link href="/crm" className="flex h-14 shrink-0 items-center gap-2.5 px-5 text-sm font-semibold tracking-wide text-paper-50">
+    <Link
+      href="/crm"
+      className={`flex h-14 shrink-0 items-center text-sm font-semibold tracking-wide text-paper-50 ${
+        collapsed ? "justify-center px-0" : "gap-2.5 px-5"
+      }`}
+      {...(collapsed ? { title: site.shortName, "aria-label": site.shortName } : {})}
+    >
       {/* Reversed: the navy disc on the navy rail would be a hole. */}
       <BtbMark simplified variant="reversed" className="h-[1.35rem] w-auto shrink-0" />
-      {site.shortName}
+      {collapsed ? null : site.shortName}
     </Link>
   );
 }
 
-export function CrmChrome({ isSuperUser = false }: { isSuperUser?: boolean }) {
+export function CrmChrome({
+  isSuperUser = false,
+  defaultCollapsed = false,
+}: {
+  isSuperUser?: boolean;
+  /**
+   * Read from the cookie by the layout on the server. Seeding state from it —
+   * rather than reading storage on mount — is what makes the first paint the
+   * right width. See lib/crm/rail.ts.
+   */
+  defaultCollapsed?: boolean;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+
+  // Write-through: the state is the truth for this tab, the cookie is what the
+  // NEXT server render reads. The write is in the handler rather than an effect
+  // on `collapsed`, because an effect would also fire on mount and rewrite the
+  // cookie with the value the server had just supplied — and it is not inside
+  // the state updater either, which React is free to call twice.
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    document.cookie = `${RAIL_COOKIE}=${railCookieValue(next)}; path=/; max-age=${RAIL_COOKIE_MAX_AGE}; samesite=lax`;
+  };
 
   // Close the drawer when a navigation lands. Keyed on pathname, not on click:
   // closing at click time would blank the nav while the old page is still on
@@ -204,9 +298,18 @@ export function CrmChrome({ isSuperUser = false }: { isSuperUser?: boolean }) {
     <>
       {/* ---- lg+: the rail. Sticky, so it never scrolls away; the pages scroll
            beside it inside the layout's flex row. ---- */}
-      <aside className="hidden w-60 shrink-0 bg-navy-950 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
-        <Brand />
-        <NavColumn pathname={pathname} isSuperUser={isSuperUser} />
+      <aside
+        className={`hidden shrink-0 bg-navy-950 transition-[width] duration-200 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col ${
+          collapsed ? "w-16" : "w-60"
+        }`}
+      >
+        <Brand collapsed={collapsed} />
+        <NavColumn
+          pathname={pathname}
+          isSuperUser={isSuperUser}
+          collapsed={collapsed}
+          onToggle={toggleCollapsed}
+        />
       </aside>
 
       {/* ---- below lg: a compact bar plus a drawer. ---- */}
