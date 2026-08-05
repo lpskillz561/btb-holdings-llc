@@ -914,7 +914,7 @@ that template carries it — a stack rebuild would drop it.
   scraped fresh from the source rolls. `auctions` has not been built yet, and NC
   and CO have never been imported.
 - The AI surfaces are **live**. `OPENAI_API_KEY` is in SSM as a SecureString and
-  `OPENAI_MODEL` is `gpt-5.6-luna`; the advisor was exercised end to end against
+  `OPENAI_MODEL` is `gpt-5.6-terra`; the advisor was exercised end to end against
   a real client record. Both are runtime-only, so changing either is an SSM
   write plus a redeploy, not a rebuild. **Verify a new model before setting it**
   — `GET /v1/models/<id>` with the key, then one `json_schema` completion. A

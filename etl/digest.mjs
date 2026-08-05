@@ -169,7 +169,7 @@ Write calmly and specifically. No marketing voice, no exclamation marks, no "we'
 async function chooseItems(commits, announced) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY is required.");
-  const model = process.env.OPENAI_MODEL || "gpt-5.6-luna";
+  const model = process.env.OPENAI_MODEL || "gpt-5.6-terra";
 
   const user = [
     "COMMITS IN THIS DEPLOY:",

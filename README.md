@@ -251,7 +251,7 @@ There is no test suite. Verify by exercising the running app — and note that
 | `CRM_DEFAULT_USEFUL_LIFE_YEARS` | no | Default `5` |
 | `CRM_DEFAULT_OCCUPANCY_BPS` / `CRM_DEFAULT_OPEX_BPS` | no | `7000` / `3500` |
 | `CRM_DEFAULT_DEPOSIT_BPS` | no | Default `1000` (10%). The deposit that produces 10:1. The strategy deck says 13% and the executed agreements are 12.4% — reconcile there, change it here. |
-| `OPENAI_API_KEY` / `OPENAI_MODEL` | for AI | SecureString in SSM. Model defaults to `gpt-4o`; production runs `gpt-5.6-luna`. **Verify a model id before setting it** — a wrong one is accepted by SSM and by the deploy, and fails at request time on all three AI surfaces. |
+| `OPENAI_API_KEY` / `OPENAI_MODEL` | for AI | SecureString in SSM. Model defaults to `gpt-4o`; production runs `gpt-5.6-terra`. **Verify a model id before setting it** — a wrong one is accepted by SSM and by the deploy, and fails at request time on all three AI surfaces. |
 
 ---
 
