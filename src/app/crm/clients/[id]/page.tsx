@@ -68,19 +68,36 @@ export default async function ClientPage({ params }: { params: Promise<{ id: str
         eyebrow="Client"
         title={detail.client.name}
         intro={summary}
-        breadcrumb={[{ href: "/crm", label: "CRM" }]}
+        // The rail already renders "BTB /" ahead of this, and the section this
+        // record belongs to is now a real page — so the crumb points there
+        // rather than back at the dashboard.
+        breadcrumb={[{ href: "/crm/clients", label: "Clients" }]}
         actions={
           // Scoped to this client, so the deck opens with their name on it and
           // the terms sized to the write-off on their record rather than to a
           // generic tier. See lib/crm/presentation.ts.
-          <a
-            href={`/crm/present?client=${detail.client.id}`}
-            target="_blank"
-            rel="noopener"
-            className="sf-btn-brand shrink-0"
-          >
-            Present to this client
-          </a>
+          //
+          // The first-call track by default — this button is pressed before the
+          // first conversation far more often than before the CPA's. The full
+          // deck is one click away on the deck's own start gate.
+          <div className="flex shrink-0 gap-2">
+            <a
+              href={`/crm/present?track=full&client=${detail.client.id}`}
+              target="_blank"
+              rel="noopener"
+              className="sf-btn-neutral"
+            >
+              Full deck
+            </a>
+            <a
+              href={`/crm/present?track=first-call&client=${detail.client.id}`}
+              target="_blank"
+              rel="noopener"
+              className="sf-btn-brand"
+            >
+              Present to this client
+            </a>
+          </div>
         }
       />
       <ClientCard

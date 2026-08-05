@@ -38,6 +38,11 @@ import { site } from "@/lib/site";
  */
 const SECTIONS = [
   { href: "/crm", label: "Overview", icon: "home" },
+  // Clients ranks above the documents because it is the record everything else
+  // hangs off, and it has its own section rather than living only on the
+  // Overview: reaching an account through the dashboard meant scrolling past
+  // the whole summary every time.
+  { href: "/crm/clients", label: "Clients", icon: "users" },
   // Second, right under Overview: the board is what the team works FROM each
   // day, so it sits with the dashboard rather than filed after the views of the
   // book. The dashboard's own list links here too.
@@ -45,6 +50,9 @@ const SECTIONS = [
   // With the board rather than filed with the documents: what is on today and
   // what was said yesterday is work-in-hand, not a view of the book.
   { href: "/crm/meetings", label: "Meetings", icon: "calendar" },
+  // The deck library. Note the href — /crm/presentATIONS is ours; /crm/present
+  // is the client-facing deck and carries no chrome at all. See lib/crm/routes.
+  { href: "/crm/presentations", label: "Presentations", icon: "slides" },
   { href: "/crm/proposals", label: "Proposals", icon: "doc" },
   { href: "/crm/contracts", label: "Contracts", icon: "pen" },
   // BTB's own land, distinct from Holdings, which is the client-owned homes.
@@ -53,7 +61,7 @@ const SECTIONS = [
   { href: "/crm/financials", label: "Financials", icon: "chart" },
 ] as const;
 
-type IconName = (typeof SECTIONS)[number]["icon"] | "users" | "exit";
+type IconName = (typeof SECTIONS)[number]["icon"] | "shield" | "exit";
 
 /** Minimal 1.5-stroke line icons; currentColor so state styling is free. */
 const ICON_PATHS: Record<IconName, string> = {
@@ -66,6 +74,11 @@ const ICON_PATHS: Record<IconName, string> = {
   board: "M4 5h16v14H4zM9.33 5v14M14.67 5v14",
   calendar: "M4 6h16v14H4zM4 10h16M8.5 4v3M15.5 4v3",
   users: "M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.5 2.9-5 5.5-5s5 1.5 5.5 5M15.5 10.5a3 3 0 1 0-1.4-5.8M15.8 15.3c2.3.3 4.2 1.7 4.7 4.7",
+  slides: "M3 4.5h18v11.5H3zM12 16v3.5M8.5 20.5h7",
+  // Account administration, distinct from the Clients list above — the same
+  // "users" glyph on both would put the allow-list and the book of business
+  // under one symbol, which is the one confusion worth avoiding on this rail.
+  shield: "M12 3.2l7 2.8v5.4c0 4.1-2.9 7.4-7 8.6-4.1-1.2-7-4.5-7-8.6V6zM9.3 12l1.9 1.9 3.5-3.6",
   exit: "M14 4h6v16h-6M10 8l-4 4 4 4M6 12h11",
 };
 
@@ -138,7 +151,7 @@ function NavColumn({ pathname, isSuperUser }: { pathname: string; isSuperUser: b
       <div className="space-y-0.5 border-t border-white/10 px-3 py-3">
         {isSuperUser ? (
           <Link href="/crm/admin" className="block">
-            <ItemBody label="Users" icon="users" active={isCurrent(pathname, "/crm/admin")} />
+            <ItemBody label="Users" icon="shield" active={isCurrent(pathname, "/crm/admin")} />
           </Link>
         ) : null}
         {/* A plain <a>: logout is an API route, not a client navigation. */}

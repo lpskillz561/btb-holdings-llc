@@ -23,6 +23,7 @@
 import type { ReactNode } from "react";
 import { fmtMoney, fmtPct } from "@/lib/crm/format";
 import { site } from "@/lib/site";
+import { DEFAULT_TRACK, resolveSlideIds, type DeckTrack } from "@/lib/crm/decks";
 import type { PresentationFigures } from "@/lib/crm/presentation";
 import type { Slide } from "./Deck";
 import { LeverageBars, RevenueSplitBar, StructureDiagram, TierTable } from "./Charts";
@@ -110,16 +111,50 @@ function Authorities({ items }: { items: string[] }) {
 
 export function buildSlides(
   figures: PresentationFigures,
-  opts: { clientName?: string | null } = {},
+  opts: { clientName?: string | null; track?: DeckTrack } = {},
 ): Slide[] {
   const { executed, sized, tiers, multiUnitCashSavedCents, proForma, lossLimitation, constants } =
     figures;
+  const track = opts.track ?? DEFAULT_TRACK;
   // The sized illustration when we know what the prospect is solving for,
   // otherwise the deal that has actually been signed. Never an invented number.
   const headline = sized ?? executed;
   const years = Math.round(constants.noteTermMonths / 12);
   // Whole rates print clean ("11%"); the executed 12.4% keeps its decimal.
   const pctLabel = (bps: number) => fmtPct(bps, { digits: bps % 100 === 0 ? 0 : 1 });
+
+  // `firstCall` marks the three that survive the short track. See the comment on
+  // the limits slide for why these three.
+  const LIMITS: { head: string; body: string; firstCall?: true }[] = [
+    {
+      head: "§461(l) caps the loss you can use this year",
+      body: `Business losses offset other income up to ${fmtMoney(lossLimitation.currentSingleCents)} single and ${fmtMoney(lossLimitation.currentJointCents)} jointly for ${lossLimitation.currentYear} (${fmtMoney(lossLimitation.priorSingleCents)} / ${fmtMoney(lossLimitation.priorJointCents)} for ${lossLimitation.priorYear}). Anything above that carries forward as an NOL — deferred, not lost.`,
+      firstCall: true,
+    },
+    {
+      head: "The note must be recourse",
+      body: "The deduction rests on at-risk basis under §465. It is guaranteed by and recourse to the Trust, which is exactly why it works — and why the structure is not optional.",
+    },
+    {
+      head: "Recapture is real",
+      body: "Selling the unit early, or converting it to personal use, claws the deduction back as ordinary income. There is no buyback in this programme, but a disposition is still a disposition.",
+      firstCall: true,
+    },
+    {
+      head: "Participation has to be documented",
+      body: "The IRS can ask for the records that establish material participation. The Trustee maintains them and provides them.",
+    },
+    {
+      head: "Placed in service is a date",
+      body: "The deduction lands in the year the unit is actually placed in service. Ordering in December and taking delivery in March moves it a year.",
+      firstCall: true,
+    },
+    {
+      head: "Enforceability of the note",
+      body: "Our opinion concludes the note is enforceable — written, secured, with offer, acceptance and consideration — while noting the taxpayer carries the burden of showing it. We say so rather than waiting to be asked.",
+    },
+  ];
+  const limits = track === "full" ? LIMITS : LIMITS.filter((item) => item.firstCall);
 
   const slides: Slide[] = [
     {
@@ -609,36 +644,32 @@ export function buildSlides(
           title="What your CPA will raise — before they do"
           lede="These are real, they are in our own file, and none of them is a reason not to proceed. They are reasons to size the deal correctly."
         >
-          <div className="grid grid-cols-2 gap-x-[3cqw] gap-y-[2.2cqh]">
-            {[
-              [
-                "§461(l) caps the loss you can use this year",
-                `Business losses offset other income up to ${fmtMoney(lossLimitation.currentSingleCents)} single and ${fmtMoney(lossLimitation.currentJointCents)} jointly for ${lossLimitation.currentYear} (${fmtMoney(lossLimitation.priorSingleCents)} / ${fmtMoney(lossLimitation.priorJointCents)} for ${lossLimitation.priorYear}). Anything above that carries forward as an NOL — deferred, not lost.`,
-              ],
-              [
-                "The note must be recourse",
-                "The deduction rests on at-risk basis under §465. It is guaranteed by and recourse to the Trust, which is exactly why it works — and why the structure is not optional.",
-              ],
-              [
-                "Recapture is real",
-                "Selling the unit early, or converting it to personal use, claws the deduction back as ordinary income. There is no buyback in this programme, but a disposition is still a disposition.",
-              ],
-              [
-                "Participation has to be documented",
-                "The IRS can ask for the records that establish material participation. The Trustee maintains them and provides them.",
-              ],
-              [
-                "Placed in service is a date",
-                "The deduction lands in the year the unit is actually placed in service. Ordering in December and taking delivery in March moves it a year.",
-              ],
-              [
-                "Enforceability of the note",
-                "Our opinion concludes the note is enforceable — written, secured, with offer, acceptance and consideration — while noting the taxpayer carries the burden of showing it. We say so rather than waiting to be asked.",
-              ],
-            ].map(([head, body]) => (
+          {/* Six on the full deck, three on the first call — and which three is
+              not a matter of taste. §461(l) changes the number they heard two
+              slides ago, recapture is the question that arrives after they have
+              told a spouse about it, and the placed-in-service date is the only
+              one with a deadline attached. The other three are answers to
+              questions a CPA asks, and the CPA is on the next call.
+
+              The slide is trimmed rather than dropped. A short deck that cuts
+              its own caveats is a worse deck, not a shorter one. */}
+          <div
+            className={`grid gap-x-[3cqw] gap-y-[2.2cqh] ${
+              limits.length > 3 ? "grid-cols-2" : "grid-cols-3"
+            }`}
+          >
+            {limits.map(({ head, body }) => (
               <div key={head}>
-                <p className="text-[0.92em] font-semibold text-paper-50">{head}</p>
-                <p className="mt-[0.7cqh] text-[0.75em] leading-relaxed text-paper-50/60">{body}</p>
+                <p className={limits.length > 3 ? "text-[0.92em] font-semibold text-paper-50" : "text-[1em] font-semibold text-paper-50"}>
+                  {head}
+                </p>
+                <p
+                  className={`mt-[0.7cqh] leading-relaxed text-paper-50/60 ${
+                    limits.length > 3 ? "text-[0.75em]" : "text-[0.82em]"
+                  }`}
+                >
+                  {body}
+                </p>
               </div>
             ))}
           </div>
@@ -704,5 +735,15 @@ export function buildSlides(
     },
   ];
 
-  return slides;
+  // The track selects AND reorders — the first-call deck puts the leverage
+  // slide before the doctrine, which is the whole point of it. Building every
+  // slide and then picking is deliberate: it costs nothing (these are React
+  // elements, not renders) and it means a track cannot name a slide that does
+  // not exist without failing loudly here rather than silently showing 7 of 8.
+  const byId = new Map(slides.map((slide) => [slide.id, slide]));
+  return resolveSlideIds(track, Boolean(sized)).map((id) => {
+    const slide = byId.get(id);
+    if (!slide) throw new Error(`Deck track "${track}" names unknown slide "${id}"`);
+    return slide;
+  });
 }

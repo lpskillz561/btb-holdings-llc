@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RecordHeader } from "@/components/crm/RecordHeader";
 import { ClientsBoard } from "@/components/crm/ClientsBoard";
@@ -49,17 +50,28 @@ export default async function CrmPage() {
         title="Client CRM"
         intro="Every prospect, what they're solving for, what we've proposed, and what they own."
         actions={
-          // A new tab, deliberately: the presenter shares that one tab in Meet
-          // and keeps the CRM open behind it. Opening in place would put the
-          // pipeline on the shared screen the moment they finish presenting.
-          <a
-            href="/crm/present"
-            target="_blank"
-            rel="noopener"
-            className="sf-btn-brand shrink-0"
-          >
-            Show presentation
-          </a>
+          <div className="flex shrink-0 gap-2">
+            <Link href="/crm/presentations" className="sf-btn-neutral">
+              All decks
+            </Link>
+            {/* A new tab, deliberately: the presenter shares that one tab in
+                Meet and keeps the CRM open behind it. Opening in place would put
+                the pipeline on the shared screen the moment they finish
+                presenting.
+
+                The track is NAMED rather than left to the default. A bare
+                /crm/present still opens the full deck for anyone holding that
+                link, and the button people actually press opens the short one —
+                which is the deck this is for. */}
+            <a
+              href="/crm/present?track=first-call"
+              target="_blank"
+              rel="noopener"
+              className="sf-btn-brand"
+            >
+              Show presentation
+            </a>
+          </div>
         }
       />
 
@@ -157,7 +169,17 @@ export default async function CrmPage() {
           </div>
 
           <div>
-            <h2 className="mb-4 text-lg font-semibold text-ink-900">Clients</h2>
+            <div className="mb-4 flex items-baseline justify-between gap-4">
+              <h2 className="text-lg font-semibold text-ink-900">Clients</h2>
+              {/* The same board has its own section now. This link is what
+                  makes that discoverable from the screen people already open. */}
+              <Link
+                href="/crm/clients"
+                className="text-sm font-medium text-sf-600 hover:underline"
+              >
+                Open clients →
+              </Link>
+            </div>
             <ClientsBoard initial={clients} states={states} pads={pads} />
           </div>
         </div>

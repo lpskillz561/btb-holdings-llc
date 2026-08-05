@@ -31,7 +31,23 @@ export interface Slide {
   node: React.ReactNode;
 }
 
-export function Deck({ slides }: { slides: Slide[] }) {
+export function Deck({
+  slides,
+  trackLabel,
+  startAside,
+}: {
+  slides: Slide[];
+  /** Which deck this is, named on the start gate so the wrong one is caught. */
+  trackLabel?: string;
+  /**
+   * Rendered under the start button — the track switch lives here rather than
+   * inside this component, which knows nothing about what a track is. It is on
+   * the START GATE and nowhere else: once the presenter has begun, the tab is
+   * being screen-shared, and a control that lists our other decks is our
+   * tooling appearing in front of a prospect.
+   */
+  startAside?: React.ReactNode;
+}) {
   const [index, setIndex] = useState(0);
   const [started, setStarted] = useState(false);
   const [overview, setOverview] = useState(false);
@@ -135,7 +151,9 @@ export function Deck({ slides }: { slides: Slide[] }) {
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gold-500">
               BTB Holdings
             </p>
-            <h1 className="mt-4 font-serif text-4xl font-medium">Client presentation</h1>
+            <h1 className="mt-4 font-serif text-4xl font-medium">
+              {trackLabel ?? "Client presentation"}
+            </h1>
             <p className="mt-4 text-paper-50/70">
               {slides.length} slides. Arrow keys or space to move, <kbd className="deck-kbd">F</kbd>{" "}
               for fullscreen, <kbd className="deck-kbd">O</kbd> for the slide list.
@@ -150,6 +168,7 @@ export function Deck({ slides }: { slides: Slide[] }) {
             <p className="mt-4 text-sm text-paper-50/45">
               Share this tab in Google Meet once it is fullscreen.
             </p>
+            {startAside}
           </div>
         </div>
       ) : (

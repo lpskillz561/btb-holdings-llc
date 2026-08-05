@@ -14,5 +14,18 @@
  * Pure and dependency-free so client components can import it.
  */
 export function isClientFacingRoute(pathname: string): boolean {
-  return pathname.endsWith("/print") || pathname === "/crm/present";
+  return pathname.endsWith("/print") || isPresentRoute(pathname);
+}
+
+/**
+ * The deck, and anything nested under it — but NOT `/crm/presentations`, which
+ * is the internal library that lists the decks and must keep its nav.
+ *
+ * The trailing slash is the whole guard. `startsWith("/crm/present")` reads as
+ * the obvious simplification and is wrong: it also matches
+ * `/crm/presentations`, which would strip the chrome off an internal page and
+ * leave whoever opened it with no way back. Do not "tidy" this.
+ */
+function isPresentRoute(pathname: string): boolean {
+  return pathname === "/crm/present" || pathname.startsWith("/crm/present/");
 }

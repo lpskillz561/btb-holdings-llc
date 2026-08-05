@@ -266,6 +266,38 @@ write-off on their record.
 - **It is under `/crm` because that is what gates it.** The middleware matcher is
   `/crm/:path*`. A top-level `/present` would be **public** — the deck names our
   terms, our deposit and our authorities.
+- **There are TWO decks and ONE set of slides.** `lib/crm/decks.ts` holds the
+  catalogue; a *track* is nothing but an ordering of slide ids over the single
+  array in `slides.tsx`. **Never add a second slide module** — two files quoting
+  the same money drift the first time a figure changes, which is the same rule
+  that put every figure in `presentation.ts` to begin with. A track naming a
+  slide that does not exist **throws** in `buildSlides` rather than silently
+  rendering 7 of 8.
+  - `full` — all 17 slides. The follow-up call, and the call the CPA joins.
+  - `first-call` — 8 slides, and it **reorders**: the leverage slide moves ahead
+    of the structure and the authorities. On the full deck the room sits through
+    six slides of doctrine before a single number, which is the pacing complaint
+    that produced the track. The limits slide is **trimmed, not cut** — three of
+    its six items (§461(l), recapture, placed-in-service) survive. A short deck
+    that drops its own caveats is a worse deck, not a shorter one.
+  - The `"terms|sizes"` position resolves to the terms slide when the deck is
+    sized to a client and the tier table otherwise, so the short deck always has
+    one money slide and never shows the executed sample as if it were theirs.
+- **A bare `/crm/present` still means the FULL deck** (`DEFAULT_TRACK`). Every
+  button in the UI names `?track=` explicitly, and the buttons people press —
+  Overview and the client card — open `first-call`. The default is left alone
+  because that URL is in calendar invites and bookmarks, and a link that quietly
+  starts showing a different deck is how a presenter gets surprised on a shared
+  screen. An unrecognised `?track=` falls back rather than 404s.
+- **The track switch is on the START GATE only**, passed in as `Deck`'s
+  `startAside` — `Deck` itself knows nothing about tracks. Once the presenter has
+  begun, the tab is being screen-shared, and a control listing our other decks is
+  our tooling in front of a prospect.
+- **`/crm/presentations` is the internal library** — the decks, what each is for,
+  its slide list, and a per-client "present" row. Slide titles there are read
+  from `buildSlides`, not re-listed, so the contents shown cannot drift from the
+  deck that opens. Every link out of it is `target="_blank"`: the presenter
+  shares that one tab and keeps the book behind it.
 - **`lib/crm/presentation.ts` computes every figure** through `deal.ts` and
   `economics.ts`. No money is typed into a slide, so a slide cannot disagree with
   the contract it becomes.
@@ -298,6 +330,12 @@ write-off on their record.
   `AskAi` off this route and off `/print`. It replaced two copies of
   `endsWith("/print")`; the cost of missing one is our internal tooling appearing
   in a prospect's screen share.
+
+  **It matches `/crm/present/` WITH THE TRAILING SLASH, and that is load-bearing
+  now that `/crm/presentations` exists.** The obvious simplification —
+  `startsWith("/crm/present")` — also swallows the library page, stripping the
+  nav off an internal screen and leaving whoever opened it with no way back. Do
+  not tidy it.
 - **Chart colour was validated, not chosen.** The accent `#b08a2c` and the
   neutral ramp in `components/present/Charts.tsx` were run against the navy
   surface — the brand's `gold-500` fails the lightness band there and reads
@@ -306,6 +344,22 @@ write-off on their record.
 - **The canvas is fixed at 16:9 and scaled, never reflowed** (`.deck-canvas`,
   `cqw` units). A deck that reflows shows the presenter and the room different
   line breaks.
+
+### `/crm/clients` and the Overview render the SAME board
+
+`ClientsBoard` is mounted twice — on the dashboard and on its own section — and
+that is one component, not a copy. The two answer different questions ("how does
+the book look today" against "find me this account"), and a second list would be
+two places to add a column and one place to forget it. Clients had been reachable
+only through the dashboard, so opening an account meant scrolling past eight
+figures, the pipeline, the board and the activity feed; every other record type
+already had its own section.
+
+Consequences worth knowing: the nav item lights up on `/crm/clients/[id]` too
+(`isCurrent` matches the prefix), the client card's breadcrumb points at the
+section rather than back at the dashboard, and the rail's own "Users" item is
+account administration — it was given a distinct glyph so the allow-list and the
+book of business do not sit under one symbol.
 
 ### Meetings and call summaries — `/crm/meetings`
 
