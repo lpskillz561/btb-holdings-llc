@@ -126,12 +126,12 @@ export function AdvisorTab({ client, aiEnabled }: { client: CrmClient; aiEnabled
                 onClick={() => void openThread(conversation.id)}
                 className={`w-full rounded-md px-3 py-2 text-left text-sm transition ${
                   conversation.id === activeId
-                    ? "bg-navy-900/5 font-medium text-navy-900"
-                    : "text-navy-900/65 hover:bg-paper-100"
+                    ? "bg-ink-900/5 font-medium text-ink-900"
+                    : "text-ink-900/65 hover:bg-ink-200/60"
                 }`}
               >
                 <span className="line-clamp-2">{conversation.title}</span>
-                <span className="mt-0.5 block text-xs text-navy-900/40">
+                <span className="mt-0.5 block text-xs text-ink-900/40">
                   {fmtAgo(conversation.updated_at)}
                 </span>
               </button>
@@ -140,11 +140,11 @@ export function AdvisorTab({ client, aiEnabled }: { client: CrmClient; aiEnabled
         </ul>
       </aside>
 
-      <div className="card flex min-h-[28rem] flex-col">
+      <div className="sf-card flex min-h-[28rem] flex-col">
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
           {messages.length === 0 && !sending ? (
             <div className="py-6">
-              <p className="text-sm text-navy-900/60">
+              <p className="text-sm text-ink-900/60">
                 Ask about {client.name}. The advisor knows their tax profile, land criteria,
                 holdings and proposal history.
               </p>
@@ -154,7 +154,7 @@ export function AdvisorTab({ client, aiEnabled }: { client: CrmClient; aiEnabled
                     key={starter}
                     type="button"
                     onClick={() => void send(starter)}
-                    className="rounded-full border border-paper-300 px-3 py-1.5 text-xs text-navy-900/70 transition hover:border-gold-500 hover:text-gold-600"
+                    className="rounded-full border border-ink-300 px-3 py-1.5 text-xs text-ink-900/70 transition hover:border-accent-500 hover:text-accent-600"
                   >
                     {starter}
                   </button>
@@ -170,8 +170,8 @@ export function AdvisorTab({ client, aiEnabled }: { client: CrmClient; aiEnabled
                 <div
                   className={`max-w-[85%] rounded-lg px-4 py-3 text-sm ${
                     message.role === "user"
-                      ? "bg-navy-900 text-paper-50"
-                      : "bg-paper-100 text-navy-900/85"
+                      ? "bg-sf-500 text-white"
+                      : "bg-ink-200/60 text-ink-900/85"
                   }`}
                 >
                   {message.role === "user" ? (
@@ -184,14 +184,14 @@ export function AdvisorTab({ client, aiEnabled }: { client: CrmClient; aiEnabled
             ))
           )}
           {sending && (
-            <p className="text-sm text-navy-900/45" role="status">
+            <p className="text-sm text-ink-900/45" role="status">
               Thinking…
             </p>
           )}
           <div ref={endRef} />
         </div>
 
-        <div className="border-t border-paper-200 p-4">
+        <div className="border-t border-ink-200 p-4">
           <ErrorNote>{error}</ErrorNote>
           <form
             onSubmit={(e) => {

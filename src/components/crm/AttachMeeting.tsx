@@ -63,7 +63,7 @@ export function AttachMeeting({
       >
         {saving ? "Filing…" : "File"}
       </button>
-      {error && <span className="text-sm text-red-700">{error}</span>}
+      {error && <span className="text-sm text-err-700">{error}</span>}
     </div>
   );
 }

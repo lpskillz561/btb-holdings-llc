@@ -103,7 +103,7 @@ export function RegisterForm({
             className="field"
             placeholder="Provided by Ziora"
           />
-          <p className="mt-1.5 text-xs text-navy-900/50">
+          <p className="mt-1.5 text-xs text-ink-900/50">
             Provided by your Ziora relationship manager.
           </p>
         </div>
@@ -112,13 +112,13 @@ export function RegisterForm({
       {error && (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
+          className="rounded-md border border-err-500/30 bg-err-50 px-3.5 py-2.5 text-sm text-err-700"
         >
           {error}
         </p>
       )}
 
-      <button type="submit" disabled={loading} className="btn-gold w-full">
+      <button type="submit" disabled={loading} className="sf-btn-brand w-full py-2.5">
         {loading ? "Creating account…" : "Create account"}
       </button>
     </form>

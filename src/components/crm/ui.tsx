@@ -1,9 +1,9 @@
 "use client";
 
-// Shared CRM primitives, in the Salesforce Lightning idiom.
+// Shared CRM primitives, in the internal look.
 //
 // These are INTERNAL ONLY — no print page imports this module, which is what
-// makes the split possible: staff screens get Lightning's density and blue,
+// makes the split possible: staff screens get the indigo, theme-aware look,
 // while proposals and contracts keep the navy/gold private-bank look that is
 // worth something in front of a client's CPA.
 //
@@ -24,7 +24,7 @@ import type { Tone } from "@/lib/crm/tone";
 
 const TONES: Record<Tone, string> = {
   neutral: "bg-ink-100 text-ink-700 ring-ink-200",
-  gold: "bg-gold-500/15 text-gold-600 ring-gold-500/30",
+  gold: "bg-accent-500/15 text-accent-600 ring-accent-500/30",
   green: "bg-ok-100 text-ok-700 ring-ok-500/25",
   amber: "bg-warn-100 text-warn-700 ring-warn-500/30",
   red: "bg-err-100 text-err-700 ring-err-500/25",
@@ -34,7 +34,7 @@ const TONES: Record<Tone, string> = {
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: Tone }) {
   return (
     <span
-      className={`inline-flex items-center rounded-sm px-2 py-0.5 text-xs font-medium ring-1 ${TONES[tone]}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${TONES[tone]}`}
     >
       {children}
     </span>
@@ -55,16 +55,20 @@ interface StatProps {
 /** The body of one figure. Bare — StatTile and StatStrip supply the surface. */
 export function Stat({ label, value, hint, tone = "navy" }: StatProps) {
   return (
-    <div className="bg-white p-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-600">{label}</p>
+    <div className="group bg-card p-4 transition-colors hover:bg-card-2">
+      <p className="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-ink-500">
+        {label}
+      </p>
+      {/* Tabular figures: these sit in a row of four and are read by comparing
+          them across, which proportional digits make measurably harder. */}
       <p
-        className={`mt-1.5 text-2xl font-semibold leading-tight ${
-          tone === "gold" ? "text-gold-600" : "text-ink-900"
+        className={`sf-num mt-2 text-[1.65rem] font-semibold leading-none tracking-tight ${
+          tone === "gold" ? "text-accent-600" : "text-ink-900"
         }`}
       >
         {value}
       </p>
-      {hint && <p className="mt-1 text-xs text-ink-600">{hint}</p>}
+      {hint && <p className="mt-2 text-xs leading-snug text-ink-600">{hint}</p>}
     </div>
   );
 }
@@ -82,7 +86,7 @@ export function StatTile(props: StatProps) {
  *
  * The overview used to show eight separate cards in two grids, and eight boxes
  * of equal visual weight is noise — nothing reads as more important than
- * anything else. A single band with internal rules is the Lightning pattern for
+ * anything else. A single band with internal rules is the right pattern for
  * this, and the gap-px-over-grey trick gives clean hairlines that wrap
  * correctly at every column count, which per-cell borders do not.
  */
@@ -118,9 +122,9 @@ export function SectionHeading({
 
 export function EmptyState({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="rounded-lg border border-dashed border-ink-300 bg-white p-8 text-center">
-      <p className="text-sm text-ink-600">{children}</p>
-      {action && <div className="mt-4 flex justify-center">{action}</div>}
+    <div className="rounded-card border border-dashed border-ink-300 bg-card-2 p-10 text-center">
+      <p className="mx-auto max-w-md text-sm leading-relaxed text-ink-600">{children}</p>
+      {action && <div className="mt-5 flex justify-center">{action}</div>}
     </div>
   );
 }
@@ -130,7 +134,7 @@ export function ErrorNote({ children }: { children: ReactNode }) {
   return (
     <p
       role="alert"
-      className="rounded border-l-4 border-err-500 bg-err-100 px-3 py-2 text-sm text-err-700"
+      className="rounded-pill border border-err-500/25 bg-err-50 px-3.5 py-2.5 text-sm text-err-700"
     >
       {children}
     </p>
@@ -296,7 +300,7 @@ export function Dialog({
   // and the problem cannot recur.
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 py-10"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink-900/40 p-4 py-10 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -306,15 +310,15 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`sf-card w-full shadow-lift ${wide ? "max-w-3xl" : "max-w-xl"}`}
+        className={`sf-card w-full animate-pop-in rounded-2xl shadow-pop ${wide ? "max-w-3xl" : "max-w-xl"}`}
       >
         <div className="flex items-center justify-between border-b border-ink-200 px-6 py-4">
-          <h2 className="text-base font-bold text-ink-900">{title}</h2>
+          <h2 className="text-base font-semibold text-ink-900">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-ink-500 transition hover:bg-ink-100 hover:text-ink-900"
+            className="rounded-full p-1.5 text-ink-500 transition hover:bg-ink-200/70 hover:text-ink-900"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
@@ -343,11 +347,15 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
-          <tr className="border-b border-ink-200 bg-ink-100 text-left">
+          {/* The header is recessed rather than raised — card-2 is a step BACK
+              from the card fill in light mode and a step forward in dark, which
+              is what keeps "this is a header, not a row" reading the same way in
+              both appearances. */}
+          <tr className="border-b border-ink-200 bg-card-2 text-left">
             {head.map((h, i) => (
               <th
                 key={i}
-                className="whitespace-nowrap px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-600"
+                className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-ink-600"
               >
                 {h}
               </th>
@@ -361,5 +369,5 @@ export function Table({ head, children }: { head: ReactNode[]; children: ReactNo
 }
 
 export function Td({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <td className={`px-3 py-2 align-middle text-ink-800 ${className}`}>{children}</td>;
+  return <td className={`px-3 py-2.5 align-middle text-ink-800 ${className}`}>{children}</td>;
 }

@@ -10,7 +10,7 @@
 // Units follow the same rule as ClientForm: the form holds whole dollars and
 // whole percents under the API's own column names, and lib/crm/db.ts converts.
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type FormEvent } from "react";
 import { bpsToInput, centsToInput, isoToDatetimeInput } from "@/lib/crm/format";
 import {
   CONTACT_ROLES,
@@ -26,6 +26,7 @@ import {
   UNIT_STATUSES,
   UNIT_USES,
 } from "@/lib/crm/types";
+import { AiAssist, AiText } from "./AiAssist";
 import { apiPatch, apiPost } from "./api";
 import {
   Dialog,
@@ -333,6 +334,42 @@ export function RecordDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const editing = Boolean(row?.id);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  /**
+   * The spec, translated for the model.
+   *
+   * `choice` fields are dropped: their options are database rows loaded into the
+   * dialog at render time, so a suggested value would be a raw id the model
+   * cannot know and a person cannot check. Picking which park a pad belongs to
+   * is a lookup, not an inference.
+   *
+   * The frozen columns need no handling here — lib/crm/assist.ts strips them
+   * server-side after generation, which is the guarantee that survives a caller
+   * sending whatever it likes.
+   */
+  const assistFields = useMemo(
+    () =>
+      spec.fields
+        .filter((f) => f.type !== "choice")
+        .map((f) => ({
+          name: f.name,
+          label: f.label,
+          type: f.type,
+          options: f.options,
+          hint: f.hint,
+        })),
+    [spec],
+  );
+
+  /** The first textarea on the form — where an AiText control is worth having. */
+  const notesField = spec.fields.find((f) => f.type === "textarea");
+
+  /** The account this record belongs to, if any. Drives the AI's record context. */
+  const assistClientId =
+    (typeof row?.client_id === "string" && row.client_id) ||
+    (typeof fixed?.client_id === "string" && fixed.client_id) ||
+    null;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -378,11 +415,32 @@ export function RecordDialog({
       wide
       title={`${editing ? "Edit" : "Add"} ${spec.title.toLowerCase()}`}
     >
-      <form onSubmit={onSubmit} className="space-y-5">
+      <form ref={formRef} onSubmit={onSubmit} className="space-y-5">
+        {/* Scoped to the client this record hangs off when there is one, so the
+            model gets their holdings, proposals and call summaries. `fixed`
+            carries client_id on create; on edit it comes off the row. */}
+        <AiAssist
+          formRef={formRef}
+          fields={assistFields}
+          formTitle={spec.title}
+          scopeType={assistClientId ? "client" : "global"}
+          scopeId={assistClientId}
+          label={editing ? "Fill gaps from the record" : "Fill this in from my notes"}
+        />
+
         <div className="grid gap-4 sm:grid-cols-2">
           {spec.fields.map((field) => (
             <Field key={field.name} label={field.label} hint={field.hint} span={field.span}>
               <Control spec={field} row={row} choices={choices} />
+              {field.name === notesField?.name ? (
+                <AiText
+                  formRef={formRef}
+                  name={field.name}
+                  label={`${field.label} on this ${spec.title.toLowerCase()}`}
+                  scopeType={assistClientId ? "client" : "global"}
+                  scopeId={assistClientId}
+                />
+              ) : null}
             </Field>
           ))}
         </div>
@@ -395,7 +453,7 @@ export function RecordDialog({
               type="button"
               onClick={onDelete}
               disabled={saving}
-              className="mr-auto text-sm font-semibold text-red-700 hover:underline disabled:opacity-50"
+              className="mr-auto text-sm font-semibold text-err-700 hover:underline disabled:opacity-50"
             >
               Delete
             </button>

@@ -64,11 +64,11 @@ export default async function FinancialsPage() {
               <div className="sf-card">
                 <Table head={["Client", "Received", "Spent", "Net", "Outstanding"]}>
                   {active.map((row) => (
-                    <tr key={row.client_id} className="transition hover:bg-white">
+                    <tr key={row.client_id} className="transition hover:bg-card-2">
                       <Td>
                         <Link
                           href={`/crm/clients/${row.client_id}`}
-                          className="font-medium text-ink-900 hover:text-gold-600"
+                          className="font-medium text-ink-900 hover:text-accent-600"
                         >
                           {row.client_name}
                         </Link>
@@ -77,7 +77,7 @@ export default async function FinancialsPage() {
                       <Td className="whitespace-nowrap">{fmtMoney(row.expense_cents)}</Td>
                       <Td
                         className={`whitespace-nowrap font-medium ${
-                          row.net_cents < 0 ? "text-red-700" : "text-ink-900"
+                          row.net_cents < 0 ? "text-err-700" : "text-ink-900"
                         }`}
                       >
                         {fmtMoney(row.net_cents)}
@@ -98,7 +98,7 @@ export default async function FinancialsPage() {
               <div className="sf-card">
                 <Table head={["Date", "Description", "Client", "Category", "Amount", "Status"]}>
                   {transactions.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-white">
+                    <tr key={row.id} className="transition hover:bg-card-2">
                       <Td className="whitespace-nowrap text-ink-600">
                         {fmtDate(row.occurred_on)}
                       </Td>
@@ -114,7 +114,7 @@ export default async function FinancialsPage() {
                         {row.client_id ? (
                           <Link
                             href={`/crm/clients/${row.client_id}`}
-                            className="text-ink-700 hover:text-gold-600"
+                            className="text-ink-700 hover:text-accent-600"
                           >
                             {row.client_name}
                           </Link>
@@ -125,7 +125,7 @@ export default async function FinancialsPage() {
                       <Td>{LABELS.txCategory[row.category]}</Td>
                       <Td
                         className={`whitespace-nowrap font-medium ${
-                          row.kind === "expense" ? "text-red-700" : "text-emerald-700"
+                          row.kind === "expense" ? "text-err-700" : "text-ok-700"
                         }`}
                       >
                         {row.kind === "expense" ? "−" : "+"}

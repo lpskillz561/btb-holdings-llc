@@ -23,7 +23,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
-import { Wordmark } from "@/components/Wordmark";
+import { AuthShell } from "@/components/AuthShell";
 import { emailHasCrmAccess } from "@/lib/crm/access";
 import { site } from "@/lib/site";
 
@@ -43,52 +43,46 @@ export default async function WelcomePage() {
   if (emailHasCrmAccess(session.sub)) redirect("/crm");
 
   return (
-    <section className="relative flex min-h-[78vh] items-center justify-center overflow-hidden bg-navy-950 px-6 py-20">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.07]"
-        style={{
-          background: "radial-gradient(60% 50% at 50% 0%, #d4af37 0%, transparent 70%)",
-        }}
-      />
-
-      <div className="relative w-full max-w-lg text-center">
-        <Wordmark className="mx-auto h-8 w-auto" />
-
-        <h1 className="mt-8 font-serif text-3xl font-medium text-paper-50">
-          Your account is ready
-        </h1>
-
-        <p className="mt-4 text-paper-50/70">
-          You are signed in as{" "}
-          <span className="font-medium text-paper-50">{session.sub}</span>. Access to the
-          client platform is enabled separately by your relationship manager — you will hear
-          from us once it is switched on.
-        </p>
-
-        <p className="mt-4 text-sm text-paper-50/50">
-          Nothing further is needed from you. If you were expecting access already, reply to
-          the invitation you received or contact us at {site.email}.
-        </p>
-
-        <div className="mt-10 flex items-center justify-center gap-6 text-sm">
-          {/* Deliberately a full-page navigation: this re-runs the check above,
-              so someone told "you're in now" can simply reload rather than being
-              told to clear a cookie. */}
-          <a href="/welcome" className="text-gold-400 underline-offset-4 hover:underline">
-            Check again
-          </a>
-          <a href="/api/auth/logout" className="text-paper-50/60 hover:text-paper-50">
-            Sign out
-          </a>
-        </div>
-
-        <p className="mt-10 text-xs text-paper-50/35">
-          <Link href="/login" className="hover:text-paper-50/60">
+    <AuthShell
+      variant="bare"
+      footer={
+        <p className="text-xs text-white/35">
+          <Link href="/login" className="transition-colors hover:text-white/60">
             {site.name}
           </Link>
         </p>
+      }
+    >
+      <h1 className="text-3xl font-semibold tracking-tight text-white">Your account is ready</h1>
+
+      <p className="mt-4 text-white/70">
+        You are signed in as <span className="font-medium text-white">{session.sub}</span>.
+        Access to the client platform is enabled separately by your relationship manager — you
+        will hear from us once it is switched on.
+      </p>
+
+      <p className="mt-4 text-sm text-white/45">
+        Nothing further is needed from you. If you were expecting access already, reply to the
+        invitation you received or contact us at {site.email}.
+      </p>
+
+      <div className="mt-10 flex items-center justify-center gap-3">
+        {/* Deliberately a full-page navigation: this re-runs the check above,
+            so someone told "you're in now" can simply reload rather than being
+            told to clear a cookie. */}
+        <a
+          href="/welcome"
+          className="rounded-pill bg-white/15 px-4 py-2 text-sm font-medium text-white backdrop-blur transition hover:bg-white/25"
+        >
+          Check again
+        </a>
+        <a
+          href="/api/auth/logout"
+          className="rounded-pill px-4 py-2 text-sm text-white/60 transition hover:bg-white/10 hover:text-white"
+        >
+          Sign out
+        </a>
       </div>
-    </section>
+    </AuthShell>
   );
 }

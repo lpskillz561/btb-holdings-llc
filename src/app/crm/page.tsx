@@ -135,7 +135,7 @@ export default async function CrmPage() {
                 {CLIENT_STATUSES.map((stage) => (
                   <div
                     key={stage}
-                    className="rounded-lg border border-ink-200 bg-white px-4 py-3"
+                    className="rounded-lg border border-ink-200 bg-card px-4 py-3"
                   >
                     <Badge tone={statusTone(stage)}>{LABELS.clientStatus[stage]}</Badge>
                     <p className="mt-2 text-xl font-semibold text-ink-900">

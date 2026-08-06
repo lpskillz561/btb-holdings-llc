@@ -79,7 +79,7 @@ export function MeetingCalendar({
             <div
               key={key}
               className={`min-h-28 border-b border-r border-ink-200 p-1.5 ${
-                inMonth ? "bg-white" : "bg-ink-50/60"
+                inMonth ? "bg-card" : "bg-ink-50/60"
               }`}
             >
               <div
@@ -111,7 +111,7 @@ function MeetingChip({ meeting, timeZone }: { meeting: MeetingRow; timeZone: str
   // to a filed one is how it stays unfiled forever.
   const tone = meeting.client_id
     ? "bg-sf-50 text-sf-700 hover:bg-sf-100"
-    : "bg-amber-50 text-amber-800 hover:bg-amber-100";
+    : "bg-warn-50 text-warn-700 hover:bg-warn-100";
 
   const body = (
     <span className="block truncate">

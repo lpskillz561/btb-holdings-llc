@@ -14,7 +14,7 @@
  * the figure staff quote off this page are the same figure, and both are the
  * one a proposal would freeze.
  *
- * Lightning styling, not the navy brand — this is internal tooling. See the two
+ * The internal look, not the navy brand — this is internal tooling. See the two
  * looks note in CLAUDE.md.
  */
 
@@ -251,7 +251,7 @@ function Tile({
   tone?: "navy" | "good" | "warn";
 }) {
   const colour =
-    tone === "good" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : "text-ink-900";
+    tone === "good" ? "text-ok-700" : tone === "warn" ? "text-warn-700" : "text-ink-900";
   return (
     <div className="sf-card p-4">
       <p className="flex items-start text-xs uppercase tracking-wide text-ink-600">
@@ -376,7 +376,7 @@ export function EquipmentWorkbench({
           own compliance burden to staff and are not client-facing text. */}
       <p className="-mb-4 max-w-3xl text-sm text-ink-600">
         Every field carries an{" "}
-        <span className="inline-flex h-4 w-4 translate-y-[2px] items-center justify-center rounded-full border border-ink-200 bg-white text-[10px] font-semibold text-ink-600">
+        <span className="inline-flex h-4 w-4 translate-y-[2px] items-center justify-center rounded-full border border-ink-200 bg-card text-[10px] font-semibold text-ink-600">
           i
         </span>{" "}
         with what it means and the rule behind it — hover, tab to it, or click to pin it open.
@@ -474,7 +474,7 @@ export function EquipmentWorkbench({
               swapped in ADS numbers would be the worst possible version of
               this: same layout, different regime, no notice. */}
           {!dealA.qualifiesForBonus ? (
-            <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            <div className="rounded-md border border-warn-500/35 bg-warn-50 p-4 text-sm text-warn-700">
               <strong className="font-semibold">
                 Business use does not exceed{" "}
                 {fmtPct(LISTED_PROPERTY_MIN_BUSINESS_USE_BPS, { digits: 0 })}.
@@ -490,7 +490,7 @@ export function EquipmentWorkbench({
       {/* ---- The deduction, in full ---------------------------------------- */}
       <div>
         <h2 className="sf-h mb-3">The deduction</h2>
-        <div className="card overflow-x-auto">
+        <div className="sf-card overflow-x-auto">
           <table className="sf-table w-full">
             <tbody>
               {(
@@ -566,7 +566,7 @@ export function EquipmentWorkbench({
                   </td>
                 </tr>
               ))}
-              <tr className="bg-paper-50">
+              <tr className="bg-card-2">
                 <td>
                   <span className="flex items-start font-semibold text-ink-900">
                     <span>Year-one tax benefit, gross vs after the cap</span>
@@ -581,7 +581,7 @@ export function EquipmentWorkbench({
                   <span className="text-ink-600 line-through">
                     {fmtMoney(dealA.grossTaxSavingsCents)}
                   </span>
-                  <span className="ml-3 font-semibold text-emerald-700">
+                  <span className="ml-3 font-semibold text-ok-700">
                     {fmtMoney(dealA.cappedTaxSavingsCents)}
                   </span>
                 </td>
@@ -594,7 +594,7 @@ export function EquipmentWorkbench({
       {/* ---- The month ----------------------------------------------------- */}
       <div>
         <h2 className="sf-h mb-3">The month, across {fmtNum(dealA.unitCount)} units</h2>
-        <div className="card overflow-x-auto">
+        <div className="sf-card overflow-x-auto">
           <table className="sf-table w-full">
             <thead>
               <tr>
@@ -619,7 +619,7 @@ export function EquipmentWorkbench({
                   <td className="text-right tabular-nums">{fmtMoney(line.annual)}</td>
                 </tr>
               ))}
-              <tr className="bg-paper-50 font-semibold">
+              <tr className="bg-card-2 font-semibold">
                 <td>
                   <span className="flex items-start text-ink-900">
                     <span>Net to the owner</span>
@@ -653,7 +653,7 @@ export function EquipmentWorkbench({
             <div className="sf-card p-5">
               <Controls scenario={b} set={(patch) => setB((s) => ({ ...s, ...patch }))} />
             </div>
-            <div className="card overflow-x-auto">
+            <div className="sf-card overflow-x-auto">
               <table className="sf-table w-full">
                 <thead>
                   <tr>
@@ -706,7 +706,7 @@ export function EquipmentWorkbench({
           </button>
         </div>
         {showSchedule ? (
-          <div className="card max-h-[32rem] overflow-auto">
+          <div className="sf-card max-h-[32rem] overflow-auto">
             <table className="sf-table w-full">
               <thead>
                 <tr>
@@ -725,7 +725,7 @@ export function EquipmentWorkbench({
                         jumps from month 24 to month 157 with nothing between
                         reads as a complete table to whoever prints it. */}
                     {elidedRows > 0 && i === 24 ? (
-                      <tr className="bg-paper-50">
+                      <tr className="bg-card-2">
                         <td colSpan={6} className="text-center text-xs italic text-ink-600">
                           {fmtNum(elidedRows)} months not shown
                         </td>
@@ -758,7 +758,7 @@ export function EquipmentWorkbench({
       {/* ---- Caveats -------------------------------------------------------- */}
       <div>
         <h2 className="sf-h mb-3">What goes in the proposal</h2>
-        <ul className="card space-y-3 p-5 text-sm leading-relaxed text-ink-800">
+        <ul className="sf-card space-y-3 p-5 text-sm leading-relaxed text-ink-800">
           {dealA.caveats.map((caveat) => (
             <li key={caveat} className="border-l-2 border-ink-200 pl-3">
               {caveat}
@@ -775,9 +775,9 @@ export function EquipmentWorkbench({
           line that does not add up is worth more than matching it — and none of these can leak
           into our figures, because every number on this page is derived.
         </p>
-        <ul className="card space-y-3 p-5 text-sm leading-relaxed text-ink-800">
+        <ul className="sf-card space-y-3 p-5 text-sm leading-relaxed text-ink-800">
           {MARKET_MATERIAL_NOTES.map((note) => (
-            <li key={note} className="border-l-2 border-gold-500/50 pl-3">
+            <li key={note} className="border-l-2 border-accent-500/50 pl-3">
               {note}
             </li>
           ))}

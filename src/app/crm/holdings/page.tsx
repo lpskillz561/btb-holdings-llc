@@ -70,7 +70,7 @@ export default async function HoldingsPage() {
                   head={["Unit", "Client", "Status", "Use", "Sited on", "Cost", "Placed in service", "Rent"]}
                 >
                   {units.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-white">
+                    <tr key={row.id} className="transition hover:bg-card-2">
                       <Td>
                         <span className="font-medium text-ink-900">{row.label}</span>
                         {row.model && (
@@ -82,7 +82,7 @@ export default async function HoldingsPage() {
                       <Td>
                         <Link
                           href={`/crm/clients/${row.client_id}`}
-                          className="text-ink-700 hover:text-gold-600"
+                          className="text-ink-700 hover:text-accent-600"
                         >
                           {row.client_name}
                         </Link>
@@ -97,7 +97,7 @@ export default async function HoldingsPage() {
                         {row.placed_in_service_on ? (
                           fmtDate(row.placed_in_service_on)
                         ) : (
-                          <span className="text-amber-700">Not yet</span>
+                          <span className="text-warn-700">Not yet</span>
                         )}
                       </Td>
                       <Td className="whitespace-nowrap">{fmtMoney(row.monthly_rent_cents)}</Td>
@@ -120,7 +120,7 @@ export default async function HoldingsPage() {
                   head={["Parcel", "Client", "Status", "Where", "Lot size", "Purchase price", "Purchased"]}
                 >
                   {properties.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-white">
+                    <tr key={row.id} className="transition hover:bg-card-2">
                       <Td>
                         <span className="font-medium text-ink-900">{row.label}</span>
                         {row.address && (
@@ -130,7 +130,7 @@ export default async function HoldingsPage() {
                       <Td>
                         <Link
                           href={`/crm/clients/${row.client_id}`}
-                          className="text-ink-700 hover:text-gold-600"
+                          className="text-ink-700 hover:text-accent-600"
                         >
                           {row.client_name}
                         </Link>

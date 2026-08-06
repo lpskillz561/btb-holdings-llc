@@ -39,7 +39,13 @@ export default async function ProposalPrintPage({
   const client = await getClient(proposal.client_id);
 
   return (
-    <div className="mx-auto max-w-[52rem] px-6 py-10 print:px-0 print:py-0">
+    // `theme-light` pins the theme variables to their light values for this
+    // subtree. The print routes are nested inside app/crm/layout.tsx and
+    // therefore inside `.sf-page`, whose background follows the reader's OS
+    // appearance — and a document that goes dark because someone's Mac is in
+    // dark mode is not a document anyone approved. The @media print rules force
+    // white on paper; this is the same guarantee on screen.
+    <div className="theme-light mx-auto max-w-[52rem] px-6 py-10 print:px-0 print:py-0">
       <div className="no-print mb-8 flex items-center justify-between border-b border-paper-200 pb-4">
         <a href={`/crm/proposals/${proposal.id}`} className="link-underline text-sm">
           ← Back to the record

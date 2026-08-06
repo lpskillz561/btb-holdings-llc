@@ -96,7 +96,7 @@ export function AdminUsers({
       {error ? <ErrorNote>{error}</ErrorNote> : null}
 
       {reveal ? (
-        <div className="rounded-lg border border-gold-400 bg-gold-200/30 p-5">
+        <div className="rounded-lg border border-accent-300 bg-accent-100/30 p-5">
           <p className="text-sm font-semibold text-ink-900">
             Temporary password for {reveal.email}
           </p>
@@ -108,7 +108,7 @@ export function AdminUsers({
           <button
             type="button"
             onClick={() => setReveal(null)}
-            className="mt-3 rounded-md border border-navy-900/20 px-3 py-1.5 text-sm hover:bg-white"
+            className="mt-3 rounded-md border border-ink-300 px-3 py-1.5 text-sm hover:bg-card-2"
           >
             I have copied it
           </button>
@@ -266,8 +266,8 @@ function ActionButton({
       title={title}
       className={`rounded-md border px-2.5 py-1 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
         danger
-          ? "border-red-300 text-red-700 hover:bg-red-50"
-          : "border-navy-900/20 text-ink-900 hover:bg-ink-100"
+          ? "border-err-500/30 text-err-700 hover:bg-err-50"
+          : "border-ink-300 text-ink-900 hover:bg-ink-100"
       }`}
     >
       {children}

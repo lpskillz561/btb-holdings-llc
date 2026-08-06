@@ -39,6 +39,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AiSuggestCards } from "./AiSuggestCards";
 import { apiDelete, apiGet, apiPatch, apiPost } from "./api";
 import { Dialog, ErrorNote, SectionHeading, TextArea, TextInput } from "./ui";
 import { fmtAgo, fmtDate } from "@/lib/crm/format";
@@ -61,7 +62,7 @@ export interface BoardUser {
  * in a grey column (`bg-ink-100`) is the one status that would have read as
  * "no colour applied" rather than as a state, and the middle column is the one
  * people actually scan. Amber also reads as "in flight" without competing with
- * Lightning blue for the primary-action slot.
+ * the brand indigo for the primary-action slot.
  *
  * The rule carries the column heading and its count too, so the colour is
  * legible to anyone reading the words rather than only to whoever can tell two
@@ -92,7 +93,7 @@ const TONE: Record<
     card: "border-ink-200 border-l-sf-500 bg-sf-50 hover:border-sf-200 hover:border-l-sf-500 hover:bg-sf-100",
     title: "text-sf-900",
     avatar: "bg-sf-600",
-    control: "text-sf-700 hover:bg-white hover:text-sf-800",
+    control: "text-sf-700 hover:bg-card-2 hover:text-sf-800",
     over: "bg-sf-50 ring-2 ring-sf-300",
   },
   doing: {
@@ -102,7 +103,7 @@ const TONE: Record<
     card: "border-ink-200 border-l-warn-500 bg-warn-50 hover:border-warn-200 hover:border-l-warn-500 hover:bg-warn-100",
     title: "text-ink-900",
     avatar: "bg-warn-700",
-    control: "text-warn-700 hover:bg-white hover:text-warn-700",
+    control: "text-warn-700 hover:bg-card-2 hover:text-warn-700",
     over: "bg-warn-50 ring-2 ring-warn-200",
   },
   done: {
@@ -114,7 +115,7 @@ const TONE: Record<
     // the grey does not also have to, and at ink-500 it stopped being legible.
     title: "text-ink-700 line-through",
     avatar: "bg-ok-700",
-    control: "text-ok-700 hover:bg-white hover:text-ok-700",
+    control: "text-ok-700 hover:bg-card-2 hover:text-ok-700",
     over: "bg-ok-50 ring-2 ring-ok-200",
   },
 };
@@ -246,6 +247,15 @@ export function TodoBoard({
       />
 
       {error && <ErrorNote>{error}</ErrorNote>}
+
+      {/* Behind a press, never on mount — this is the screen the team opens
+          every morning and a model call on every open is a bill and a wait. */}
+      <AiSuggestCards
+        onAdd={async (card) => {
+          const row = await apiPost<CrmTodo>("/api/crm/todos", card);
+          setTodos((rows) => [row, ...rows]);
+        }}
+      />
 
       <form onSubmit={add} className="sf-card mb-4 flex gap-2 p-3">
         <input

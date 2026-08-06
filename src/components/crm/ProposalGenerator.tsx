@@ -188,8 +188,8 @@ export function ProposalGenerator({
           </Field>
         </div>
 
-        <details className="rounded-lg border border-paper-200 bg-paper-50 p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-navy-900">
+        <details className="rounded-lg border border-ink-200 bg-card-2 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-ink-900">
             Tax and operating assumptions
           </summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -212,8 +212,8 @@ export function ProposalGenerator({
         </details>
 
         {/* Live preview of the exact figures that will be frozen onto the proposal. */}
-        <div className="rounded-lg border border-gold-500/25 bg-gold-500/5 p-4">
-          <h4 className="text-sm font-semibold text-navy-900">The figures this will quote</h4>
+        <div className="rounded-lg border border-accent-500/25 bg-accent-500/5 p-4">
+          <h4 className="text-sm font-semibold text-ink-900">The figures this will quote</h4>
           <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             <Line label="Total investment" value={fmtMoney(preview.totalInvestmentCents)} />
             <Line label="Depreciable basis" value={fmtMoney(preview.depreciableBasisCents)} />
@@ -263,7 +263,7 @@ export function ProposalGenerator({
             />
           </dl>
           {client.target_writeoff_cents ? (
-            <p className="mt-3 text-xs text-navy-900/60">
+            <p className="mt-3 text-xs text-ink-900/60">
               Their target deduction is {fmtMoney(client.target_writeoff_cents)} — this covers{" "}
               {fmtPct(
                 Math.round(
@@ -274,7 +274,7 @@ export function ProposalGenerator({
               .
             </p>
           ) : null}
-          <p className="mt-3 text-xs text-navy-900/50">
+          <p className="mt-3 text-xs text-ink-900/50">
             Calculated here, not by the model. The AI writes the prose around these numbers and is
             forbidden from restating them.
           </p>
@@ -315,8 +315,8 @@ export function ProposalGenerator({
 function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="flex justify-between gap-3">
-      <dt className="text-navy-900/60">{label}</dt>
-      <dd className={strong ? "font-semibold text-navy-900" : "text-navy-900/85"}>{value}</dd>
+      <dt className="text-ink-900/60">{label}</dt>
+      <dd className={strong ? "font-semibold text-ink-900" : "text-ink-900/85"}>{value}</dd>
     </div>
   );
 }

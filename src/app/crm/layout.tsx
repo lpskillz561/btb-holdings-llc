@@ -10,10 +10,10 @@ import { RAIL_COOKIE, isRailCollapsed } from "@/lib/crm/rail";
 /**
  * The internal application shell.
  *
- * Everything under /crm that a member of staff works in renders on Lightning's
- * grey with sans type. The grey is load-bearing rather than decorative: it is
- * what makes the white cards read as raised, which is why `.sf-card` carries no
- * shadow.
+ * Everything under /crm that a member of staff works in renders on the internal
+ * look: a tinted page, rounded cards lifted by a layered shadow, and a theme
+ * that follows the reader's OS appearance. In dark mode a card is raised by
+ * being BRIGHTER than the page rather than by shadow — see globals.css.
  *
  * Two things here are what make a section change feel like one screen rather
  * than a page load, and both are structural:

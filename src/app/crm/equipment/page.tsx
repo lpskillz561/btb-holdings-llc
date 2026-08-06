@@ -1,6 +1,6 @@
 // The amusement-equipment scenario tool.
 //
-// INTERNAL, and it keeps the Lightning chrome — note the route is /crm/equipment
+// INTERNAL, and it keeps the app chrome — note the route is /crm/equipment
 // and not anything under /crm/present, so `isClientFacingRoute` leaves the nav
 // and the Ask AI button in place. That is the right call: this page shows the
 // gross-versus-capped tax benefit side by side and names where the competing

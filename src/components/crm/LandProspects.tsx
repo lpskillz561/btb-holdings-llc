@@ -337,7 +337,7 @@ function ProspectRowView({
               ) : (
                 <ul className="space-y-2">
                   {comments.map((c) => (
-                    <li key={c.id} className="rounded border border-ink-200 bg-white p-2.5">
+                    <li key={c.id} className="rounded border border-ink-200 bg-card p-2.5">
                       <p className="text-xs font-medium text-ink-700">
                         {c.author_email}
                         <span className="ml-2 font-normal text-ink-500">{fmtAgo(c.created_at)}</span>

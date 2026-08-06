@@ -9,7 +9,7 @@
 // the browser ever multiplies by 100, so there is exactly one place that can
 // get it wrong.
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { bpsToInput, centsToInput } from "@/lib/crm/format";
 import {
   CLIENT_STATUSES,
@@ -19,8 +19,49 @@ import {
   LEAD_SOURCES,
   type CrmClient,
 } from "@/lib/crm/types";
+import { AiAssist, AiText, type AssistFieldSpec } from "./AiAssist";
 import { apiPatch, apiPost } from "./api";
 import { ErrorNote, Field, MoneyInput, PercentInput, Select, TextArea, TextInput } from "./ui";
+
+/**
+ * What the AI may propose on this form, described for the model.
+ *
+ * Kept as a list beside the JSX rather than derived from it, because the model
+ * needs the *meaning* of a field, not its input type — "the deduction they are
+ * trying to achieve, in whole dollars" is a far better brief than "money". The
+ * two can drift, and the cost of drift is one field going unsuggested, which is
+ * the harmless direction.
+ *
+ * Placement (`pad_id`, `unit_label`) is deliberately absent. Assigning a client
+ * to a pad creates a home and takes that pad out of sellable capacity; that is
+ * an operational decision about BTB's own land, not something to infer from a
+ * call summary.
+ */
+const CLIENT_ASSIST_FIELDS: AssistFieldSpec[] = [
+  { name: "name", label: "Name", type: "text" },
+  { name: "legal_name", label: "Legal / entity name", type: "text", hint: "The entity that will hold title, if not the individual." },
+  { name: "status", label: "Pipeline stage", type: "select", options: CLIENT_STATUSES },
+  { name: "health", label: "Health", type: "select", options: HEALTHS },
+  { name: "source", label: "Lead source", type: "select", options: LEAD_SOURCES },
+  { name: "entity_type", label: "Filing entity", type: "select", options: ENTITY_TYPES },
+  { name: "email", label: "Email", type: "email" },
+  { name: "phone", label: "Phone", type: "text" },
+  { name: "city", label: "City", type: "text" },
+  { name: "state", label: "State they live in", type: "text", hint: "Two-letter code." },
+  { name: "tax_state", label: "State they file in", type: "text", hint: "Two-letter code." },
+  { name: "marginal_rate_bps", label: "Marginal rate", type: "percent", hint: "Federal + state combined, as a whole percent, e.g. 37." },
+  { name: "est_annual_income_cents", label: "Estimated annual income", type: "money", hint: "Whole dollars." },
+  { name: "target_writeoff_cents", label: "Deduction they are targeting", type: "money", hint: "Whole dollars. This is what the deal is sized from." },
+  { name: "investment_capacity_cents", label: "Capital available", type: "money", hint: "Whole dollars." },
+  { name: "cpa_name", label: "CPA name", type: "text" },
+  { name: "cpa_email", label: "CPA email", type: "email" },
+  { name: "target_state", label: "Land: target state", type: "text" },
+  { name: "target_county", label: "Land: target county or city", type: "text" },
+  { name: "target_min_acres", label: "Land: minimum acres", type: "number" },
+  { name: "target_max_acres", label: "Land: maximum acres", type: "number" },
+  { name: "target_max_price_cents", label: "Land: budget", type: "money", hint: "Whole dollars." },
+  { name: "notes", label: "Notes", type: "textarea", hint: "What they are solving for, who introduced them." },
+];
 
 /** An unoccupied pad, offered when taking a client on. */
 export interface AvailablePad {
@@ -56,6 +97,9 @@ export function ClientForm({
 }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Handed to the AI controls so they can read what is typed and write a
+  // suggestion into a named field. The form stays uncontrolled either way.
+  const formRef = useRef<HTMLFormElement>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,7 +142,21 @@ export function ClientForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={onSubmit} className="space-y-6">
+      {/* Scoped to the client being EDITED so the model has their record,
+          proposals, contracts and call summaries. On a create there is no
+          record yet, so it falls back to the workspace and works from the
+          notes the person pastes in — which is the realistic case anyway:
+          you are looking at an email while you type. */}
+      <AiAssist
+        formRef={formRef}
+        fields={CLIENT_ASSIST_FIELDS}
+        formTitle="Client record"
+        scopeType={client ? "client" : "global"}
+        scopeId={client?.id ?? null}
+        label={client ? "Fill gaps from the record" : "Fill this in from my notes"}
+      />
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name">
           <TextInput name="name" required defaultValue={client?.name ?? ""} placeholder="Jane Whitfield" />
@@ -133,8 +191,8 @@ export function ClientForm({
       </div>
 
       <div>
-        <h3 className="mb-1 text-sm font-semibold text-navy-900">Tax profile</h3>
-        <p className="mb-4 text-xs text-navy-900/50">
+        <h3 className="mb-1 text-sm font-semibold text-ink-900">Tax profile</h3>
+        <p className="mb-4 text-xs text-ink-900/50">
           Drives every figure in a generated proposal. Estimates are fine — the client&apos;s CPA
           confirms the real numbers.
         </p>
@@ -168,8 +226,8 @@ export function ClientForm({
       </div>
 
       <div>
-        <h3 className="mb-1 text-sm font-semibold text-navy-900">Land criteria</h3>
-        <p className="mb-4 text-xs text-navy-900/50">
+        <h3 className="mb-1 text-sm font-semibold text-ink-900">Land criteria</h3>
+        <p className="mb-4 text-xs text-ink-900/50">
           Pre-fills the parcel search on this client&apos;s Land tab, so the first search is
           already the right one.
         </p>
@@ -240,6 +298,16 @@ export function ClientForm({
 
       <Field label="Notes">
         <TextArea name="notes" rows={4} defaultValue={client?.notes ?? ""} placeholder="What they're solving for, who introduced them, anything the AI advisor should know." />
+        {/* "Check against the rules" is the one that earns this control: these
+            notes are what the advisor and the proposal generator later read,
+            so a 7-day test or a non-recourse note written here propagates. */}
+        <AiText
+          formRef={formRef}
+          name="notes"
+          label="Notes on the client"
+          scopeType={client ? "client" : "global"}
+          scopeId={client?.id ?? null}
+        />
       </Field>
 
       <ErrorNote>{error}</ErrorNote>

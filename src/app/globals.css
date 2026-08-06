@@ -2,10 +2,209 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   THE THEME VARIABLES.
+
+   Every token the INTERNAL application uses resolves here — see the long
+   comment at the top of tailwind.config.ts for why. Three rules govern this
+   block and breaking any of them is a visible bug:
+
+   1. Values are space-separated RGB channels, not hex and not `rgb(...)`.
+      Tailwind composes them as `rgb(var(--x) / <alpha-value>)`, which is what
+      keeps `bg-card/60` and `text-ink-900/55` working.
+
+   2. The ramps INVERT in dark mode, they are not replaced. `ink-100` is always
+      "the page" and `ink-900` is always "body text"; only the lightness flips.
+      Same for `sf`: 500 is the vivid primary in both modes, everything below it
+      is a tint (darker in dark) and everything above it is a text shade
+      (lighter in dark). That is why `text-sf-600`, `bg-sf-100 text-sf-700` and
+      `bg-sf-50` row hovers all keep meaning what they meant, in 48 files,
+      without one of them being edited.
+
+   3. `.theme-light` pins the light values back. The /print routes are nested
+      under app/crm/layout.tsx and therefore inside `.sf-page`, and a contract
+      packet must not go dark because the reader's Mac is in dark mode. Those
+      pages carry the class. The presentation deck does not need it — it paints
+      entirely out of the frozen navy/gold literals — but it is harmless there.
+   ========================================================================== */
+
 :root {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     sans-serif;
   --font-serif: Georgia, "Times New Roman", ui-serif, serif;
+
+  /* Tells the browser to render native controls, scrollbars and form widgets
+     for whichever appearance is active. Without it a dark app still gets white
+     scrollbars and a white date picker. */
+  color-scheme: light dark;
+}
+
+:root,
+.theme-light {
+  /* ---- Primary: indigo → violet. 500 is the action colour. ---- */
+  --sf-50: 238 240 255;
+  --sf-100: 224 227 255;
+  --sf-200: 199 203 254;
+  --sf-300: 165 168 251;
+  --sf-400: 129 122 246;
+  --sf-500: 91 91 245;
+  --sf-600: 79 70 229;
+  --sf-700: 67 56 202;
+  --sf-800: 55 48 163;
+  --sf-900: 42 35 120;
+
+  /* ---- Neutrals. Very slightly cool/violet-tinted rather than pure grey, so
+         the page reads as part of the same family as the accent instead of as
+         a default. ---- */
+  --ink-50: 255 255 255;
+  --ink-100: 244 244 251;
+  --ink-200: 230 230 240;
+  --ink-300: 205 205 222;
+  --ink-400: 168 168 190;
+  --ink-500: 138 138 163;
+  --ink-600: 106 106 133;
+  --ink-700: 82 82 107;
+  --ink-800: 58 58 79;
+  --ink-900: 26 26 43;
+
+  --card: 255 255 255;
+  --card-2: 249 249 253;
+
+  /* ---- The internal echo of the brand gold. 600 is a touch darker than
+         gold-600 so it clears contrast as link text on white. ---- */
+  --accent-100: 245 236 214;
+  --accent-300: 227 207 155;
+  --accent-500: 200 164 92;
+  --accent-600: 148 113 45;
+
+  --ok-50: 236 253 243;
+  --ok-100: 209 250 223;
+  --ok-200: 166 244 197;
+  --ok-500: 18 183 106;
+  --ok-700: 2 122 72;
+
+  --warn-50: 255 250 235;
+  --warn-100: 254 240 199;
+  --warn-200: 254 223 137;
+  --warn-500: 247 144 9;
+  --warn-700: 181 71 8;
+
+  --err-50: 254 243 242;
+  --err-100: 254 228 226;
+  --err-500: 240 68 56;
+  --err-700: 180 35 24;
+
+  /* The AI gradient. Deliberately violet→fuchsia and NOT the primary indigo:
+     "the machine suggested this" must never be mistaken for "this is the button
+     that saves". */
+  --ai-from: 139 92 246;
+  --ai-to: 217 70 239;
+
+  /* Layered: a tight contact shadow for the edge, a wide diffuse one for the
+     lift. One shadow reads as a box with a shadow; two read as an object above
+     the page, which is the whole difference. */
+  --shadow-soft: 0 1px 2px rgb(26 26 43 / 0.04), 0 1px 3px rgb(26 26 43 / 0.06);
+  --shadow-raise: 0 1px 2px rgb(26 26 43 / 0.05),
+    0 8px 24px -12px rgb(26 26 43 / 0.18);
+  --shadow-pop: 0 2px 4px rgb(26 26 43 / 0.06),
+    0 24px 48px -20px rgb(26 26 43 / 0.28);
+  --shadow-glow: 0 6px 18px -6px rgb(91 91 245 / 0.45);
+
+  /* The translucent materials. macOS's sidebars and popovers are a colour over
+     a blur, not a flat fill, and the blur is what makes them read as glass. */
+  --glass-panel: 255 255 255 / 0.82;
+  --glass-line: 26 26 43 / 0.08;
+
+  /* The navigation rail. Deep indigo→plum rather than a neutral sidebar: it is
+     the one large field of colour in the app and it is what stops the whole
+     thing reading as a grey admin panel.
+
+     It stays DARK in both appearances, deliberately. A rail that inverts would
+     need the mark to invert with it — BtbMark's disc is a solid navy and would
+     be a hole on a dark ground and a smudge on a light one — so this would mean
+     rendering both variants and toggling them. Holding the rail dark keeps one
+     mark, one reversed treatment, and one thing to look at. */
+  --rail-from: 32 28 78;
+  --rail-to: 52 28 88;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Below 500 are tints on a dark ground; above 500 are text shades. */
+    --sf-50: 30 29 56;
+    --sf-100: 42 40 82;
+    --sf-200: 58 55 116;
+    --sf-300: 92 88 178;
+    --sf-400: 130 126 250;
+    --sf-500: 124 124 255;
+    --sf-600: 152 148 255;
+    --sf-700: 180 177 255;
+    --sf-800: 206 204 255;
+    --sf-900: 228 227 255;
+
+    /* Not pure black. macOS's dark surfaces sit around 10–14% lightness, and
+       true black makes the layered shadows below invisible. */
+    --ink-50: 22 22 30;
+    --ink-100: 15 15 22;
+    --ink-200: 44 44 58;
+    --ink-300: 60 60 78;
+    --ink-400: 88 88 110;
+    --ink-500: 124 124 148;
+    --ink-600: 158 158 182;
+    --ink-700: 189 189 208;
+    --ink-800: 216 216 229;
+    --ink-900: 242 242 248;
+
+    /* Lighter than the page, so "raised" reads the same way it does in light
+       mode. In dark mode a card is lifted by being brighter, not by shadow. */
+    --card: 26 26 36;
+    --card-2: 34 34 46;
+
+    --accent-100: 61 48 22;
+    --accent-300: 154 122 55;
+    --accent-500: 214 181 116;
+    --accent-600: 233 209 160;
+
+    --ok-50: 11 31 22;
+    --ok-100: 16 42 29;
+    --ok-200: 23 67 46;
+    --ok-500: 50 213 131;
+    --ok-700: 108 233 166;
+
+    --warn-50: 32 24 6;
+    --warn-100: 44 33 9;
+    --warn-200: 74 58 18;
+    --warn-500: 253 176 34;
+    --warn-700: 254 200 75;
+
+    --err-50: 40 17 16;
+    --err-100: 58 22 20;
+    --err-500: 249 112 102;
+    --err-700: 253 162 159;
+
+    --ai-from: 167 139 250;
+    --ai-to: 232 121 249;
+
+    /* The wide diffuse layer is dropped — a black blur on a dark ground is mud,
+       not depth. An inset hairline highlight along the top edge does the work
+       instead, which is exactly what macOS does. */
+    --shadow-soft: inset 0 1px 0 rgb(255 255 255 / 0.04),
+      0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-raise: inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 4px 16px -8px rgb(0 0 0 / 0.7);
+    --shadow-pop: inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 16px 40px -16px rgb(0 0 0 / 0.85);
+    --shadow-glow: 0 6px 18px -6px rgb(124 124 255 / 0.5);
+
+    --glass-panel: 26 26 36 / 0.85;
+    --glass-line: 255 255 255 / 0.09;
+
+    /* Same rail, taken down so it sits with a dark page rather than glowing
+       against it. Still tinted — a neutral black rail loses the one piece of
+       colour the layout has. */
+    --rail-from: 20 18 34;
+    --rail-to: 28 18 40;
+  }
 }
 
 html {
@@ -13,8 +212,8 @@ html {
 }
 
 body {
-  background: #fbfaf7;
-  color: #0a1430;
+  background: rgb(var(--ink-100));
+  color: rgb(var(--ink-900));
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -22,10 +221,10 @@ body {
 @layer base {
   /* Headings default to the SANS face.
      They used to be serif globally, which was right when this was a marketing
-     site. The internal CRM is now Lightning-styled and sans, and fighting a
-     base rule with utility classes is a specificity argument nobody wins — so
-     the documents that still want the serif (proposals, contracts, the login
-     screen) say `font-serif` explicitly, and there are only a handful. */
+     site. The internal CRM is now sans, and fighting a base rule with utility
+     classes is a specificity argument nobody wins — so the documents that still
+     want the serif (proposals, contracts, the deck) say `font-serif`
+     explicitly, and there are only a handful. */
   h1,
   h2,
   h3,
@@ -49,7 +248,7 @@ body {
     @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-gold-400;
   }
 
-  /* ---- Buttons ---- */
+  /* ---- Buttons: the CLIENT-FACING set. Navy/gold, used by the documents. ---- */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-3 text-sm font-semibold tracking-wide transition disabled:cursor-not-allowed disabled:opacity-50;
   }
@@ -66,7 +265,15 @@ body {
     @apply btn border border-white/20 bg-white/5 text-paper-50 hover:bg-white/10;
   }
 
-  /* ---- Surfaces ---- */
+  /* ---- Surfaces: client-facing. ----
+     NOTE: `.card` currently has no call sites. Every use of it was on an
+     internal screen — the client list, the equipment workbench, the land
+     search, the advisor tab — where a hard-coded white fill became a white
+     rectangle the moment dark mode existed. Those are all `.sf-card` now.
+     It is kept because it is part of the document vocabulary that `@media
+     print` and the proposal/contract packets are written against; if a
+     document ever needs a surface, this is the one it should use, NOT
+     `.sf-card`, which follows the reader's OS appearance. */
   .card {
     @apply rounded-xl border border-paper-200 bg-white shadow-card;
   }
@@ -77,29 +284,33 @@ body {
     @apply h-px w-full bg-gradient-to-r from-transparent via-paper-300 to-transparent;
   }
 
-  /* ---- Inputs ---- */
+  /* ---- Inputs. Despite sitting in the client-facing block, `.field` and
+         `.field-label` are used ONLY by internal forms — the sign-in pages and
+         eleven CRM components; no document or print route has an input on it.
+         So both are theme-aware. Verified rather than assumed. ---- */
   .field-label {
-    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-navy-800/60;
+    @apply mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-500;
   }
   .field {
-    @apply w-full rounded-md border border-paper-300 bg-white px-3.5 py-2.5 text-sm text-navy-900 outline-none transition placeholder:text-navy-900/30 focus:border-gold-500 focus:ring-2 focus:ring-gold-500/20;
+    @apply w-full rounded-lg border border-ink-300 bg-card px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-sf-400 focus:ring-4 focus:ring-sf-500/15;
   }
 
   .link-underline {
     @apply font-semibold text-navy-700 underline-offset-4 hover:text-gold-600 hover:underline;
   }
 
-  /* ------------------------------------------------------------------ */
-  /* Lightning — INTERNAL CRM ONLY.                                     */
-  /*                                                                    */
-  /* Everything above is the client-facing brand and is still what the  */
-  /* proposals and contracts render in. These classes are for the       */
-  /* screens staff work in: tighter, denser, blue rather than navy.     */
-  /* No print route imports any of this.                               */
-  /* ------------------------------------------------------------------ */
+  /* ====================================================================== */
+  /* THE INTERNAL APPLICATION.                                              */
+  /*                                                                        */
+  /* Everything above is the client-facing brand and is still what the       */
+  /* proposals and contracts render in. These classes are the screens staff   */
+  /* work in: rounded, layered, translucent, and theme-aware. No print route */
+  /* imports any of this except .sf-btn, on a button marked .no-print.       */
+  /*                                                                        */
+  /* The `sf-` prefix is a fossil — it used to mean Salesforce. It is kept    */
+  /* because renaming ~180 references across 48 files is pure diff noise.     */
+  /* ====================================================================== */
 
-  /* The grey page behind white cards. Lightning gets its depth from this
-     contrast rather than from shadows, which is why .sf-card has none. */
   .sf-page {
     @apply min-h-screen bg-ink-100 font-sans text-ink-900;
   }
@@ -107,37 +318,99 @@ body {
   .sf-page .section {
     @apply py-6 lg:py-8;
   }
-  /* A whisper of shadow, not a lift: the grey/white contrast still does the
-     work, this just softens the edge where card meets page. */
+
+  /* The card. Depth now comes from a real layered shadow rather than from
+     grey/white contrast alone, which is what lets the same class work in dark
+     mode — where the lift comes from the card being BRIGHTER than the page and
+     the shadow is reduced to a hairline highlight. See --shadow-soft. */
   .sf-card {
-    @apply rounded-lg border border-ink-200 bg-white shadow-[0_1px_2px_rgba(24,24,24,0.04)];
+    @apply rounded-card border border-ink-200 bg-card shadow-soft;
+  }
+  /* Opt-in hover lift for cards that are themselves a link or a drag handle.
+     Not on .sf-card itself: most cards are containers, and a container that
+     rises when the pointer crosses it is noise. */
+  .sf-card-interactive {
+    @apply transition duration-200 ease-spring hover:-translate-y-0.5 hover:border-sf-300 hover:shadow-raise;
   }
   .sf-h {
-    @apply text-sm font-bold text-ink-900;
+    @apply text-sm font-semibold text-ink-900;
   }
   .sf-meta {
     @apply text-xs text-ink-600;
   }
 
-  /* Buttons. A 32px target, per Lightning; the radius matches .sf-card. */
-  .sf-btn {
-    @apply inline-flex items-center justify-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
+  /* The translucent material. Used by the rail, the assistant panel and the
+     popovers — a colour over a blur, which is what makes it read as glass
+     rather than as a flat tint. The fallback matters: `backdrop-filter` is
+     unsupported in a few contexts (and in print), and without an opaque
+     fallback the panel would be see-through with nothing behind it. */
+  .sf-glass {
+    background: rgb(var(--glass-panel));
+    border-color: rgb(var(--glass-line));
   }
-  .sf-btn-brand {
-    @apply sf-btn border-sf-500 bg-sf-500 text-white hover:border-sf-600 hover:bg-sf-600;
-  }
-  .sf-btn-neutral {
-    @apply sf-btn border-ink-300 bg-white text-sf-600 hover:bg-ink-100;
-  }
-  .sf-btn-danger {
-    @apply sf-btn border-err-500 bg-white text-err-700 hover:bg-err-100;
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    .sf-glass {
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+    }
   }
 
+  /* ---- The navigation rail ---- */
+  .sf-rail {
+    background-image: linear-gradient(
+      165deg,
+      rgb(var(--rail-from)),
+      rgb(var(--rail-to))
+    );
+  }
+  /* One nav row. The active state is a gradient pill with a glow rather than a
+     flat tint plus a marker bar — it is the same gradient as the primary
+     button, which is what ties "where I am" to "what I press". */
+  .sf-rail-item {
+    @apply relative flex items-center rounded-pill py-2 text-sm text-white/60 transition duration-150 hover:bg-white/10 hover:text-white;
+  }
+  .sf-rail-item-active {
+    @apply bg-grad-brand font-medium text-white shadow-glow hover:bg-grad-brand hover:brightness-105;
+  }
+
+  /* ---- Buttons. 34px target; the radius matches the inputs beside them. ---- */
+  .sf-btn {
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-pill border px-3.5 py-2 text-sm font-medium transition duration-150 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100;
+  }
+  /* The primary action. A gradient rather than a flat fill, and a coloured glow
+     rather than a grey shadow — this is the one element on a screen that is
+     allowed to be vivid. */
+  .sf-btn-brand {
+    @apply sf-btn border-transparent bg-grad-brand text-white shadow-glow hover:bg-grad-brand-hover hover:brightness-105;
+  }
+  .sf-btn-neutral {
+    @apply sf-btn border-ink-200 bg-card text-ink-800 shadow-soft hover:border-ink-300 hover:bg-card-2;
+  }
+  /* Borderless, for toolbars and table row actions where a bordered button per
+     row turns the page into a grid of boxes. */
+  .sf-btn-ghost {
+    @apply sf-btn border-transparent bg-transparent text-ink-700 shadow-none hover:bg-ink-200/60 hover:text-ink-900;
+  }
+  .sf-btn-danger {
+    @apply sf-btn border-err-500/30 bg-err-50 text-err-700 hover:border-err-500/60 hover:bg-err-100;
+  }
+  /* Every AI trigger in the app. Violet, distinct from the indigo primary, so
+     "suggest something" is never mistaken for "save". */
+  .sf-btn-ai {
+    @apply sf-btn border-transparent bg-grad-ai text-white shadow-[0_6px_18px_-6px_rgb(var(--ai-to)/0.5)] hover:brightness-110;
+  }
+  /* The quieter form of the same thing, for inline placement beside a field
+     label where a filled violet button would shout. */
+  .sf-btn-ai-quiet {
+    @apply sf-btn border-sf-200 bg-sf-50 text-sf-700 shadow-none hover:border-sf-300 hover:bg-sf-100;
+  }
+
+  /* ---- Inputs ---- */
   .sf-input {
-    @apply w-full rounded-md border border-ink-300 bg-white px-3 py-1.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-sf-500 focus:ring-2 focus:ring-sf-200;
+    @apply w-full rounded-pill border border-ink-300 bg-card px-3 py-2 text-sm text-ink-900 outline-none transition placeholder:text-ink-400 focus:border-sf-400 focus:ring-4 focus:ring-sf-500/15;
   }
   .sf-label {
-    @apply mb-1 block text-xs font-medium text-ink-600;
+    @apply mb-1.5 block text-xs font-medium text-ink-600;
   }
 
   /* A short settle on the record header when a section changes. Deliberately
@@ -154,15 +427,11 @@ body {
      fires on arrival and on nothing else. router.refresh() reconciles the same
      element in place and is correctly left alone.
 
-     Scoped to .sf-page, so the marketing site and the print documents — which
-     are laid out in plain divs anyway — are untouched. */
+     Scoped to .sf-page, so the print documents — which are laid out in plain
+     divs anyway — are untouched. */
   .sf-page .section {
     animation: crm-fade-in 180ms ease-out both;
   }
-
-  /* The clicked nav item's pending feedback lives in CrmChrome.tsx as an
-     animate-pulse on the row — the old horizontal underline sweep died with the
-     tab strip when the nav became a left rail. */
 
   /* The navigation bar, pinned to the top of the window. See NavProgress.tsx
      for why the CRM has this instead of a loading.tsx skeleton. */
@@ -175,8 +444,8 @@ body {
     transform-origin: left center;
     background-image: linear-gradient(
       90deg,
-      theme("colors.sf.500") 0%,
-      theme("colors.sf.400") 100%
+      rgb(var(--sf-500)) 0%,
+      rgb(var(--ai-to)) 100%
     );
     /* Creeps towards the end and never reaches it. There is no progress to
        report — a dynamic render is one round trip with no milestones — and a
@@ -206,21 +475,56 @@ body {
     .nav-progress--done .nav-progress__bar {
       transition: none;
     }
+    /* The spring lifts and the pop-in entrances are the other half of this. */
+    .sf-card-interactive {
+      @apply hover:translate-y-0;
+    }
+    .animate-pop-in,
+    .animate-slide-in-right,
+    .ai-applied {
+      animation: none;
+    }
   }
 
-  /* Compact record table. Lightning packs far more rows per screen than the
-     marketing-site table did, which is the whole point of the switch. */
+  /* Compact record table. Packs far more rows per screen than the marketing
+     table did, which is the whole point. */
   .sf-table {
     @apply w-full border-collapse text-sm;
   }
   .sf-table thead th {
-    @apply border-b border-ink-200 bg-ink-100 px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ink-600;
+    @apply border-b border-ink-200 bg-card-2 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-ink-600;
   }
   .sf-table tbody td {
-    @apply border-b border-ink-200 px-3 py-2 align-middle text-ink-800;
+    @apply border-b border-ink-200 px-3 py-2.5 align-middle text-ink-800;
+  }
+  .sf-table tbody tr {
+    @apply transition-colors;
   }
   .sf-table tbody tr:hover {
     @apply bg-sf-50;
+  }
+
+  /* Money and other figures that are compared down a column or across a row of
+     tiles. Proportional digits make a column of dollar amounts ragged and
+     genuinely harder to scan.
+
+     Tabular figures of the SANS face, not the mono stack. Mono was tried and is
+     wrong here: at the 26px display size the stat tiles use it reads as code
+     rather than as a headline figure, and the wide, slab-ish zero is the first
+     thing the eye lands on across an eight-figure band. `tabular-nums` gets the
+     alignment without changing the voice. */
+  .sf-num {
+    @apply tabular-nums;
+  }
+
+  /* A field that an AI suggestion was just written into.
+     Applied by components/crm/AiAssist.tsx, which removes the class, forces a
+     reflow and re-adds it — an animation does not replay on a class that is
+     already present, so applying to the same field twice would flash once.
+     It matters most for a field that has scrolled out of view, where pressing
+     Use otherwise looks like nothing happened. */
+  .ai-applied {
+    animation: ai-applied 1.1s ease-out;
   }
 
   /* ------------------------------------------------------------------------
@@ -232,8 +536,10 @@ body {
      not on the presenter's, so they stop reading their own slide. Fixing the
      canvas at 1280x720 and scaling it means what is rehearsed is what is shown.
 
-     This is client-facing, so it is navy/gold serif brand, not the Lightning
-     palette the rest of /crm uses. See CLAUDE.md, "Two looks, on purpose".
+     This is client-facing, so it is navy/gold serif brand and paints entirely
+     out of the FROZEN literal palette. It does not follow the OS appearance and
+     must never be made to: a deck that goes dark because the presenter's laptop
+     did is a deck nobody rehearsed. See CLAUDE.md, "Two looks, on purpose".
      ------------------------------------------------------------------------ */
   .deck-stage {
     @apply fixed inset-0 overflow-hidden bg-navy-900;
@@ -331,6 +637,23 @@ body {
   }
 }
 
+/* The violet flash on a field an AI suggestion was written into. Fades rather
+   than snapping off, so it reads as "this one just changed" and not as an
+   error state that is still active. */
+@keyframes ai-applied {
+  0% {
+    box-shadow: 0 0 0 0 rgb(var(--ai-to) / 0.55);
+    background-color: rgb(var(--ai-to) / 0.1);
+  }
+  60% {
+    box-shadow: 0 0 0 4px rgb(var(--ai-to) / 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--ai-to) / 0);
+    background-color: transparent;
+  }
+}
+
 /* Most of the distance in the first second, the rest never. */
 @keyframes nav-progress-creep {
   0% {
@@ -371,8 +694,11 @@ body {
     background: #fff;
   }
   /* The print routes are nested under /crm, so they inherit the app shell's
-     grey. On paper that would come out as a grey page behind a document that is
-     supposed to look like it came from a private bank. */
+     page colour. On paper that would come out as a tinted page behind a
+     document that is supposed to look like it came from a private bank. The
+     pages also carry .theme-light, which is what stops them going dark ON
+     SCREEN when the reader's Mac is in dark mode; this rule is the paper half
+     of the same guarantee. */
   .sf-page {
     background: #fff !important;
   }
@@ -395,15 +721,27 @@ body {
   }
 }
 
+/* Overlay scrollbars, in the macOS idiom: no track, a thumb that only appears
+   against content. Themed, so a dark app does not get a light grey thumb. */
 ::-webkit-scrollbar {
   width: 11px;
   height: 11px;
 }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
 ::-webkit-scrollbar-thumb {
-  background: rgba(10, 20, 48, 0.18);
+  background: rgb(var(--ink-400) / 0.45);
+  border: 3px solid transparent;
+  background-clip: content-box;
   border-radius: 9999px;
 }
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--ink-500) / 0.7);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
 ::selection {
-  background: theme("colors.gold.300");
-  color: theme("colors.navy.950");
+  background: rgb(var(--sf-500) / 0.25);
+  color: rgb(var(--ink-900));
 }

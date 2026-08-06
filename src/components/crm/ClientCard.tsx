@@ -290,7 +290,7 @@ function OverviewTab({
               {detail.contacts.map((row) => (
                 <tr
                   key={row.id}
-                  className="cursor-pointer transition hover:bg-white"
+                  className="cursor-pointer transition hover:bg-card-2"
                   onClick={() => {
                     setContact(row as unknown as Row);
                     setContactOpen(true);
@@ -468,13 +468,13 @@ function CostPositionCard({ detail }: { detail: ClientDetail }) {
       {/* The two states that silently shrink a deduction, called out where the
           number is, not buried in a tab. */}
       {c.in_service_basis_cents < c.depreciable_basis_cents && (
-        <p className="mt-4 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
+        <p className="mt-4 rounded-md bg-warn-500/10 px-3 py-2 text-xs text-warn-700">
           {fmtMoney(c.depreciable_basis_cents - c.in_service_basis_cents)} of basis is not yet
           placed in service and is deducting nothing.
         </p>
       )}
       {c.personal_use_count > 0 && (
-        <p className="mt-2 rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800">
+        <p className="mt-2 rounded-md bg-warn-500/10 px-3 py-2 text-xs text-warn-700">
           {c.personal_use_count} unit{c.personal_use_count === 1 ? " is" : "s are"} recorded as
           personal use and excluded from the depreciable basis.
         </p>
@@ -542,11 +542,11 @@ function ProposalsTab({
             head={["Proposal", "Status", "Investment", "First-year deduction", "Tax benefit", "Created"]}
           >
             {detail.proposals.map((row) => (
-              <tr key={row.id} className="transition hover:bg-white">
+              <tr key={row.id} className="transition hover:bg-card-2">
                 <Td>
                   <Link
                     href={`/crm/proposals/${row.id}`}
-                    className="font-medium text-ink-900 hover:text-gold-600"
+                    className="font-medium text-ink-900 hover:text-accent-600"
                   >
                     {row.title}
                   </Link>
@@ -648,7 +648,7 @@ function CollectionTab({
             {rows.map((row) => (
               <tr
                 key={String(row.id)}
-                className="cursor-pointer transition hover:bg-white"
+                className="cursor-pointer transition hover:bg-card-2"
                 onClick={() => {
                   setEditing(row);
                   setOpen(true);
@@ -829,7 +829,7 @@ function HoldingsTab({
           row.placed_in_service_on ? (
             fmtDate(row.placed_in_service_on as string)
           ) : (
-            <span key="p" className="text-amber-700">Not yet</span>
+            <span key="p" className="text-warn-700">Not yet</span>
           ),
           fmtMoney(row.monthly_rent_cents as number | null),
         ]}
@@ -879,7 +879,7 @@ function FinancialsTab({
           <span key="d" className="font-medium text-ink-900">{String(row.description)}</span>,
           LABELS.txCategory[row.category as keyof typeof LABELS.txCategory],
           LABELS.txKind[row.kind as keyof typeof LABELS.txKind],
-          <span key="a" className={row.kind === "expense" ? "text-red-700" : "text-emerald-700"}>
+          <span key="a" className={row.kind === "expense" ? "text-err-700" : "text-ok-700"}>
             {row.kind === "expense" ? "−" : "+"}
             {fmtMoney(row.amount_cents as number)}
           </span>,

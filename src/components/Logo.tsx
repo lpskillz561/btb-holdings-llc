@@ -13,7 +13,8 @@
  *
  * The three colours are the artwork's own, and they are already in
  * tailwind.config.ts: #032d60 is sf-800, #1b96ff is sf-400, #0176d3 is sf-500.
- * The mark is native to the Lightning palette the CRM is built in.
+ * They are the mark's own drawn artwork and are deliberately NOT theme tokens:
+ * it must render identically in light and dark.
  */
 
 const NAVY = "#032d60"; // sf-800

@@ -17,8 +17,14 @@
  * Layout contract with app/crm/layout.tsx: on lg+ this renders a sticky
  * full-height column inside the layout's flex row, and the pages render beside
  * it. Below lg it renders a compact top bar plus a drawer, and the pages render
- * below it. The navy is deliberate — the one place the brand survives indoors —
- * and the body of every screen stays Lightning grey/white/blue.
+ * below it.
+ *
+ * The rail is a deep indigo→plum gradient (`.sf-rail`) and it stays dark in
+ * BOTH appearances, which is a deliberate constraint rather than an oversight:
+ * `BtbMark`'s disc is a solid navy, so a rail that inverted with the OS would
+ * need both mark variants rendered and toggled. Holding it dark keeps one mark
+ * and one reversed treatment. It is also the only large field of colour in the
+ * layout — without it the app reads as a grey admin panel.
  *
  * The rail COLLAPSES to icons on lg+, and the preference is a cookie the server
  * reads — see lib/crm/rail.ts for why it is not localStorage. Collapsing is an
@@ -146,21 +152,13 @@ function ItemBody({
   const { pending } = useLinkStatus();
   return (
     <span
-      className={`relative flex items-center rounded-md py-2 text-sm transition-colors ${
-        collapsed ? "justify-center px-0" : "gap-2.5 px-3"
-      } ${
-        active
-          ? "bg-white/10 font-medium text-white"
-          : pending
-            ? "animate-pulse bg-white/5 text-white"
-            : "text-paper-50/60 hover:bg-white/5 hover:text-paper-50"
+      className={`sf-rail-item ${collapsed ? "justify-center px-0" : "gap-2.5 px-3"} ${
+        active ? "sf-rail-item-active" : pending ? "animate-pulse bg-white/10 text-white" : ""
       }`}
     >
-      {/* Gold tick for "you are here" — the one brand accent on the rail. */}
-      <span
-        aria-hidden
-        className={`absolute -left-2 h-5 w-0.5 rounded-full ${active ? "bg-gold-500" : ""}`}
-      />
+      {/* The gold tick that used to mark "you are here" is gone: the active row
+          is now the gradient pill itself, and a marker bar beside a filled pill
+          is two ways of saying one thing. */}
       <NavIcon name={icon} />
       {/* Collapsed, the label is dropped from the flow but never from the
           accessible name — the <Link> above carries aria-label and title, so
@@ -214,9 +212,7 @@ function NavColumn({
         {/* A plain <a>: logout is an API route, not a client navigation. */}
         <a
           href="/api/auth/logout"
-          className={`flex items-center rounded-md py-2 text-sm text-paper-50/60 transition-colors hover:bg-white/5 hover:text-paper-50 ${
-            collapsed ? "justify-center px-0" : "gap-2.5 px-3"
-          }`}
+          className={`sf-rail-item ${collapsed ? "justify-center px-0" : "gap-2.5 px-3"}`}
           {...tip("Sign out")}
         >
           <NavIcon name="exit" />
@@ -228,9 +224,7 @@ function NavColumn({
             onClick={onToggle}
             aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}
             title={collapsed ? "Expand navigation" : "Collapse navigation"}
-            className={`flex w-full items-center rounded-md py-2 text-sm text-paper-50/60 transition-colors hover:bg-white/5 hover:text-paper-50 ${
-              collapsed ? "justify-center px-0" : "gap-2.5 px-3"
-            }`}
+            className={`sf-rail-item w-full ${collapsed ? "justify-center px-0" : "gap-2.5 px-3"}`}
           >
             <NavIcon name={collapsed ? "expand" : "collapse"} />
             {collapsed ? null : "Collapse"}
@@ -245,7 +239,7 @@ function Brand({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <Link
       href="/crm"
-      className={`flex h-14 shrink-0 items-center text-sm font-semibold tracking-wide text-paper-50 ${
+      className={`flex h-14 shrink-0 items-center text-sm font-semibold tracking-wide text-white ${
         collapsed ? "justify-center px-0" : "gap-2.5 px-5"
       }`}
       {...(collapsed ? { title: site.shortName, "aria-label": site.shortName } : {})}
@@ -308,7 +302,7 @@ export function CrmChrome({
       {/* ---- lg+: the rail. Sticky, so it never scrolls away; the pages scroll
            beside it inside the layout's flex row. ---- */}
       <aside
-        className={`hidden shrink-0 bg-navy-950 transition-[width] duration-200 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col ${
+        className={`sf-rail hidden shrink-0 transition-[width] duration-200 ease-spring lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col ${
           collapsed ? "w-16" : "w-60"
         }`}
       >
@@ -322,14 +316,14 @@ export function CrmChrome({
       </aside>
 
       {/* ---- below lg: a compact bar plus a drawer. ---- */}
-      <div className="sticky top-0 z-30 flex h-12 items-center justify-between bg-navy-950 pr-2 lg:hidden">
+      <div className="sf-rail sticky top-0 z-30 flex h-12 items-center justify-between pr-2 lg:hidden">
         <Brand />
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open navigation"
           aria-expanded={open}
-          className="rounded-md p-2 text-paper-50/80 transition hover:bg-white/10 hover:text-paper-50"
+          className="rounded-pill p-2 text-white/80 transition hover:bg-white/10 hover:text-white"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
             <path d="M4 6.5h16M4 12h16M4 17.5h16" />
@@ -342,16 +336,16 @@ export function CrmChrome({
             type="button"
             aria-label="Close navigation"
             onClick={() => setOpen(false)}
-            className="absolute inset-0 bg-navy-950/50 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-ink-900/40 backdrop-blur-sm"
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-navy-950 shadow-2xl">
+          <div className="sf-rail absolute inset-y-0 left-0 flex w-72 max-w-[85vw] animate-slide-in-right flex-col shadow-2xl">
             <div className="flex items-center justify-between pr-2">
               <Brand />
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close navigation"
-                className="rounded-md p-2 text-paper-50/70 transition hover:bg-white/10 hover:text-paper-50"
+                className="rounded-pill p-2 text-white/70 transition hover:bg-white/10 hover:text-white"
               >
                 <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
                   <path d="M6 6l12 12M18 6L6 18" />

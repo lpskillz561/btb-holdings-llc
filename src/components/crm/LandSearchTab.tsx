@@ -201,13 +201,13 @@ export function LandSearchTab({
             {saved.map((row) => {
               const fit = fits[row.parcel_key];
               return (
-                <div key={row.id} className="card p-4">
+                <div key={row.id} className="sf-card p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-semibold text-navy-900">
+                      <p className="font-semibold text-ink-900">
                         <AddressLink oneLine={row.one_line} fallback={row.parcel_key} />
                       </p>
-                      <p className="mt-0.5 text-sm text-navy-900/55">
+                      <p className="mt-0.5 text-sm text-ink-900/55">
                         {[
                           row.county && `${row.county} County`,
                           row.state,
@@ -262,7 +262,7 @@ export function LandSearchTab({
                         type="button"
                         onClick={() => void remove(row)}
                         aria-label="Remove from shortlist"
-                        className="rounded p-1.5 text-navy-900/35 transition hover:bg-paper-100 hover:text-red-700"
+                        className="rounded p-1.5 text-ink-900/35 transition hover:bg-ink-200/60 hover:text-err-700"
                       >
                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5">
                           <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
@@ -282,8 +282,8 @@ export function LandSearchTab({
       {/* ---------------- Search ---------------- */}
       <div>
         <SectionHeading title="Find land" />
-        <div className="card p-5">
-          <p className="mb-4 text-sm text-navy-900/60">
+        <div className="sf-card p-5">
+          <p className="mb-4 text-sm text-ink-900/60">
             Pre-filled from {client.name}&apos;s land criteria. Anything left blank falls back to
             their record.
           </p>
@@ -329,7 +329,7 @@ export function LandSearchTab({
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-2 self-end pb-2.5 text-sm text-navy-900/80">
+            <label className="flex items-center gap-2 self-end pb-2.5 text-sm text-ink-900/80">
               <input
                 type="checkbox"
                 checked={landOnly}
@@ -342,7 +342,7 @@ export function LandSearchTab({
                   that can only ever return nothing. */}
               Vacant land only
               {useKind !== "any" && (
-                <span className="text-xs text-navy-900/50">(n/a for a use filter)</span>
+                <span className="text-xs text-ink-900/50">(n/a for a use filter)</span>
               )}
             </label>
             <div className="self-end">
@@ -357,12 +357,12 @@ export function LandSearchTab({
 
         {result && (
           <div className={`mt-5 ${loading ? "opacity-60 transition-opacity" : ""}`}>
-            <p className="mb-3 text-sm text-navy-900/60">
+            <p className="mb-3 text-sm text-ink-900/60">
               {result.total.toLocaleString()} parcel{result.total === 1 ? "" : "s"} in {result.area}
               {result.rows.length > 0 && ` · showing ${result.rows.length}`}
             </p>
             {result.notes.map((note, i) => (
-              <p key={i} className="mb-2 text-xs text-navy-900/50">
+              <p key={i} className="mb-2 text-xs text-ink-900/50">
                 {note}
               </p>
             ))}
@@ -370,18 +370,18 @@ export function LandSearchTab({
             {result.rows.length === 0 ? (
               <EmptyState>No parcels match. Widen the acreage or value range.</EmptyState>
             ) : (
-              <div className="card">
+              <div className="sf-card">
                 <Table head={["Parcel", "Lot size", "Assessed", "Land value", "Last sale", ""]}>
                   {result.rows.map((row) => {
                     const key = row.parcelId ?? "";
                     const already = savedByKey.get(key);
                     return (
-                      <tr key={key} className="transition hover:bg-paper-50">
+                      <tr key={key} className="transition hover:bg-sf-50">
                         <Td>
-                          <span className="font-medium text-navy-900">
+                          <span className="font-medium text-ink-900">
                             <AddressLink oneLine={row.oneLine} fallback={key} />
                           </span>
-                          <span className="mt-0.5 block text-xs text-navy-900/45">
+                          <span className="mt-0.5 block text-xs text-ink-900/45">
                             {[row.owner, row.propType].filter(Boolean).join(" · ")}
                           </span>
                           {/* Only when we actually have it. A blank would read
@@ -389,7 +389,7 @@ export function LandSearchTab({
                               of what an absent row means. */}
                           {row.zoning && (
                             <span
-                              className="mt-1 inline-block rounded bg-paper-200 px-1.5 py-0.5 text-[0.7rem] font-medium text-navy-900/70"
+                              className="mt-1 inline-block rounded bg-ink-200 px-1.5 py-0.5 text-[0.7rem] font-medium text-ink-900/70"
                               title={`Zoning per ${row.zoningJurisdiction ?? "the county"}, read ${row.zoningAt ?? "—"}. Confirm with a written determination.`}
                             >
                               {row.zoning}
@@ -403,7 +403,7 @@ export function LandSearchTab({
                         <Td className="whitespace-nowrap">
                           {fmtMoney(dollarsToCents(row.landValue))}
                         </Td>
-                        <Td className="whitespace-nowrap text-navy-900/60">
+                        <Td className="whitespace-nowrap text-ink-900/60">
                           {row.lastDeedDate ? fmtDate(row.lastDeedDate) : "—"}
                           {row.lastDeedAmount ? ` · ${fmtMoney(dollarsToCents(row.lastDeedAmount))}` : ""}
                         </Td>
@@ -439,7 +439,7 @@ export function LandSearchTab({
               >
                 Previous
               </button>
-              <span className="text-sm text-navy-900/50">Page {page}</span>
+              <span className="text-sm text-ink-900/50">Page {page}</span>
               <button
                 type="button"
                 className="sf-btn-neutral"
@@ -459,18 +459,18 @@ export function LandSearchTab({
 function FitPanel({ fit, onRefresh }: { fit: ParcelFit; onRefresh: () => void }) {
   const tone = fit.verdict === "Strong fit" ? "green" : fit.verdict === "Poor fit" ? "red" : "amber";
   return (
-    <div className="mt-4 border-t border-paper-200 pt-4">
+    <div className="mt-4 border-t border-ink-200 pt-4">
       <div className="flex flex-wrap items-center gap-3">
         <Badge tone={tone}>{fit.verdict}</Badge>
-        <span className="text-xs uppercase tracking-wide text-navy-900/45">
+        <span className="text-xs uppercase tracking-wide text-ink-900/45">
           {fit.confidence} confidence
         </span>
-        <button type="button" onClick={onRefresh} className="ml-auto text-xs font-semibold text-navy-700 hover:text-gold-600">
+        <button type="button" onClick={onRefresh} className="ml-auto text-xs font-semibold text-sf-600 hover:text-accent-600">
           Re-assess
         </button>
       </div>
-      <p className="mt-2 font-medium text-navy-900">{fit.headline}</p>
-      <div className="mt-2 text-sm text-navy-900/75">
+      <p className="mt-2 font-medium text-ink-900">{fit.headline}</p>
+      <div className="mt-2 text-sm text-ink-900/75">
         <Markdown>{fit.rationale}</Markdown>
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -487,8 +487,8 @@ function FitList({ title, items }: { title: string; items: string[] }) {
   if (!items?.length) return null;
   return (
     <div>
-      <h5 className="text-xs font-semibold uppercase tracking-wide text-navy-800/50">{title}</h5>
-      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-navy-900/75">
+      <h5 className="text-xs font-semibold uppercase tracking-wide text-ink-800/50">{title}</h5>
+      <ul className="mt-1.5 list-disc space-y-1 pl-4 text-sm text-ink-900/75">
         {items.map((item, i) => (
           <li key={i}>
             <Markdown inline>{item}</Markdown>

@@ -69,7 +69,7 @@ export function LoginForm({ next }: { next: string }) {
       {error && (
         <p
           role="alert"
-          className="rounded-md border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
+          className="rounded-md border border-err-500/30 bg-err-50 px-3.5 py-2.5 text-sm text-err-700"
         >
           {error}
         </p>
@@ -78,7 +78,7 @@ export function LoginForm({ next }: { next: string }) {
       <button
         type="submit"
         disabled={loading}
-        className="btn-gold w-full"
+        className="sf-btn-brand w-full py-2.5"
       >
         {loading ? "Signing in…" : "Sign in"}
       </button>

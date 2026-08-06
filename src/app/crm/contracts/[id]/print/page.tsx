@@ -49,7 +49,11 @@ export default async function ContractPrintPage({
   const documents = only ? [contract] : set;
 
   return (
-    <div className="mx-auto max-w-[52rem] px-6 py-10 print:px-0 print:py-0">
+    // `theme-light` pins the theme variables to their light values for this
+    // subtree — see the same note on the proposal print page. An execution
+    // packet is the one thing in this app that reaches a counterparty, and its
+    // appearance must not depend on the reader's system settings.
+    <div className="theme-light mx-auto max-w-[52rem] px-6 py-10 print:px-0 print:py-0">
       <div className="no-print mb-8 flex items-center justify-between border-b border-paper-200 pb-4">
         <a href="/crm/contracts" className="link-underline text-sm">
           ← Back to contracts

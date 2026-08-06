@@ -228,7 +228,7 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
         type="button"
         onClick={() => setOpen(true)}
         title="Ask the advisor (⌘K)"
-        className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-sf-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-navy-950/20 transition hover:bg-sf-600"
+        className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-grad-ai px-5 py-3.5 text-sm font-semibold text-white shadow-[0_10px_30px_-8px_rgb(var(--ai-to)/0.6)] transition duration-200 ease-spring hover:-translate-y-0.5 hover:brightness-110"
       >
         <AskIcon />
         Ask AI
@@ -243,18 +243,18 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
       <div
         aria-hidden
         onClick={() => setOpen(false)}
-        className="fixed inset-0 z-40 bg-navy-950/20"
+        className="fixed inset-0 z-40 bg-ink-900/30 backdrop-blur-sm"
       />
 
       <aside
         role="dialog"
         aria-label="Ask the advisor"
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-ink-200 bg-white shadow-2xl"
+        className="animate-slide-in-right fixed inset-y-0 right-0 z-50 flex w-full max-w-xl flex-col border-l border-ink-200 bg-card shadow-pop"
       >
-        <header className="flex items-center justify-between gap-3 border-b border-ink-200 bg-navy-950 px-4 py-3">
+        <header className="flex items-center justify-between gap-3 bg-grad-ai px-4 py-3.5">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-paper-50">Ask AI</p>
-            <p className="truncate text-xs text-paper-50/60">
+            <p className="text-sm font-semibold text-white">Ask AI</p>
+            <p className="truncate text-xs text-white/70">
               {scope.label} · answers from the house knowledge base
             </p>
           </div>
@@ -262,7 +262,7 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
             <button
               type="button"
               onClick={() => setShowThreads((v) => !v)}
-              className="rounded-md px-2 py-1 text-xs text-paper-50/70 transition hover:bg-white/10 hover:text-gold-400"
+              className="rounded-pill px-2 py-1 text-xs text-white/75 transition hover:bg-white/15 hover:text-white"
             >
               History
             </button>
@@ -273,7 +273,7 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
                 setMessages([]);
                 setShowThreads(false);
               }}
-              className="rounded-md px-2 py-1 text-xs text-paper-50/70 transition hover:bg-white/10 hover:text-gold-400"
+              className="rounded-pill px-2 py-1 text-xs text-white/75 transition hover:bg-white/15 hover:text-white"
             >
               New
             </button>
@@ -281,7 +281,7 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close"
-              className="rounded-md px-2 py-1 text-lg leading-none text-paper-50/70 transition hover:bg-white/10 hover:text-paper-50"
+              className="rounded-pill px-2 py-1 text-lg leading-none text-white/75 transition hover:bg-white/15 hover:text-white"
             >
               ×
             </button>
@@ -299,8 +299,8 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
                     <button
                       type="button"
                       onClick={() => void openThread(conversation.id)}
-                      className={`w-full px-4 py-2 text-left text-sm transition hover:bg-white ${
-                        conversation.id === activeId ? "bg-white font-medium" : ""
+                      className={`w-full px-4 py-2 text-left text-sm transition hover:bg-card ${
+                        conversation.id === activeId ? "bg-card font-medium" : ""
                       }`}
                     >
                       <span className="line-clamp-1 text-ink-800">{conversation.title}</span>
@@ -357,10 +357,10 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
                 className={message.role === "user" ? "flex justify-end" : "flex justify-start"}
               >
                 <div
-                  className={`max-w-[90%] rounded-lg px-3 py-2 text-sm ${
+                  className={`max-w-[90%] rounded-2xl px-3.5 py-2.5 text-sm ${
                     message.role === "user"
-                      ? "bg-sf-500 text-white"
-                      : "bg-ink-100 text-ink-800"
+                      ? "bg-grad-brand text-white"
+                      : "bg-ink-200/55 text-ink-800"
                   }`}
                 >
                   {message.role === "user" ? (

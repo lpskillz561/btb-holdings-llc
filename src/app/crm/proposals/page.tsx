@@ -69,11 +69,11 @@ export default async function ProposalsPage() {
                 head={["Proposal", "Client", "Status", "Investment", "Deduction", "Tax benefit", "Created", ""]}
               >
                 {proposals.map((row) => (
-                  <tr key={row.id} className="transition hover:bg-white">
+                  <tr key={row.id} className="transition hover:bg-card-2">
                     <Td>
                       <Link
                         href={`/crm/proposals/${row.id}`}
-                        className="font-medium text-ink-900 hover:text-gold-600"
+                        className="font-medium text-ink-900 hover:text-accent-600"
                       >
                         {row.title}
                       </Link>
@@ -81,7 +81,7 @@ export default async function ProposalsPage() {
                     <Td>
                       <Link
                         href={`/crm/clients/${row.client_id}`}
-                        className="text-ink-700 hover:text-gold-600"
+                        className="text-ink-700 hover:text-accent-600"
                       >
                         {row.client_name}
                       </Link>

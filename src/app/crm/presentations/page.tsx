@@ -111,7 +111,7 @@ export default async function PresentationsPage() {
               terms to the deduction on their record. Without a target deduction the deck falls
               back to the executed sample and the tier table — never an invented number.
             </p>
-            <div className="card">
+            <div className="sf-card">
               {clients.length === 0 ? (
                 <div className="p-6">
                   <EmptyState>
@@ -121,11 +121,11 @@ export default async function PresentationsPage() {
               ) : (
                 <Table head={["Client", "Stage", "Target deduction", "Present"]}>
                   {clients.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-paper-50">
+                    <tr key={row.id} className="transition hover:bg-sf-50">
                       <Td>
                         <Link
                           href={`/crm/clients/${row.id}`}
-                          className="font-semibold text-ink-900 hover:text-gold-600"
+                          className="font-semibold text-ink-900 hover:text-accent-600"
                         >
                           {row.name}
                         </Link>

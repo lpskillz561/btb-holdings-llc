@@ -7,7 +7,7 @@
 // open internet.
 //
 // It looks nothing like the rest of /crm, on purpose. Everything under /crm is
-// Salesforce Lightning because that is what staff read fastest; this is shown to
+// the internal look — indigo, rounded, following the OS appearance; this is shown to
 // a taxpayer and their CPA, where the navy/gold brand is worth more than
 // familiar software. `CrmChrome` and `AskAi` both render nothing here, the same
 // way they render nothing on a /print route.

@@ -583,29 +583,104 @@ front of a taxpayer's CPA is worse than no panel.
 
 ## Two looks, on purpose
 
-**Internal screens are Salesforce Lightning. Client documents are not.**
+**The internal app follows the reader's OS appearance. Client documents never
+do.** The Salesforce Lightning look is gone — August 2026, because the people
+using this are not software people and the blandness was pushing them away.
 
-- The CRM staff work in — every `/crm` page, `components/crm/ui.tsx`, the nav —
-  uses the `sf-*` / `ink-*` palette in `tailwind.config.ts` and the `.sf-*`
-  classes in `globals.css`. Lightning blue `#0176d3`, grey page, white cards,
-  compact tables. The grey is load-bearing: `.sf-card` has no shadow and gets
-  its lift from the contrast.
-- **Proposals, contracts and every `/print` route keep the navy/gold serif
-  brand.** They go to a taxpayer and their CPA, where "private bank" is worth
-  more than "familiar software". `ui.tsx` is imported by no print page, which is
-  what makes the split cheap to maintain — restyle it freely.
+- The CRM staff work in — every `/crm` page, `components/crm/ui.tsx`, the rail —
+  is an indigo→violet, rounded, layered, translucent "Mac-like" look, and it has
+  a **dark mode that follows `prefers-color-scheme` automatically**. There is no
+  toggle.
+- **Proposals, contracts, every `/print` route and the `/crm/present` deck keep
+  the navy/gold serif brand, frozen.** They go to a taxpayer and their CPA, where
+  "private bank" is worth more than "familiar software" — and a document whose
+  colour depends on the reader's system settings is not a document anyone
+  approved.
 
-Two traps this arrangement sets:
+### How the split is enforced, which is the part to not break
 
-- **Headings default to SANS now.** The base layer used to force `font-serif` on
+**Two palettes in `tailwind.config.ts`, and only one of them moves.**
+
+- `navy` / `steel` / `gold` / `paper` are **literal hex** and must stay that way.
+  The documents and the deck are painted entirely out of them.
+- `sf` / `ink` / `ok` / `warn` / `err` / `card` / `accent` all resolve to **CSS
+  variables** declared in `globals.css`. That indirection is what bought dark
+  mode across 48 files without editing any of them.
+
+**The ramps INVERT in dark mode, they are not replaced.** `ink-100` is always
+"the page" and `ink-900` is always "body text"; `sf-500` is the vivid primary in
+both, everything below it is a tint and everything above it is a text shade. So
+`text-sf-600`, `bg-sf-100 text-sf-700` and `bg-sf-50` row hovers all keep meaning
+what they meant. Match that convention or a new token will read backwards.
+
+**No file under `components/present/`, and neither print page, references a
+single variable-backed token.** That was verified, not assumed, and it is what
+makes the deck physically immune. Keep it that way — if a client-facing surface
+seems to need one, it is the wrong token.
+
+- **`.theme-light` pins the light values back**, and both print pages carry it.
+  They are nested inside `app/crm/layout.tsx` and therefore inside `.sf-page`,
+  so without it a contract packet goes dark on a reader's Mac. `@media print`
+  forcing white is the paper half of the same guarantee; this is the screen half.
+- **`.card` is the document surface and now has no call sites.** Every use of it
+  was on an internal screen, where its hard-coded white fill became a white
+  rectangle in dark mode; those are all `.sf-card` now. Kept for documents. If
+  you put a surface on a print page, it is `.card`, never `.sf-card`.
+- **The rail and the sign-in backdrop stay dark in both appearances.**
+  `BtbMark`'s disc is a solid navy, so a surface that inverted would need both
+  mark variants rendered and toggled. One mark, one reversed treatment.
+- **The violet gradient means AI and nothing else.** Primary actions are indigo
+  (`.sf-btn-brand`); every AI control is violet→fuchsia (`.sf-btn-ai`). "The
+  machine suggested this" must never be one glance from "this is the button that
+  saves".
+- **`.sf-num` is `tabular-nums` in the SANS face, not the mono stack.** Mono was
+  tried and reads as code at the stat tiles' display size.
+- The `sf-` prefix is a **fossil** — it used to mean Salesforce and now just
+  means the primary ramp. It is ~180 references across 48 files; renaming it is
+  diff noise for no behaviour change.
+
+One trap that survives from the old arrangement:
+
+- **Headings default to SANS.** The base layer used to force `font-serif` on
   every `h1`-`h4`; a descendant rule like `.sf-page h1 { font-sans }` would then
   have beaten an explicit `font-serif` utility on the element, which is a
   specificity argument you cannot win. So the default flipped and the documents
   opt back in with `font-serif`. If a document heading comes out sans, it is
   missing that class.
-- **`/crm/*/print` is nested inside `app/crm/layout.tsx`** and therefore inside
-  `.sf-page`, whose grey background would otherwise print. `@media print` forces
-  it white — keep that rule if you touch the layout.
+
+## Inline AI — `lib/crm/assist.ts`, and it never writes
+
+`AskAi` answers questions. This answers a different one — "help me fill this in"
+— and it is on the client form, the record dialogs, every notes field, the kanban
+board and the client list.
+
+- **Nothing in that module writes.** Every function returns a suggestion and
+  stops; `POST /api/crm/assist` has no branch that reaches an UPDATE. Applying
+  one is the browser calling the ordinary POST/PATCH endpoints, so a suggestion
+  passes every coercer and every allow-list a typed value passes. Propose-then-
+  confirm is a property of the system, not a convention.
+- **`NEVER_SUGGEST` is the money guardrail**, and it is applied server-side
+  *after* generation rather than only asked for in the prompt. It strips the
+  frozen proposal economics, the `deal.ts` note terms, and the
+  provenance-stamped AI artifacts (`summary_md` and friends). A model that
+  ignores the instruction still cannot put a computed figure on screen.
+- **Every call goes through `buildScopedPrompt`**, so it inherits `BASE_PROMPT` +
+  `SKILL.md` + record context. A suggestion written without `SKILL.md` describes
+  the generic tiny-home strategy — the 7-day test, a non-recourse note, land the
+  client owns — which is a deal BTB does not sell. Never call the model directly
+  from here.
+- **Nothing fires on mount.** Every control is behind a press. `ClientsBoard` is
+  mounted twice (Overview and `/crm/clients`), so an on-mount triage would bill
+  twice for one view of the dashboard, and the board is the screen the team opens
+  every morning.
+- **Enum and id validity are checked server-side.** A suggested `select` value
+  outside its options is dropped rather than shown — it would fail the CHECK at
+  save time as a 400 that reads like a bug in the form.
+- The `check` action on `AiText` is the one that earns the feature: it does not
+  rewrite, it reads what is written against the knowledge base and reports what
+  contradicts it. Same idea as "Points to check" on a meeting summary.
+- `crm_todos` has **no `client_id`** — the board is the team's shared list — so a
+  suggested card names the account in its title instead.
 
 ## Testing — curl is not enough
 

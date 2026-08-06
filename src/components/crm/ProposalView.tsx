@@ -128,7 +128,7 @@ export function ProposalView({
             </Badge>
             <Link
               href={`/crm/proposals/${proposal.id}/print`}
-              className="text-sm font-semibold text-navy-700 hover:text-gold-600"
+              className="text-sm font-semibold text-sf-600 hover:text-accent-600"
             >
               Print / PDF
             </Link>

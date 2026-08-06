@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ClientListRow } from "@/lib/crm/clients";
 import { fmtAgo, fmtMoney } from "@/lib/crm/format";
 import { CLIENT_STATUSES, LABELS, type ClientStatus } from "@/lib/crm/types";
+import { AiTriage } from "./AiTriage";
 import { apiGet, qs } from "./api";
 import { ClientForm, type AvailablePad, type StateOption } from "./ClientForm";
 import { statusTone } from "@/lib/crm/tone";
@@ -88,9 +89,17 @@ export function ClientsBoard({
         </button>
       </div>
 
+      {/* Answers the question the list itself cannot: not "find me this
+          account" but "which of these has gone quiet". Behind a press — this
+          component is mounted on both the Overview and /crm/clients, so an
+          on-mount call would bill twice for one view of the dashboard.
+          `nameFor` reads from the rows already loaded rather than asking the
+          model for a name it could get wrong. */}
+      <AiTriage nameFor={(id) => rows.find((r) => r.id === id)?.name} />
+
       <ErrorNote>{error}</ErrorNote>
 
-      <div className={`card mt-3 ${loading ? "opacity-60 transition-opacity" : ""}`}>
+      <div className={`sf-card mt-3 ${loading ? "opacity-60 transition-opacity" : ""}`}>
         {rows.length === 0 ? (
           <div className="p-6">
             <EmptyState
@@ -110,9 +119,9 @@ export function ClientsBoard({
             head={["Client", "Stage", "Target deduction", "Invested", "Holdings", "Last touched"]}
           >
             {rows.map((row) => (
-              <tr key={row.id} className="transition hover:bg-paper-50">
+              <tr key={row.id} className="transition hover:bg-sf-50">
                 <Td>
-                  <Link href={`/crm/clients/${row.id}`} className="font-semibold text-ink-900 hover:text-gold-600">
+                  <Link href={`/crm/clients/${row.id}`} className="font-semibold text-ink-900 hover:text-accent-600">
                     {row.name}
                   </Link>
                   <span className="mt-0.5 block text-xs text-ink-500">

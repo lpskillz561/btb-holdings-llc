@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
-import { Wordmark } from "@/components/Wordmark";
+import { AuthShell } from "@/components/AuthShell";
 import { RegisterForm } from "@/components/RegisterForm";
 
 export const metadata: Metadata = {
@@ -50,51 +50,36 @@ export default async function RegisterPage({
   const { open, codeRequired } = registrationState();
 
   return (
-    <section className="relative flex min-h-[78vh] items-center justify-center overflow-hidden bg-navy-950 px-6 py-20">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.07]"
-        style={{
-          background:
-            "radial-gradient(60% 50% at 50% 0%, #d4af37 0%, transparent 70%)",
-        }}
-      />
+    <AuthShell>
+      <p className="bg-grad-ai bg-clip-text text-xs font-bold uppercase tracking-[0.18em] text-transparent">
+        Request access
+      </p>
+      <h1 className="mt-3 text-2xl font-semibold tracking-tight text-ink-900">
+        Create your account
+      </h1>
 
-      <div className="relative w-full max-w-md">
-        <div className="mb-8 flex justify-center">
-          <Wordmark tone="light" />
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-white p-8 shadow-lift sm:p-10">
-          <p className="eyebrow">Request access</p>
-          <h1 className="mt-3 font-serif text-2xl font-medium text-navy-900">
-            Create your account
-          </h1>
-
-          {open ? (
-            <>
-              <p className="mt-2 text-sm text-navy-900/60">
-                Set up access to the Ziora underwriting platform.
-              </p>
-              <div className="mt-7">
-                <RegisterForm next={dest} codeRequired={codeRequired} />
-              </div>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-navy-900/60">
-              Registration is currently by invitation. Please contact your Ziora
-              relationship manager to request access.
-            </p>
-          )}
-
-          <p className="mt-6 text-center text-sm text-navy-900/60">
-            Already have access?{" "}
-            <Link href="/login" className="link-underline">
-              Sign in
-            </Link>
+      {open ? (
+        <>
+          <p className="mt-2 text-sm text-ink-600">
+            Set up access to the Ziora underwriting platform.
           </p>
-        </div>
-      </div>
-    </section>
+          <div className="mt-7">
+            <RegisterForm next={dest} codeRequired={codeRequired} />
+          </div>
+        </>
+      ) : (
+        <p className="mt-2 text-sm text-ink-600">
+          Registration is currently by invitation. Please contact your Ziora relationship
+          manager to request access.
+        </p>
+      )}
+
+      <p className="mt-6 text-center text-sm text-ink-600">
+        Already have access?{" "}
+        <Link href="/login" className="font-medium text-sf-600 underline-offset-4 hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </AuthShell>
   );
 }

@@ -62,7 +62,7 @@ export function AssessSite({ parcelKey, label }: { parcelKey: string; label: str
       {error && <p className="mt-1 text-xs text-err-700">{error}</p>}
 
       {fit && open && (
-        <div className="mt-2 rounded border border-ink-200 bg-white p-3">
+        <div className="mt-2 rounded border border-ink-200 bg-card p-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={tone}>{fit.verdict}</Badge>
             <span className="sf-meta uppercase tracking-wide">{fit.confidence} confidence</span>
