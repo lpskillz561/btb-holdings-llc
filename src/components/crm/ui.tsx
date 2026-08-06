@@ -10,9 +10,11 @@
 // Compose these; don't restyle per page. The vocabulary is the .sf-* classes in
 // globals.css.
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import type { Tone } from "@/lib/crm/tone";
+import { Dropdown } from "./Dropdown";
+import { FieldIdContext, useFieldId } from "./fieldContext";
 
 /* -------------------------------------------------------------------------- */
 /* Badges                                                                      */
@@ -155,6 +157,18 @@ export function Detail({ label, children }: { label: string; children: ReactNode
 /* Form fields                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * A labelled form row.
+ *
+ * NOT a wrapping `<label>` any more. `Dropdown` renders a `<button>` — a native
+ * select's popup is drawn by the OS and cannot be themed — and interactive
+ * content inside a label is invalid HTML whose practical symptom is that
+ * clicking the field's NAME opens the dropdown. It is `htmlFor` + `useId` now,
+ * with the id handed to the control through `FieldIdContext`.
+ *
+ * Same fix, same reason, as `Num` on the equipment workbench when `InfoTip`
+ * arrived. See CLAUDE.md.
+ */
 export function Field({
   label,
   hint,
@@ -166,23 +180,43 @@ export function Field({
   children: ReactNode;
   span?: boolean;
 }) {
+  const id = useId();
+  const hintId = `${id}-hint`;
   return (
-    <label className={`block ${span ? "sm:col-span-2" : ""}`}>
-      <span className="sf-label">{label}</span>
-      {children}
-      {hint && <span className="mt-1 block text-xs text-ink-600">{hint}</span>}
-    </label>
+    <div className={`block ${span ? "sm:col-span-2" : ""}`}>
+      <label className="sf-label" htmlFor={id}>
+        {label}
+      </label>
+      <FieldIdContext.Provider value={id}>{children}</FieldIdContext.Provider>
+      {hint && (
+        <span id={hintId} className="mt-1 block text-xs text-ink-600">
+          {hint}
+        </span>
+      )}
+    </div>
   );
 }
 
 export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`sf-input ${props.className ?? ""}`} />;
+  const id = useFieldId(props.id);
+  return <input {...props} id={id} className={`sf-input ${props.className ?? ""}`} />;
 }
 
 export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`sf-input ${props.className ?? ""}`} />;
+  const id = useFieldId(props.id);
+  return <textarea {...props} id={id} className={`sf-input ${props.className ?? ""}`} />;
 }
 
+/**
+ * The enum picker used by every spec-driven form.
+ *
+ * Renders `Dropdown` rather than a bare `<select>`, so the popup is ours and
+ * follows the theme — a native select's menu is drawn by the OS and is the one
+ * control CSS cannot reach. The props are unchanged, so no call site moved.
+ *
+ * `Dropdown` keeps a real hidden `<select name=...>` in the DOM, so FormData,
+ * `form.elements.namedItem()` and the AI assist "Use" path all still work.
+ */
 export function Select({
   options,
   labels,
@@ -192,13 +226,29 @@ export function Select({
   labels?: Record<string, string>;
 }) {
   return (
-    <select {...props} className={`sf-input ${props.className ?? ""}`}>
-      {options.map((o) => (
-        <option key={o} value={o}>
-          {labels?.[o] ?? o}
-        </option>
-      ))}
-    </select>
+    <Dropdown
+      name={props.name}
+      id={props.id}
+      required={props.required}
+      disabled={props.disabled}
+      aria-label={props["aria-label"]}
+      className={props.className}
+      defaultValue={props.defaultValue === undefined ? undefined : String(props.defaultValue)}
+      value={props.value === undefined ? undefined : String(props.value)}
+      onChange={
+        props.onChange
+          ? // The spec-driven forms are uncontrolled and pass no handler; the
+            // few controlled callers expect a change EVENT, so synthesise the
+            // one shape they read rather than changing their signatures.
+            (value) =>
+              props.onChange?.({
+                target: { value, name: props.name },
+                currentTarget: { value, name: props.name },
+              } as React.ChangeEvent<HTMLSelectElement>)
+          : undefined
+      }
+      options={options.map((o) => ({ value: o, label: labels?.[o] ?? o }))}
+    />
   );
 }
 
@@ -208,6 +258,7 @@ export function Select({
  * float number of dollars that could round badly.
  */
 export function MoneyInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const id = useFieldId(props.id);
   return (
     <div className="relative">
       <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-500">
@@ -216,6 +267,7 @@ export function MoneyInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
       <input
         inputMode="decimal"
         {...props}
+        id={id}
         className={`sf-input pl-7 ${props.className ?? ""}`}
       />
     </div>
@@ -223,11 +275,13 @@ export function MoneyInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
 }
 
 export function PercentInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const id = useFieldId(props.id);
   return (
     <div className="relative">
       <input
         inputMode="decimal"
         {...props}
+        id={id}
         className={`sf-input pr-8 ${props.className ?? ""}`}
       />
       <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-ink-500">

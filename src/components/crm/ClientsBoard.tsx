@@ -17,6 +17,7 @@ import { apiGet, qs } from "./api";
 import { ClientForm, type AvailablePad, type StateOption } from "./ClientForm";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, Dialog, EmptyState, ErrorNote, Table, Td, useDialog } from "./ui";
+import { Dropdown } from "./Dropdown";
 
 export function ClientsBoard({
   initial,
@@ -70,19 +71,16 @@ export function ClientsBoard({
           aria-label="Search clients"
           className="field max-w-xs"
         />
-        <select
+        <Dropdown
           value={status}
-          onChange={(e) => setStatus(e.target.value as ClientStatus | "")}
+          onChange={(v) => setStatus(v as ClientStatus | "")}
           aria-label="Filter by stage"
-          className="field max-w-[14rem]"
-        >
-          <option value="">All stages</option>
-          {CLIENT_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {LABELS.clientStatus[s]}
-            </option>
-          ))}
-        </select>
+          className="w-[14rem]"
+          options={[
+            { value: "", label: "All stages" },
+            ...CLIENT_STATUSES.map((s) => ({ value: s, label: LABELS.clientStatus[s] })),
+          ]}
+        />
         <div className="flex-1" />
         <button type="button" className="sf-btn-brand" onClick={openDialog}>
           Add client

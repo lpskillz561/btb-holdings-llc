@@ -23,6 +23,7 @@ import { apiDelete, apiGet, apiPatch, apiPost, qs } from "./api";
 import { statusTone } from "@/lib/crm/tone";
 import { zillowUrlForAddress } from "@/lib/zillow";
 import { Badge, EmptyState, ErrorNote, SectionHeading, Table, Td } from "./ui";
+import { Dropdown } from "./Dropdown";
 
 /**
  * The address, as a Zillow search link when it carries a house number.
@@ -221,18 +222,16 @@ export function LandSearchTab({
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <select
+                      <Dropdown
                         value={row.status}
-                        onChange={(e) => void setStatus(row, e.target.value)}
+                        onChange={(v) => void setStatus(row, v)}
                         aria-label="Shortlist status"
-                        className="field w-auto py-1.5 text-xs"
-                      >
-                        {SAVED_PARCEL_STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            {LABELS.savedParcelStatus[s]}
-                          </option>
-                        ))}
-                      </select>
+                        className="w-44"
+                        options={SAVED_PARCEL_STATUSES.map((s) => ({
+                          value: s,
+                          label: LABELS.savedParcelStatus[s],
+                        }))}
+                      />
                       <button
                         type="button"
                         className="sf-btn-neutral px-3 py-1.5 text-xs"
@@ -315,20 +314,20 @@ export function LandSearchTab({
               <span className="field-label">Max assessed value</span>
               <input className="field" inputMode="decimal" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="150000" />
             </label>
-            <label className="block">
+            {/* A div rather than a wrapping <label> — see the note in
+                ProposalView: Dropdown is a button. */}
+            <div className="block">
               <span className="field-label">Current use</span>
-              <select
-                className="field"
+              <Dropdown
+                aria-label="Current use"
                 value={useKind}
-                onChange={(e) => setUseKind(e.target.value as UseKind)}
-              >
-                {Object.entries(USE_KINDS).map(([key, { label }]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={(v) => setUseKind(v as UseKind)}
+                options={Object.entries(USE_KINDS).map(([key, { label }]) => ({
+                  value: key,
+                  label,
+                }))}
+              />
+            </div>
             <label className="flex items-center gap-2 self-end pb-2.5 text-sm text-ink-900/80">
               <input
                 type="checkbox"

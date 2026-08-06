@@ -16,6 +16,7 @@ import { LABELS, PROPOSAL_STATUSES, type CrmProposal } from "@/lib/crm/types";
 import { apiPatch } from "./api";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, ErrorNote } from "./ui";
+import { Dropdown } from "./Dropdown";
 
 export function ProposalView({
   proposal: initial,
@@ -134,21 +135,22 @@ export function ProposalView({
             </Link>
           </div>
 
-          <label className="mt-5 block">
+          {/* A div, not a wrapping <label>: Dropdown is a <button>, and
+              interactive content inside a label makes clicking the word
+              "Status" open the menu. `aria-label` carries the name instead. */}
+          <div className="mt-5 block">
             <span className="field-label">Status</span>
-            <select
-              className="field"
+            <Dropdown
+              aria-label="Proposal status"
               value={proposal.status}
               disabled={saving}
-              onChange={(e) => void patch({ status: e.target.value })}
-            >
-              {PROPOSAL_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {LABELS.proposalStatus[status]}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={(v) => void patch({ status: v })}
+              options={PROPOSAL_STATUSES.map((status) => ({
+                value: status,
+                label: LABELS.proposalStatus[status],
+              }))}
+            />
+          </div>
 
           <label className="mt-4 block">
             <span className="field-label">Valid until</span>

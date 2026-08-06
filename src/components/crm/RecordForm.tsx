@@ -38,6 +38,7 @@ import {
   TextArea,
   TextInput,
 } from "./ui";
+import { Dropdown } from "./Dropdown";
 
 export interface FieldSpec {
   name: string;
@@ -290,14 +291,15 @@ function Control({ spec, row, choices }: { spec: FieldSpec; row?: Row; choices?:
     case "choice": {
       const list = choices?.[spec.choiceKey ?? ""] ?? [];
       return (
-        <select name={spec.name} defaultValue={value} className="field">
-          <option value="">{list.length ? "— none —" : "— none recorded yet —"}</option>
-          {list.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <Dropdown
+          name={spec.name}
+          defaultValue={value}
+          placeholder={list.length ? "— none —" : "— none recorded yet —"}
+          options={[
+            { value: "", label: list.length ? "— none —" : "— none recorded yet —" },
+            ...list,
+          ]}
+        />
       );
     }
     default:

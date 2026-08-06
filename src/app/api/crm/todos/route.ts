@@ -14,6 +14,6 @@ export const GET = withCrm(async () => {
 export const POST = withCrm(async (req, { actor }) => {
   const body = await readBody(req);
   // `created_by` comes from the session, never the body.
-  const row = await createTodo(body.title, body.status, actor);
+  const row = await createTodo(body.title, body.status, actor, body.notes);
   return NextResponse.json(row, { status: 201 });
 });

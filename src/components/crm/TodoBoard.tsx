@@ -37,14 +37,19 @@
  * entry in that map.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AiSuggestCards } from "./AiSuggestCards";
-import { apiDelete, apiGet, apiPatch, apiPost } from "./api";
+import { apiDelete, apiDeleteJson, apiGet, apiPatch, apiPost, qs } from "./api";
+import { CommentThread } from "./CommentThread";
+import { Dropdown } from "./Dropdown";
+import { SubtaskList } from "./SubtaskList";
+import { TagChip, TagPicker } from "./TagChip";
+import { formatTicket, parseTicket } from "@/lib/crm/ticket";
 import { Dialog, ErrorNote, SectionHeading, TextArea, TextInput } from "./ui";
 import { fmtAgo, fmtDate } from "@/lib/crm/format";
 import { LABELS, TODO_STATUSES, type TodoStatus } from "@/lib/crm/types";
-import type { CrmTodo, CrmTodoComment } from "@/lib/crm/todos";
+import type { CrmSubtask, CrmTag, CrmTodo } from "@/lib/crm/todos";
 
 export interface BoardUser {
   email: string;
@@ -120,6 +125,13 @@ const TONE: Record<
   },
 };
 
+/**
+ * How the columns are ordered. Applied to all three at once — sorting one
+ * column differently from its neighbours would make the board unreadable as a
+ * left-to-right flow.
+ */
+type SortKey = "newest" | "oldest" | "ticket" | "title";
+
 /** "David Belousov" -> DB; an email with no name -> its first two letters. */
 function initials(person: BoardUser | undefined, email: string): string {
   const source = person?.name?.trim();
@@ -152,6 +164,26 @@ export function TodoBoard({
   const [overColumn, setOverColumn] = useState<TodoStatus | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
+  // ---- The vocabulary, and the filters over it ----
+  const [allTags, setAllTags] = useState<CrmTag[]>([]);
+  const [q, setQ] = useState("");
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [who, setWho] = useState<string>(""); // "" = anyone, "@me", "@none", or an email
+  const [sort, setSort] = useState<SortKey>("newest");
+
+  const loadTags = useCallback(async () => {
+    try {
+      setAllTags(await apiGet<CrmTag[]>("/api/crm/tags"));
+    } catch {
+      // The board must still work with no tag vocabulary loaded — the picker
+      // just offers creation instead of a list.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadTags();
+  }, [loadTags]);
+
   // `?card=<id>` opens a card straight from a link — how the dashboard list
   // gets you to the card you clicked rather than dumping you on the board.
   const router = useRouter();
@@ -170,7 +202,72 @@ export function TodoBoard({
 
   const byEmail = new Map(users.map((u) => [u.email.toLowerCase(), u]));
   const openCount = todos.filter((t) => t.status !== "done").length;
+  // Looked up in the FULL list, not the filtered one: a card opened from
+  // `?card=` must still open when the current filter would hide it, or a link
+  // from the dashboard silently does nothing.
   const open = todos.find((t) => t.id === openId) ?? null;
+
+  /**
+   * Search, filter, sort — applied to every column at once.
+   *
+   * A ticket key typed into the box is treated as a jump rather than as text:
+   * "BTB-42", "btb 42", "#42" and a bare "42" all mean that one card. That is
+   * the whole reason for having keys, and matching them as a substring instead
+   * would return BTB-42, BTB-142 and BTB-420 together.
+   */
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const ticketQuery = parseTicket(q);
+    const wanted = new Set(tagFilter);
+
+    const matches = todos.filter((t) => {
+      if (ticketQuery !== null) {
+        if (t.ticket_number !== ticketQuery) return false;
+      } else if (needle) {
+        const haystack = [
+          t.title,
+          t.notes ?? "",
+          ...(t.tags ?? []).map((g) => g.label),
+          t.assignee ?? "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(needle)) return false;
+      }
+
+      // AND across selected tags: picking two means "cards carrying both",
+      // which is what narrowing is for. OR would widen as you click, which
+      // reads as the filter not working.
+      if (wanted.size) {
+        const on = new Set((t.tags ?? []).map((g) => g.id));
+        for (const id of wanted) if (!on.has(id)) return false;
+      }
+
+      if (who === "@me" && t.assignee?.toLowerCase() !== viewer.toLowerCase()) return false;
+      if (who === "@none" && t.assignee) return false;
+      if (who && who !== "@me" && who !== "@none" && t.assignee?.toLowerCase() !== who) return false;
+
+      return true;
+    });
+
+    const sorted = [...matches];
+    switch (sort) {
+      case "oldest":
+        sorted.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        break;
+      case "ticket":
+        sorted.sort((a, b) => (a.ticket_number ?? 0) - (b.ticket_number ?? 0));
+        break;
+      case "title":
+        sorted.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      default:
+        sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
+    return sorted;
+  }, [todos, q, tagFilter, who, sort, viewer]);
+
+  const filtering = Boolean(q.trim() || tagFilter.length || who);
 
   async function add(event: React.FormEvent) {
     event.preventDefault();
@@ -257,7 +354,7 @@ export function TodoBoard({
         }}
       />
 
-      <form onSubmit={add} className="sf-card mb-4 flex gap-2 p-3">
+      <form onSubmit={add} className="sf-card mb-3 flex gap-2 p-3">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -271,9 +368,87 @@ export function TodoBoard({
         </button>
       </form>
 
+      {/* ---- Search, filter, sort ---- */}
+      <div className="sf-card mb-4 space-y-3 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search BTB-42, a title, a tag…"
+            aria-label="Search the board"
+            className="sf-input max-w-xs flex-1"
+          />
+          <Dropdown
+            value={who}
+            onChange={setWho}
+            aria-label="Filter by assignee"
+            className="w-48"
+            options={[
+              { value: "", label: "Anyone" },
+              { value: "@me", label: "Mine" },
+              { value: "@none", label: "Unassigned" },
+              ...users.map((u) => ({
+                value: u.email.toLowerCase(),
+                label: u.name?.trim() || u.email,
+                hint: u.name?.trim() ? u.email : undefined,
+              })),
+            ]}
+          />
+          <Dropdown
+            value={sort}
+            onChange={(v) => setSort(v as SortKey)}
+            aria-label="Sort cards"
+            className="w-44"
+            options={[
+              { value: "newest", label: "Newest first" },
+              { value: "oldest", label: "Oldest first" },
+              { value: "ticket", label: "Ticket number" },
+              { value: "title", label: "Title A–Z" },
+            ]}
+          />
+          {filtering ? (
+            <button
+              type="button"
+              onClick={() => {
+                setQ("");
+                setTagFilter([]);
+                setWho("");
+              }}
+              className="sf-btn-ghost text-xs"
+            >
+              Clear filters
+            </button>
+          ) : null}
+          <span className="sf-meta ml-auto">
+            {filtering ? `${visible.length} of ${todos.length}` : `${todos.length} cards`}
+          </span>
+        </div>
+
+        {allTags.length ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {allTags.map((tag) => (
+              <TagChip
+                key={tag.id}
+                tag={tag}
+                size="xs"
+                active={tagFilter.includes(tag.id)}
+                onClick={() =>
+                  setTagFilter((current) =>
+                    current.includes(tag.id)
+                      ? current.filter((id) => id !== tag.id)
+                      : [...current, tag.id],
+                  )
+                }
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+
       <div className="grid gap-4 md:grid-cols-3">
         {TODO_STATUSES.map((status) => {
-          const cards = todos.filter((t) => t.status === status);
+          const cards = visible.filter((t) => t.status === status);
           const index = TODO_STATUSES.indexOf(status);
           const prev = TODO_STATUSES[index - 1];
           const next = TODO_STATUSES[index + 1];
@@ -327,16 +502,34 @@ export function TodoBoard({
                         onClick={() => setOpenId(todo.id)}
                         className="block w-full cursor-grab p-2.5 text-left active:cursor-grabbing"
                       >
+                        {/* The key sits ABOVE the title, the way Jira does it:
+                            it is the card's name, and reading it should not mean
+                            scanning to the end of a sentence. */}
+                        <p className="sf-num mb-1 text-[0.7rem] font-bold tracking-wide text-ink-500">
+                          {formatTicket(todo.ticket_number)}
+                        </p>
                         <p className={`text-sm font-medium ${TONE[status].title}`}>{todo.title}</p>
+
+                        {todo.tags?.length ? (
+                          <span className="mt-1.5 flex flex-wrap gap-1">
+                            {todo.tags.map((tag) => (
+                              <TagChip key={tag.id} tag={tag} size="xs" />
+                            ))}
+                          </span>
+                        ) : null}
+
                         {/* text-ink-700 over .sf-meta's ink-600: the class is
                             tuned for white cards, and on a tinted fill it falls
                             to ~4.2:1. Small text, so that is under AA. */}
-                        <p className="sf-meta mt-1 text-ink-700">
+                        <p className="sf-meta mt-1.5 text-ink-700">
                           {status === "done"
                             ? `Done by ${todo.done_by ?? "someone"} ${fmtAgo(todo.done_at)}`
                             : `Added by ${todo.created_by ?? "someone"} ${fmtAgo(todo.created_at)}`}
                         </p>
-                        {(todo.assignee || todo.notes || (todo.comment_count ?? 0) > 0) && (
+                        {(todo.assignee ||
+                          todo.notes ||
+                          (todo.comment_count ?? 0) > 0 ||
+                          (todo.subtask_count ?? 0) > 0) && (
                           <p className="mt-1.5 flex items-center gap-1.5">
                             {todo.assignee && (
                               <span
@@ -349,6 +542,14 @@ export function TodoBoard({
                             {todo.notes && (
                               <span className="sf-meta text-ink-700" title="Has notes">
                                 ≡ notes
+                              </span>
+                            )}
+                            {(todo.subtask_count ?? 0) > 0 && (
+                              <span
+                                className="sf-meta text-ink-700"
+                                title={`${todo.subtask_done_count ?? 0} of ${todo.subtask_count} subtasks done`}
+                              >
+                                ☑ {todo.subtask_done_count ?? 0}/{todo.subtask_count}
                               </span>
                             )}
                             {(todo.comment_count ?? 0) > 0 && (
@@ -402,7 +603,11 @@ export function TodoBoard({
 
               {cards.length === 0 && (
                 <p className="px-1 py-4 text-center text-xs text-ink-500">
-                  {status === "todo" ? "Nothing queued." : "Drop a card here."}
+                  {filtering
+                    ? "Nothing here matches."
+                    : status === "todo"
+                      ? "Nothing queued."
+                      : "Drop a card here."}
                 </p>
               )}
             </section>
@@ -416,10 +621,24 @@ export function TodoBoard({
           todo={open}
           users={users}
           viewer={viewer}
+          allTags={allTags}
           onClose={closeCard}
           onSave={(changes) => patch(open, changes)}
           onDelete={() => void remove(open)}
           onCommentCount={(n) => setCommentCount(open.id, n)}
+          onSubtaskCount={(total, done) =>
+            setTodos((rows) =>
+              rows.map((r) =>
+                r.id === open.id
+                  ? { ...r, subtask_count: total, subtask_done_count: done }
+                  : r,
+              ),
+            )
+          }
+          onTagsChange={(tags) =>
+            setTodos((rows) => rows.map((r) => (r.id === open.id ? { ...r, tags } : r)))
+          }
+          onTagsCreated={() => void loadTags()}
         />
       )}
     </div>
@@ -448,18 +667,29 @@ function CardDialog({
   todo,
   users,
   viewer,
+  allTags,
   onClose,
   onSave,
   onDelete,
   onCommentCount,
+  onSubtaskCount,
+  onTagsChange,
+  onTagsCreated,
 }: {
   todo: CrmTodo;
   users: BoardUser[];
   viewer: string;
+  /** The whole vocabulary, for the picker. */
+  allTags: CrmTag[];
   onClose: () => void;
   onSave: (changes: Partial<CrmTodo>) => Promise<CrmTodo | null>;
   onDelete: () => void;
   onCommentCount: (count: number) => void;
+  onSubtaskCount: (total: number, done: number) => void;
+  /** This card's tags changed — the board re-renders its chips. */
+  onTagsChange: (tags: CrmTag[]) => void;
+  /** A tag was created here; the board adds it to the vocabulary. */
+  onTagsCreated: () => void;
 }) {
   const [title, setTitle] = useState(todo.title);
   const [assignee, setAssignee] = useState(todo.assignee ?? "");
@@ -467,12 +697,61 @@ function CardDialog({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [subtasks, setSubtasks] = useState<CrmSubtask[]>([]);
+  const [tags, setTags] = useState<CrmTag[]>(todo.tags ?? []);
+  const [tagError, setTagError] = useState("");
+
+  const ticket = formatTicket(todo.ticket_number);
+
+  // Subtasks are loaded when the card opens rather than with the board: most
+  // cards are never opened, and 500 lists fetched to render a progress bar is
+  // the wrong trade. The counts on the cards come from aggregates on the board
+  // query — same reasoning as the comment thread.
+  useEffect(() => {
+    let live = true;
+    apiGet<CrmSubtask[]>(`/api/crm/todos/${todo.id}/subtasks`)
+      .then((rows) => live && setSubtasks(rows))
+      .catch(() => {
+        // A failed subtask load must not stop someone reading the card.
+      });
+    return () => {
+      live = false;
+    };
+  }, [todo.id]);
+
   // Someone else moved or edited this card while it was open.
   useEffect(() => {
     setTitle(todo.title);
     setAssignee(todo.assignee ?? "");
     setNotes(todo.notes ?? "");
   }, [todo.title, todo.assignee, todo.notes]);
+
+  async function addTag(body: Record<string, unknown>) {
+    setTagError("");
+    try {
+      const next = await apiPost<CrmTag[]>(`/api/crm/todos/${todo.id}/tags`, body);
+      setTags(next);
+      onTagsChange(next);
+      // A brand-new tag has to reach the vocabulary too, or the picker will not
+      // offer it on the next card until the page is reloaded.
+      if (body.label) onTagsCreated();
+    } catch (err) {
+      setTagError(err instanceof Error ? err.message : "Could not add that tag.");
+    }
+  }
+
+  async function removeTag(tag: CrmTag) {
+    setTagError("");
+    try {
+      const next = await apiDeleteJson<CrmTag[]>(
+        `/api/crm/todos/${todo.id}/tags${qs({ tag_id: tag.id })}`,
+      );
+      setTags(next);
+      onTagsChange(next);
+    } catch (err) {
+      setTagError(err instanceof Error ? err.message : "Could not remove that tag.");
+    }
+  }
 
   const dirty =
     title.trim() !== todo.title ||
@@ -498,7 +777,15 @@ function CardDialog({
   }
 
   return (
-    <Dialog open onClose={onClose} wide title={LABELS.todoStatus[todo.status]}>
+    <Dialog
+      open
+      onClose={onClose}
+      wide
+      // The KEY is the title now, not the column. "BTB-42" is what someone says
+      // out loud and what they came here to confirm; which column it is in is
+      // already visible on the board behind the dialog.
+      title={ticket ? `${ticket} · ${LABELS.todoStatus[todo.status]}` : LABELS.todoStatus[todo.status]}
+    >
       {/* Jira's shape: the work on the left, the facts about it on the right.
           One column below md — a two-up detail panel on a phone is neither. */}
       <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_15rem]">
@@ -539,7 +826,24 @@ function CardDialog({
             </div>
           </form>
 
-          <CommentThread todoId={todo.id} viewer={viewer} onCount={onCommentCount} />
+          <SubtaskList
+            todoId={todo.id}
+            subtasks={subtasks}
+            users={users}
+            viewer={viewer}
+            onChange={(rows) => {
+              setSubtasks(rows);
+              // Keep the board's "2 of 5" badge in step without a refetch.
+              onSubtaskCount(rows.length, rows.filter((s) => s.done_at).length);
+            }}
+          />
+
+          <CommentThread
+            todoId={todo.id}
+            viewer={viewer}
+            users={users}
+            onCount={onCommentCount}
+          />
         </div>
 
         <aside className="space-y-4 md:border-l md:border-ink-200 md:pl-6">
@@ -547,20 +851,46 @@ function CardDialog({
             <label className="sf-label" htmlFor="card-assignee">
               Assigned to
             </label>
-            <select
+            <Dropdown
               id="card-assignee"
               value={assignee}
-              onChange={(e) => setAssignee(e.target.value)}
-              className="sf-input"
-            >
-              <option value="">Unassigned</option>
-              {users.map((u) => (
-                <option key={u.email} value={u.email}>
-                  {u.name ? `${u.name} (${u.email})` : u.email}
-                </option>
-              ))}
-            </select>
+              onChange={setAssignee}
+              placeholder="Unassigned"
+              options={[
+                { value: "", label: "Unassigned" },
+                ...users.map((u) => ({
+                  value: u.email,
+                  label: u.name?.trim() || u.email,
+                  hint: u.name?.trim() ? u.email : undefined,
+                })),
+              ]}
+            />
             <p className="sf-meta mt-1">Save to apply.</p>
+          </div>
+
+          {/* Tags write IMMEDIATELY rather than joining the dirty-field save.
+              Adding one is a single click with an obvious result, and holding it
+              behind a Save button is how a tag gets lost by pressing Close. The
+              title and notes still batch — see the note on CardDialog. */}
+          <div className="border-t border-ink-200 pt-3">
+            <p className="sf-label">Tags</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {tags.map((tag) => (
+                <TagChip
+                  key={tag.id}
+                  tag={tag}
+                  size="xs"
+                  onRemove={() => void removeTag(tag)}
+                />
+              ))}
+              <TagPicker
+                all={allTags}
+                selected={tags}
+                onAdd={(tag) => void addTag({ tag_id: tag.id })}
+                onCreate={(label, color) => void addTag({ label, color })}
+              />
+            </div>
+            {tagError ? <p className="mt-1.5 text-xs text-err-700">{tagError}</p> : null}
           </div>
 
           <dl className="space-y-2 border-t border-ink-200 pt-3 text-xs text-ink-600">
@@ -605,153 +935,5 @@ function CardDialog({
         </aside>
       </div>
     </Dialog>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/* Comments                                                                    */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The discussion on one card.
- *
- * Loaded when the card is opened rather than with the board: most cards are
- * never opened, and 500 threads fetched to render three badges is the wrong
- * trade. The counts on the cards come from an aggregate on the board query.
- *
- * Posting is optimistic in neither direction — a comment appears only once the
- * server has given it an id and a timestamp, because the timestamp and the
- * author are the entire reason it is a comment rather than a line of notes, and
- * a locally-invented "just now" that later disagrees with the server is worse
- * than a moment's wait.
- */
-function CommentThread({
-  todoId,
-  viewer,
-  onCount,
-}: {
-  todoId: string;
-  viewer: string;
-  onCount: (count: number) => void;
-}) {
-  const [comments, setComments] = useState<CrmTodoComment[] | null>(null);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let live = true;
-    apiGet<CrmTodoComment[]>(`/api/crm/todos/${todoId}/comments`)
-      .then((rows) => {
-        if (!live) return;
-        setComments(rows);
-        onCount(rows.length);
-      })
-      .catch((err: unknown) => {
-        if (!live) return;
-        setComments([]);
-        setError(err instanceof Error ? err.message : "Could not load the discussion.");
-      });
-    // `live` guards the unmount race: closing the dialog before the fetch lands
-    // would otherwise set state on a gone component.
-    return () => {
-      live = false;
-    };
-    // onCount is a fresh closure each render; depending on it would refetch the
-    // thread on every keystroke in the parent form.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [todoId]);
-
-  async function post(event: React.FormEvent) {
-    event.preventDefault();
-    const body = draft.trim();
-    if (!body || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const row = await apiPost<CrmTodoComment>(`/api/crm/todos/${todoId}/comments`, { body });
-      const next = [...(comments ?? []), row];
-      setComments(next);
-      onCount(next.length);
-      setDraft("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not post that.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove(comment: CrmTodoComment) {
-    if (!confirm("Delete this comment?")) return;
-    setError("");
-    try {
-      await apiDelete(`/api/crm/todo-comments/${comment.id}`);
-      const next = (comments ?? []).filter((c) => c.id !== comment.id);
-      setComments(next);
-      onCount(next.length);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete that.");
-    }
-  }
-
-  return (
-    <section className="border-t border-ink-200 pt-4">
-      <h3 className="sf-h mb-3">
-        Comments
-        {comments && comments.length > 0 && (
-          <span className="ml-2 font-normal text-ink-600">({comments.length})</span>
-        )}
-      </h3>
-
-      {error && <ErrorNote>{error}</ErrorNote>}
-
-      {comments === null ? (
-        <p className="sf-meta">Loading…</p>
-      ) : comments.length === 0 ? (
-        <p className="sf-meta">No comments yet. Decisions made here stay with the card.</p>
-      ) : (
-        <ul className="mb-3 space-y-3">
-          {comments.map((c) => (
-            <li key={c.id} className="rounded-lg border border-ink-200 bg-ink-100/50 p-3">
-              <div className="flex flex-wrap items-baseline gap-x-2">
-                <span className="text-xs font-semibold text-ink-800">{c.author_email}</span>
-                {/* Both: relative reads fastest, absolute is what you quote in a
-                    meeting. The title carries the full ISO stamp. */}
-                <span className="sf-meta" title={c.created_at}>
-                  {fmtAgo(c.created_at)} · {fmtDate(c.created_at)}
-                </span>
-                {c.author_email.toLowerCase() === viewer.toLowerCase() && (
-                  <button
-                    type="button"
-                    onClick={() => void remove(c)}
-                    className="ml-auto rounded px-1 text-xs text-ink-500 hover:bg-ink-200 hover:text-err-700"
-                  >
-                    Delete
-                  </button>
-                )}
-              </div>
-              {/* pre-wrap: people paste lists and paragraphs into these. */}
-              <p className="mt-1.5 whitespace-pre-wrap break-words text-sm text-ink-800">
-                {c.body}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <form onSubmit={post} className="space-y-2">
-        <TextArea
-          rows={3}
-          value={draft}
-          maxLength={5000}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add a comment…"
-          aria-label="Add a comment"
-        />
-        <button type="submit" className="sf-btn-brand" disabled={busy || !draft.trim()}>
-          {busy ? "Posting…" : "Comment"}
-        </button>
-      </form>
-    </section>
   );
 }

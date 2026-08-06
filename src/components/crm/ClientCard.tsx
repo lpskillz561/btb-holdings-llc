@@ -38,6 +38,7 @@ import {
 } from "./RecordForm";
 import { statusTone } from "@/lib/crm/tone";
 import { Badge, Detail, Dialog, EmptyState, ErrorNote, SectionHeading, StatTile, Table, Td, useDialog } from "./ui";
+import { Dropdown } from "./Dropdown";
 
 type Row = Record<string, unknown>;
 
@@ -555,18 +556,16 @@ function ProposalsTab({
                   </span>
                 </Td>
                 <Td>
-                  <select
+                  <Dropdown
                     value={row.status}
-                    onChange={(e) => void setStatus(row, e.target.value)}
+                    onChange={(v) => void setStatus(row, v)}
                     aria-label="Proposal status"
-                    className="field w-auto py-1 text-xs"
-                  >
-                    {PROPOSAL_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {LABELS.proposalStatus[s]}
-                      </option>
-                    ))}
-                  </select>
+                    className="w-40"
+                    options={PROPOSAL_STATUSES.map((s) => ({
+                      value: s,
+                      label: LABELS.proposalStatus[s],
+                    }))}
+                  />
                 </Td>
                 <Td className="whitespace-nowrap">{fmtMoney(row.total_investment_cents)}</Td>
                 <Td className="whitespace-nowrap">{fmtMoney(row.year_one_deduction_cents)}</Td>

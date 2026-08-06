@@ -469,6 +469,102 @@ section rather than back at the dashboard, and the rail's own "Users" item is
 account administration — it was given a distinct glyph so the allow-list and the
 book of business do not sit under one symbol.
 
+### The board — `/crm/todos`, and it works like Jira now
+
+Ticket keys, tags, subtasks and a rebuilt comment thread, August 2026.
+
+**One sequence, `crm_ticket_seq`, shared by cards AND subtasks.** A subtask
+carries a real key of its own — BTB-58 under BTB-42, not BTB-42.1 — which is the
+whole reason it has one: a subtask you can assign but cannot name is not a thing
+anyone can ask about. Two sequences would mean two tickets called BTB-58.
+
+- **`lib/crm/ticket.ts` is PURE and the prefix is a CONSTANT.** It is imported
+  by client components, and `process.env` in a client bundle is silently
+  `undefined` — so a component resolving its own prefix would render every key
+  as `undefined-42`. Same rule as `equipment.ts`. Changing `BTB` is a one-line
+  code change; note that old keys do not move, since `ticket_number` is the
+  stored fact and the prefix is presentation.
+- **`parseTicket` accepts "BTB-42", "btb 42", "#42" and a bare "42"**, and the
+  board's search treats a key as a JUMP rather than as text. Substring matching
+  would return BTB-42, BTB-142 and BTB-420 together.
+- **Numbers are never reused.** A deleted card's key stays dead, so BTB-42 in a
+  chat message six months on either finds the thing it named or finds nothing.
+- **`schema.ts` gained a `pre` hook** — statements that run before CREATE TABLE.
+  It exists for exactly one thing: a sequence that a column DEFAULT names.
+  `columns` and `alters` both run too late.
+- **The backfill numbers the oldest card 1**, offset by the current max so it is
+  correct in a mixed state and not only in the all-NULL one. It is idempotent
+  (nothing is NULL after the first run) and was verified by reproducing the real
+  pre-migration state — dropping the column, inserting cards out of
+  chronological order, and restarting.
+- **The `setval` lives on `crm_todo_subtasks`, not `crm_todos`.** It needs the
+  high-water mark of BOTH tables, and TABLES is applied in order inside one
+  transaction, so on a fresh install the subtask table does not exist yet when
+  the card table's `alters` run. It uses `GREATEST(..., last_value)` so it can
+  only ever move the sequence FORWARD — winding it back would re-issue a live
+  number and the unique index would then reject every new card.
+
+**Tags are a registry, not a text array on the card.** A tag carries a colour
+and a colour has to be stable; the same label rendered amber on one card and
+teal on another is worse than no colour. `crm_tags` + `crm_todo_tags`, unique on
+`lower(label)` so "Urgent" and "urgent" cannot both exist, and POST is an upsert
+so "add a tag" needs no find-or-create in the caller.
+
+- **`TagChip.tsx` is the one place that does NOT use the CSS-variable tokens.**
+  Eight hues would mean sixteen more ramps counting dark values, for something
+  decorative, so it uses Tailwind's palette with an explicit `dark:` per tone.
+  That is safe *only* because Tailwind's default `darkMode` is `media`, the same
+  `prefers-color-scheme` the token layer keys off. **Do not set `darkMode:
+  "class"` without revisiting that file** — the chips would stay light while
+  everything around them went dark.
+- New tags get a colour hashed from the label, so the same word always lands on
+  the same hue and re-creating a deleted tag brings its colour back.
+
+**Subtasks tick immediately; the card's title and notes still batch.** A
+checklist whose ticks are lost by pressing Close is the opposite of a checklist.
+The optimistic update has to TRANSLATE `done` (a boolean on the wire) into
+`done_at`/`done_by` (what the row and the checkbox actually hold) — spreading the
+request body onto the row sets a property nothing reads and leaves the tick
+frozen until the server answers. Both shapes typecheck; only driving the real
+board catches it.
+
+**Comments render Markdown and resolve @mentions**, with an avatar rail whose
+colour is hashed from the address so one person is one colour everywhere.
+Consecutive remarks by the same person drop the repeated header. **Mentions do
+not notify anyone** — nothing in this app sends mail yet, and a mention that
+looks like a notification and is not is worse than one that plainly is not.
+⌘↵ posts; plain Enter is a newline, unlike the AI panel, because a comment is
+usually more than one line.
+
+### Dropdowns — `components/crm/Dropdown.tsx`
+
+**A native `<select>`'s popup is drawn by the OS and cannot be themed.** It is
+the one control CSS does not reach, and on a form of ten fields it is the one
+people notice — a grey macOS menu in the middle of an indigo app, in the light
+appearance even when everything around it is dark.
+
+**The native `<select>` is still in the DOM.** Visually hidden and pointer-inert,
+but real and named, which is what keeps `new FormData(form)`,
+`form.elements.namedItem()` and the AI assist "Use" path working with no call
+site changed. Its `onChange` is how an external write (the AI panel) updates the
+visible label. A hidden `<input>` plus a button would have broken all three; a
+from-scratch listbox would have broken those *and* the accessibility tree.
+
+- It is `sr-only`-style positioning, NOT `display:none` and NOT `hidden` — a
+  hidden select is excluded from form submission by the spec, which would
+  silently drop the field.
+- The popup is portalled and positioned from the trigger's rect, like `InfoTip`
+  and for the same reason: an absolutely-positioned menu is clipped to nothing
+  inside the `overflow-auto` containers these sit in. The cost is that scrolling
+  must close it; the listener uses `capture` because scrolling inside those
+  containers does not bubble.
+- **`Field` in `ui.tsx` no longer wraps its control in a `<label>`.** `Dropdown`
+  is a `<button>`, interactive content inside a label is invalid, and clicking
+  the field's NAME would open the menu. It is `htmlFor` + `useId` now, with the
+  id passed down through `FieldIdContext` — context rather than `cloneElement`
+  because a Field's children are not always one control (the Notes field holds a
+  `TextArea` and an `AiText`). Exactly the lesson `Num` learned from `InfoTip`.
+
 ### Meetings and call summaries — `/crm/meetings`
 
 Calls with clients, on a month calendar and on a **Meetings** tab on the client

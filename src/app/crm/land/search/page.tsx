@@ -27,6 +27,7 @@ import {
 } from "@/lib/crm/siteScore";
 import { SORT_OPTIONS, STATE_NAMES, isSortKey, listStates, searchArea, type SortKey } from "@/lib/parcels";
 import { zillowUrlForAddress } from "@/lib/zillow";
+import { Dropdown } from "@/components/crm/Dropdown";
 
 export const metadata: Metadata = {
   title: "Land search",
@@ -176,14 +177,25 @@ export default async function LandSearchPage({
           <form method="GET" className="sf-card flex flex-wrap items-end gap-4 p-4">
             <div>
               <label className="sf-label" htmlFor="state">State</label>
-              <select id="state" name="state" defaultValue={state ?? ""} className="sf-input">
-                <option value="">Any state</option>
-                {states.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {STATE_NAMES[s.code] ?? s.code} ({fmtNum(s.count)})
-                  </option>
-                ))}
-              </select>
+              {/* A client component rendered from a server one, which is
+                  allowed — it is CALLING a function from a "use client" module
+                  that is not. The hidden native select inside it is what this
+                  plain GET form actually submits. */}
+              <Dropdown
+                id="state"
+                name="state"
+                defaultValue={state ?? ""}
+                placeholder="Any state"
+                className="w-56"
+                options={[
+                  { value: "", label: "Any state" },
+                  ...states.map((s) => ({
+                    value: s.code,
+                    label: STATE_NAMES[s.code] ?? s.code,
+                    hint: `${fmtNum(s.count)} parcels`,
+                  })),
+                ]}
+              />
             </div>
             <div>
               <label className="sf-label" htmlFor="minAcres">Minimum acres</label>
@@ -197,13 +209,16 @@ export default async function LandSearchPage({
             </div>
             <div>
               <label className="sf-label" htmlFor="sort">Sort by</label>
-              <select id="sort" name="sort" defaultValue={sort} className="sf-input">
-                {(Object.keys(SORT_OPTIONS) as SortKey[]).map((key) => (
-                  <option key={key} value={key}>
-                    {SORT_LABELS[key]}
-                  </option>
-                ))}
-              </select>
+              <Dropdown
+                id="sort"
+                name="sort"
+                defaultValue={sort}
+                className="w-52"
+                options={(Object.keys(SORT_OPTIONS) as SortKey[]).map((key) => ({
+                  value: key,
+                  label: SORT_LABELS[key],
+                }))}
+              />
             </div>
             {/* Keep the open county when the filters change; a new search should
                 not silently throw you back to the top-ranked one. */}

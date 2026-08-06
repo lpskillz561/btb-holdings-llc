@@ -37,6 +37,7 @@ import {
   PROPERTY_STATUSES,
   PROPOSAL_STATUSES,
   SAVED_PARCEL_STATUSES,
+  TAG_COLORS,
   TODO_STATUSES,
   TX_CATEGORIES,
   TX_KINDS,
@@ -47,6 +48,17 @@ import {
 
 interface TableDef {
   name: string;
+  /**
+   * Statements run BEFORE the CREATE TABLE.
+   *
+   * Exists for exactly one thing the other hooks cannot express: a sequence a
+   * column's DEFAULT refers to. `columns` are emitted as part of CREATE TABLE
+   * and as `ADD COLUMN IF NOT EXISTS`, both of which fail if the sequence the
+   * default names does not exist yet, and `alters` run too late to help.
+   *
+   * Same contract as everything else here: safe to re-run on every boot.
+   */
+  pre?: string[];
   /** [column, type + inline constraints]. Order is the CREATE TABLE order. */
   columns: [string, string][];
   /** Generated from ./types so SQL and TypeScript cannot disagree. */
@@ -636,8 +648,29 @@ const TABLES: TableDef[] = [
   // disagree; one nullable timestamp cannot, and it answers "when" for free.
   {
     name: "crm_todos",
+    pre: [
+      // ONE sequence for cards AND subtasks, because a subtask carries a real
+      // ticket key of its own (BTB-58 under BTB-42) rather than a suffix of its
+      // parent's. Two sequences would mean two tickets called BTB-58.
+      //
+      // A sequence rather than max()+1: the latter needs a lock to be safe under
+      // concurrent inserts, and without one two people adding a card at the same
+      // moment get the same number and the second insert dies on the unique
+      // index. nextval() is atomic and never hands the same value out twice.
+      //
+      // Numbers are NOT reused when a card is deleted. That is the point of a
+      // ticket key — BTB-42 in a chat message six months from now should either
+      // find the thing it named or find nothing, never something else.
+      "CREATE SEQUENCE IF NOT EXISTS crm_ticket_seq AS BIGINT START 1",
+    ],
     columns: [
       ["id", "TEXT PRIMARY KEY"],
+      // The human-readable key, rendered BTB-<n> — see lib/crm/ticket.ts.
+      // Nullable in the column definition and backfilled in `alters` below,
+      // because ADD COLUMN with a volatile DEFAULT on an existing table is a
+      // full table rewrite whose ordering is not guaranteed to follow
+      // created_at. An explicit backfill numbers the oldest card 1.
+      ["ticket_number", "BIGINT"],
       ["title", "TEXT NOT NULL"],
       // Which kanban column the card sits in.
       ["status", "TEXT NOT NULL DEFAULT 'todo'"],
@@ -662,12 +695,130 @@ const TABLES: TableDef[] = [
     indexes: [
       // Matches the board's ORDER BY exactly: column, then newest first.
       "CREATE INDEX IF NOT EXISTS crm_todos_board_idx ON crm_todos (status, created_at DESC)",
+      // Two cards called BTB-42 would make the key worthless. This is also what
+      // turns a concurrent-insert race into a clean error rather than a
+      // duplicate that nobody notices until someone quotes the wrong ticket.
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_todos_ticket_idx ON crm_todos (ticket_number)",
     ],
     alters: [
       // Converges any card written by the pre-kanban build, where "done" was
       // carried only by done_at. Safe to re-run: once the code sets both
       // together, no row can be in the state this looks for.
       "UPDATE crm_todos SET status = 'done' WHERE done_at IS NOT NULL AND status = 'todo'",
+
+      // Backfill the cards that predate ticket numbers, oldest first, so the
+      // board reads as a history rather than as an arbitrary shuffle.
+      //
+      // Offset by the current maximum rather than starting at 1, which makes it
+      // correct in the mixed state as well as the all-NULL one — the only state
+      // that occurs in practice is all-NULL on the first boot after deploy, but
+      // a statement that is only correct in the expected state is the kind that
+      // silently collides later. `created_at, id` because created_at is a TEXT
+      // timestamp with millisecond resolution and two cards added in the same
+      // millisecond must still get a deterministic order.
+      //
+      // Idempotent: after the first run nothing is NULL, so the subquery is
+      // empty and the UPDATE touches no rows.
+      `UPDATE crm_todos t
+         SET ticket_number = s.rn + COALESCE((SELECT max(ticket_number) FROM crm_todos), 0)
+         FROM (SELECT id, row_number() OVER (ORDER BY created_at, id) AS rn
+                 FROM crm_todos WHERE ticket_number IS NULL) s
+        WHERE t.id = s.id`,
+      // NOTE: the sequence is re-parked in crm_todo_subtasks' `alters`, not
+      // here. It has to consider the high-water mark of BOTH tables, and on a
+      // fresh install the subtask table does not exist yet at this point —
+      // TABLES is applied in order, inside one transaction.
+    ],
+  },
+  // Subtasks. A real row rather than a checklist inside `notes`, because they
+  // are ASSIGNABLE — "who is doing this piece" is a fact two people need to
+  // agree on, and a line of markdown cannot hold it.
+  //
+  // Each carries its own ticket_number off the SAME sequence as the parent, so a
+  // subtask is a ticket you can name out loud. That is deliberate: a subtask
+  // with an assignee and no key is a thing you can give someone but cannot then
+  // refer to.
+  {
+    name: "crm_todo_subtasks",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      // DEFAULT, unlike the parent's: this table is new, so there are no
+      // pre-existing rows for a volatile default to fill badly. Every insert
+      // gets its number without the writer having to remember to ask.
+      ["ticket_number", "BIGINT NOT NULL DEFAULT nextval('crm_ticket_seq')"],
+      // Cascade: a subtask has no meaning without its parent card.
+      ["todo_id", "TEXT NOT NULL REFERENCES crm_todos(id) ON DELETE CASCADE"],
+      ["title", "TEXT NOT NULL"],
+      // Same design as the card: one nullable timestamp rather than a boolean
+      // plus a timestamp that can disagree with it. NULL means open.
+      ["done_at", "TEXT"],
+      ["done_by", "TEXT"],
+      // Unassigned is a real state on a shared board, not a missing value.
+      ["assignee", "TEXT"],
+      // Hand-ordering within a card. Subtasks are a sequence of steps far more
+      // often than cards are, so unlike the board this list IS orderable.
+      ["position", "INTEGER NOT NULL DEFAULT 0"],
+      ["created_by", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_todo_subtasks_card_idx ON crm_todo_subtasks (todo_id, position, created_at)",
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_todo_subtasks_ticket_idx ON crm_todo_subtasks (ticket_number)",
+      // Drives the "assigned to me" filter across both tables.
+      "CREATE INDEX IF NOT EXISTS crm_todo_subtasks_assignee_idx ON crm_todo_subtasks (assignee)",
+    ],
+    alters: [
+      // Re-park the shared sequence past the high-water mark of BOTH tables.
+      // It lives here rather than on crm_todos because this is the first point
+      // in the run where both tables are guaranteed to exist.
+      //
+      // GREATEST includes the sequence's own last_value so this can only move it
+      // FORWARD. Winding it back would re-issue a number a live row already
+      // holds, and the unique indexes would then reject the next insert — an
+      // outage that would look like "the board stopped accepting cards".
+      `SELECT setval('crm_ticket_seq', GREATEST(
+         (SELECT COALESCE(max(ticket_number), 0) FROM crm_todos),
+         (SELECT COALESCE(max(ticket_number), 0) FROM crm_todo_subtasks),
+         (SELECT last_value FROM crm_ticket_seq)
+       ))`,
+    ],
+  },
+  // The tag vocabulary. A registry rather than a free text[] on the card,
+  // because a tag carries a COLOUR and a colour has to be stable: the same
+  // label rendered amber on one card and teal on another is worse than no
+  // colour at all. One row per label means one answer.
+  {
+    name: "crm_tags",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      // Display form, as first typed. Uniqueness is enforced case-insensitively
+      // by the index below, so "Urgent" and "urgent" cannot both exist.
+      ["label", "TEXT NOT NULL"],
+      ["color", "TEXT NOT NULL DEFAULT 'grey'"],
+      ["created_by", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [{ column: "color", values: TAG_COLORS }],
+    indexes: [
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_tags_label_idx ON crm_tags (lower(label))",
+    ],
+  },
+  // Which tags are on which card.
+  {
+    name: "crm_todo_tags",
+    columns: [
+      ["todo_id", "TEXT NOT NULL REFERENCES crm_todos(id) ON DELETE CASCADE"],
+      ["tag_id", "TEXT NOT NULL REFERENCES crm_tags(id) ON DELETE CASCADE"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      // The composite key. Declared as a unique index rather than a PRIMARY KEY
+      // because statementsFor() skips PRIMARY KEY columns when bringing an older
+      // install forward, and a two-column key cannot be expressed in the
+      // [column, type] shape anyway.
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_todo_tags_pk ON crm_todo_tags (todo_id, tag_id)",
+      // Drives "show me everything tagged X".
+      "CREATE INDEX IF NOT EXISTS crm_todo_tags_tag_idx ON crm_todo_tags (tag_id)",
     ],
   },
   // The discussion on a card. A table rather than appending to `notes` for the
@@ -749,6 +900,9 @@ function checkClause(column: string, values: readonly string[]): string {
 
 function statementsFor(table: TableDef): string[] {
   const sql: string[] = [];
+
+  // Before the table, because a column DEFAULT may name a sequence created here.
+  sql.push(...(table.pre ?? []));
 
   const cols = table.columns.map(([name, type]) => `  ${name} ${type}`).join(",\n");
   sql.push(`CREATE TABLE IF NOT EXISTS ${table.name} (\n${cols}\n)`);

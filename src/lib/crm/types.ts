@@ -272,6 +272,30 @@ export const TODO_STATUSES = ["todo", "doing", "done"] as const;
 export type TodoStatus = (typeof TODO_STATUSES)[number];
 
 /**
+ * The colours a tag may be.
+ *
+ * A NAMED set rather than free hex, for two reasons. The palette is
+ * theme-aware — every one of these resolves through CSS variables and has a
+ * dark-mode value, which a hex string a person typed cannot — and a fixed
+ * vocabulary is what keeps a board of thirty tags legible instead of thirty
+ * arbitrary colours. See TAG_TONE in components/crm/TagChip.tsx for the fills.
+ *
+ * `grey` is first because it is the fallback for a tag created without a
+ * colour being chosen, and the CHECK is generated from this array.
+ */
+export const TAG_COLORS = [
+  "grey",
+  "purple",
+  "blue",
+  "teal",
+  "green",
+  "yellow",
+  "orange",
+  "red",
+] as const;
+export type TagColor = (typeof TAG_COLORS)[number];
+
+/**
  * What a conversation is about. `global` is the whole workspace — the assistant
  * opened on a list page, where the question is "which contracts are unsigned",
  * not "how is this account doing". The rest are one record.

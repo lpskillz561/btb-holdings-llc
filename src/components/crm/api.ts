@@ -37,6 +37,17 @@ export const apiPost = <T,>(url: string, body?: unknown) => request<T>("POST", u
 export const apiPatch = <T,>(url: string, body: unknown) => request<T>("PATCH", url, body);
 export const apiDelete = (url: string) => request<void>("DELETE", url);
 
+/**
+ * DELETE that answers with a body.
+ *
+ * Most deletes here return 204, which is why `apiDelete` is typed `void`.
+ * Detaching a tag from a card is the exception: it returns the card's REMAINING
+ * tags, so the dialog re-renders from the server's answer rather than
+ * reconstructing the set by filtering its own state — which is how a set drifts
+ * when two people edit the same card.
+ */
+export const apiDeleteJson = <T,>(url: string) => request<T>("DELETE", url);
+
 /** Build a query string, dropping empty values so blank inputs don't filter. */
 export function qs(params: Record<string, string | number | boolean | null | undefined>): string {
   const sp = new URLSearchParams();

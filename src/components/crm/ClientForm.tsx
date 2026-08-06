@@ -22,6 +22,7 @@ import {
 import { AiAssist, AiText, type AssistFieldSpec } from "./AiAssist";
 import { apiPatch, apiPost } from "./api";
 import { ErrorNote, Field, MoneyInput, PercentInput, Select, TextArea, TextInput } from "./ui";
+import { Dropdown } from "./Dropdown";
 
 /**
  * What the AI may propose on this form, described for the model.
@@ -274,20 +275,31 @@ export function ClientForm({
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Available pad">
-              {/* A plain select: ui.tsx's Select renders a fixed enum, and
-                  these options come from the database. */}
-              <select name="pad_id" defaultValue="" className="sf-input">
-                <option value="">Do not place yet</option>
-                {pads.map((pad) => (
-                  <option key={pad.id} value={pad.id}>
-                    {pad.park_name} — {pad.label}
-                    {pad.sections_remaining != null
-                      ? ` (${pad.sections_remaining} of ${pad.land_capacity} sections left)`
-                      : ""}
-                    {pad.pad_sqft ? ` (${pad.pad_sqft.toLocaleString("en-US")} sq ft)` : ""}
-                  </option>
-                ))}
-              </select>
+              {/* Dropdown directly rather than ui.tsx's Select: that one renders
+                  a fixed enum from ./types, and these options come from the
+                  database. The capacity detail moves to `hint`, where it reads
+                  as a second line instead of a long parenthetical. */}
+              <Dropdown
+                name="pad_id"
+                defaultValue=""
+                placeholder="Do not place yet"
+                options={[
+                  { value: "", label: "Do not place yet" },
+                  ...pads.map((pad) => ({
+                    value: pad.id,
+                    label: `${pad.park_name} — ${pad.label}`,
+                    hint:
+                      [
+                        pad.sections_remaining != null
+                          ? `${pad.sections_remaining} of ${pad.land_capacity} sections left`
+                          : null,
+                        pad.pad_sqft ? `${pad.pad_sqft.toLocaleString("en-US")} sq ft` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || undefined,
+                  })),
+                ]}
+              />
             </Field>
             <Field label="Name this home" hint="Defaults to the park name.">
               <TextInput name="unit_label" placeholder="Cabin 1" />

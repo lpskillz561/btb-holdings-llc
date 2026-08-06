@@ -12,6 +12,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { apiPost } from "./api";
+import { Dropdown } from "./Dropdown";
 
 export function AttachMeeting({
   meetingId,
@@ -41,20 +42,18 @@ export function AttachMeeting({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select
+      <Dropdown
         aria-label="Client"
-        className="field max-w-56"
+        className="w-56"
         value={clientId}
-        onChange={(e) => setClientId(e.target.value)}
+        onChange={setClientId}
         disabled={saving}
-      >
-        <option value="">— choose a client —</option>
-        {clients.map((client) => (
-          <option key={client.id} value={client.id}>
-            {client.name}
-          </option>
-        ))}
-      </select>
+        placeholder="— choose a client —"
+        options={[
+          { value: "", label: "— choose a client —" },
+          ...clients.map((client) => ({ value: client.id, label: client.name })),
+        ]}
+      />
       <button
         type="button"
         className="sf-btn-neutral"

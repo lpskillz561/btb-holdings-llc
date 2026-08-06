@@ -31,6 +31,7 @@ import {
   type EquipmentDeal,
   type FilingStatus,
 } from "@/lib/crm/equipment";
+import { Dropdown } from "./Dropdown";
 
 interface Scenario {
   units: number;
@@ -223,15 +224,15 @@ function Controls({
           <label htmlFor={filingId}>Filing status</label>
           <InfoTip term="filingStatus" />
         </span>
-        <select
+        <Dropdown
           id={filingId}
           value={scenario.filing}
-          onChange={(e) => set({ filing: e.target.value as FilingStatus })}
-          className="sf-input"
-        >
-          <option value="joint">Married filing jointly</option>
-          <option value="single">Single</option>
-        </select>
+          onChange={(v) => set({ filing: v as FilingStatus })}
+          options={[
+            { value: "joint", label: "Married filing jointly" },
+            { value: "single", label: "Single" },
+          ]}
+        />
       </div>
     </div>
   );
