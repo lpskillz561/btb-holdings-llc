@@ -12,7 +12,7 @@
  * presentations index can list what a deck contains without building it.
  */
 
-export const DECK_TRACKS = ["first-call", "full"] as const;
+export const DECK_TRACKS = ["first-call", "full", "equipment"] as const;
 export type DeckTrack = (typeof DECK_TRACKS)[number];
 
 /**
@@ -68,7 +68,7 @@ export const DECKS: Record<DeckTrack, DeckDefinition> = {
   full: {
     track: "full",
     label: "Full deck",
-    blurb: "Seventeen slides. The whole position, including the structure and the authorities.",
+    blurb: "Eighteen slides. The whole position, the authorities, and both programmes.",
     when:
       "The follow-up call, and the call the CPA joins. Every slide the first-call deck holds back is an answer to a question they will actually ask.",
     slides: [
@@ -88,6 +88,41 @@ export const DECKS: Record<DeckTrack, DeckDefinition> = {
       "sizes",
       "limits",
       "process",
+      // The second product line, named at the END of the tiny-home pitch and
+      // nowhere earlier. A prospect who has just sat through the structure, the
+      // authorities and the terms is being asked to hold one deal in their
+      // head; introducing a second asset class in the middle of that is how a
+      // room stops following either. Here it reads as "and there is another
+      // route if the first does not fit", which is what it is.
+      "programmes",
+      "close",
+    ],
+  },
+  // The amusement-equipment pitch. A separate track rather than slides bolted
+  // onto the full deck, because the two products share a statute and almost
+  // nothing else: different asset class, different recovery period, a listed-
+  // property compliance burden the homes do not carry, and no trust. Trying to
+  // present both from one deck means qualifying every sentence with which one
+  // it applies to.
+  equipment: {
+    track: "equipment",
+    label: "Equipment",
+    blurb: "Ten slides. Amusement equipment under §168(k), with the calculator on screen.",
+    when:
+      "A prospect whose business can genuinely host or place equipment, or who wants a smaller entry than a Park Model. The qualification slide is the same one — the buyer profile does not change, only the asset does.",
+    slides: [
+      "equipment-title",
+      // Shared with the tiny-home deck, deliberately. The buyer is the same
+      // high-income taxpayer with the same problem; only the asset differs, and
+      // a second copy of this slide would be a second place to edit it.
+      "who",
+      "equipment-asset",
+      "equipment-listed",
+      "equipment-terms",
+      "equipment-revenue",
+      "equipment-calculator",
+      "equipment-limits",
+      "programmes",
       "close",
     ],
   },

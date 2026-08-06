@@ -25,9 +25,26 @@ import {
   DEFAULT_BONUS_RATE_BPS,
   DEFAULT_DEPOSIT_BPS,
   DEFAULT_MARGINAL_RATE_BPS,
+  LOSS_LIMITATION,
   computeEconomics,
   type Economics,
 } from "./economics";
+import {
+  computeEquipmentDeal,
+  equipmentConfig,
+  type EquipmentConfig,
+  type EquipmentDeal,
+} from "./equipment";
+
+/**
+ * Re-exported so the deck keeps one import for "everything on a slide".
+ *
+ * The constants themselves moved to ./economics, which is the module both
+ * product lines run their figures through — the tiny homes and the amusement
+ * equipment are subject to the same §461(l) cap, and it was previously stated
+ * both here and as literal dollars inside an economics caveat string.
+ */
+export { LOSS_LIMITATION };
 
 /** Read an integer env override, falling back when unset or malformed. */
 function envInt(name: string, fallback: number): number {
@@ -103,16 +120,6 @@ export const TIER_DEPOSIT_BPS = {
   fractional: () => envInt("CRM_TIER_DEPOSIT_BPS_FRACTIONAL", 1_300),
   single: () => envInt("CRM_TIER_DEPOSIT_BPS_SINGLE", 1_200),
   multi: () => envInt("CRM_TIER_DEPOSIT_BPS_MULTI", 1_000),
-} as const;
-
-/** §461(l) excess business loss caps. From the strategy deck's own appendix. */
-export const LOSS_LIMITATION = {
-  currentYear: 2026,
-  currentSingleCents: 32_500_000,
-  currentJointCents: 65_000_000,
-  priorYear: 2025,
-  priorSingleCents: 31_300_000,
-  priorJointCents: 62_600_000,
 } as const;
 
 /* -------------------------------------------------------------------------- */
@@ -194,6 +201,27 @@ export function depositBpsForPrice(priceCents: number): number {
   return TIER_DEPOSIT_BPS.fractional();
 }
 
+/**
+ * How many units the amusement-equipment slides illustrate.
+ *
+ * Ten, matching the fleet size the programme is pitched at — big enough that
+ * the venue economics are not dominated by a single machine's placement, small
+ * enough to be a first purchase. Configuration rather than a constant, like
+ * every other assumption that reaches a slide.
+ */
+export const EQUIPMENT_ILLUSTRATION_UNITS = () => envInt("CRM_EQUIPMENT_FLEET_UNITS", 10);
+
+export interface EquipmentFigures {
+  config: EquipmentConfig;
+  units: number;
+  /** The headline illustration: a fleet on optimistic collections. */
+  fleet: EquipmentDeal;
+  /** The same fleet on the conservative case. Both are always shown. */
+  conservative: EquipmentDeal;
+  /** A single unit, for the entry-point comparison against the homes. */
+  single: EquipmentDeal;
+}
+
 export interface PresentationFigures {
   /** The signed example in docs/. */
   executed: DealIllustration;
@@ -208,6 +236,12 @@ export interface PresentationFigures {
    * that bulk is not cheaper, in which case the slide says nothing.
    */
   multiUnitCashSavedCents: number;
+  /**
+   * The second product line. Always built, even on the tiny-home decks — the
+   * comparison slide in the full deck names it, and a presenter who is asked
+   * "what else do you do" should not be reaching for a different tab.
+   */
+  equipment: EquipmentFigures;
   proForma: typeof PRO_FORMA;
   lossLimitation: typeof LOSS_LIMITATION;
   constants: {
@@ -248,6 +282,24 @@ export function buildPresentationFigures(targetWriteoffCents?: number | null): P
         single.terms.downPaymentCents
       : 0;
 
+  // The amusement-equipment illustration. Note the filing status: JOINT is the
+  // assumption everywhere in this deck, and it is the LESS favourable choice to
+  // leave unstated — the §461(l) cap is twice the single filer's, so a slide
+  // built on it and shown to a single filer overstates the usable first-year
+  // benefit. The slide says which one it is.
+  const eqConfig = equipmentConfig();
+  const eqUnits = EQUIPMENT_ILLUSTRATION_UNITS();
+  const eqBase = {
+    config: eqConfig,
+    unitCount: eqUnits,
+    marginalRateBps: DEFAULT_MARGINAL_RATE_BPS(),
+    bonusRateBps: DEFAULT_BONUS_RATE_BPS(),
+    // 100% qualified business use — the only assumption under which this
+    // product's headline figures hold at all. §280F is on the limits slide.
+    businessUseBps: 10_000,
+    filingStatus: "joint" as const,
+  };
+
   return {
     executed: illustrate("Executed example", EXECUTED_PRICE_CENTS, EXECUTED_DOWN_CENTS),
     sized:
@@ -260,6 +312,23 @@ export function buildPresentationFigures(targetWriteoffCents?: number | null): P
         : null,
     tiers,
     multiUnitCashSavedCents: Math.max(0, Math.round(singlyCents - multi.terms.downPaymentCents)),
+    equipment: {
+      config: eqConfig,
+      units: eqUnits,
+      fleet: computeEquipmentDeal({
+        ...eqBase,
+        monthlyGrossCents: eqConfig.optimisticMonthlyGrossCents,
+      }),
+      conservative: computeEquipmentDeal({
+        ...eqBase,
+        monthlyGrossCents: eqConfig.conservativeMonthlyGrossCents,
+      }),
+      single: computeEquipmentDeal({
+        ...eqBase,
+        unitCount: 1,
+        monthlyGrossCents: eqConfig.optimisticMonthlyGrossCents,
+      }),
+    },
     proForma: PRO_FORMA,
     lossLimitation: LOSS_LIMITATION,
     constants: {

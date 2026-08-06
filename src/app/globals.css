@@ -304,6 +304,22 @@ body {
   .deck-note {
     @apply mt-[2.4cqh] text-[0.72em] leading-relaxed text-paper-50/50;
   }
+
+  /* The one interactive control in the deck — the equipment estimator's
+     sliders. Sized in cqh like everything else on the canvas, because the deck
+     is scaled rather than reflowed and a fixed-pixel thumb would be a different
+     physical size on the presenter's laptop than in the room. The track is
+     deliberately low-contrast and the thumb carries the accent: on a projected
+     navy surface a bright rail reads as a progress bar. */
+  .deck-range {
+    @apply h-[0.9cqh] cursor-pointer appearance-none rounded-full bg-white/15;
+  }
+  .deck-range::-webkit-slider-thumb {
+    @apply h-[2.2cqh] w-[2.2cqh] appearance-none rounded-full border-0 bg-gold-500;
+  }
+  .deck-range::-moz-range-thumb {
+    @apply h-[2.2cqh] w-[2.2cqh] appearance-none rounded-full border-0 bg-gold-500;
+  }
 }
 
 @keyframes crm-fade-in {

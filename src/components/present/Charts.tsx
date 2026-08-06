@@ -63,10 +63,21 @@ export function RevenueSplitBar({
   segments,
   totalCents,
   width = 980,
+  caption = "Gross rental income, one month",
 }: {
   segments: Segment[];
   totalCents: number;
   width?: number;
+  /**
+   * What the total is. A prop rather than fixed text because the amusement-
+   * equipment deck uses the same chart for a month of COLLECTIONS, and the
+   * alternative — a second near-identical chart component — is two files that
+   * drift the first time the palette or the label spacing changes.
+   *
+   * Keep the FOUR-segment shape whichever deck it serves: the neutral ramp is
+   * three steps plus one accent, so a fifth segment repeats a colour.
+   */
+  caption?: string;
 }) {
   const barY = 54;
   const barH = 64;
@@ -87,7 +98,7 @@ export function RevenueSplitBar({
         viewBox={`0 0 ${width} ${height}`}
         className="h-auto w-full"
         role="img"
-        aria-label={`One month of rental income of ${money(total)}, divided into ${segments
+        aria-label={`${caption}: ${money(total)}, divided into ${segments
           .map((s) => `${s.label} ${money(s.cents, { cents: true })}`)
           .join(", ")}`}
       >
@@ -99,7 +110,7 @@ export function RevenueSplitBar({
         </defs>
 
         <text x={0} y={22} fill={TEXT_MUTED} fontSize={17}>
-          Gross rental income, one month
+          {caption}
         </text>
         <text x={0} y={44} fill={TEXT} fontSize={26} fontWeight={600}>
           {money(total)}

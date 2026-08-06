@@ -21,12 +21,19 @@
 // Land never appears. BTB owns the ground; the client buys the home on a pad.
 
 import type { ReactNode } from "react";
-import { fmtMoney, fmtPct } from "@/lib/crm/format";
+import { fmtMoney, fmtMoneyShort, fmtPct } from "@/lib/crm/format";
 import { site } from "@/lib/site";
 import { DEFAULT_TRACK, resolveSlideIds, type DeckTrack } from "@/lib/crm/decks";
+import {
+  EQUIPMENT_ASSET_CLASS,
+  EQUIPMENT_ASSET_CLASS_NAME,
+  EQUIPMENT_CLASS_LIFE_YEARS,
+  EQUIPMENT_RECOVERY_YEARS,
+} from "@/lib/crm/equipment";
 import type { PresentationFigures } from "@/lib/crm/presentation";
 import type { Slide } from "./Deck";
 import { LeverageBars, RevenueSplitBar, StructureDiagram, TierTable } from "./Charts";
+import { EquipmentCalculator } from "./EquipmentCalculator";
 
 /* -------------------------------------------------------------------------- */
 /* Slide furniture                                                             */
@@ -113,8 +120,16 @@ export function buildSlides(
   figures: PresentationFigures,
   opts: { clientName?: string | null; track?: DeckTrack } = {},
 ): Slide[] {
-  const { executed, sized, tiers, multiUnitCashSavedCents, proForma, lossLimitation, constants } =
-    figures;
+  const {
+    executed,
+    sized,
+    tiers,
+    multiUnitCashSavedCents,
+    equipment,
+    proForma,
+    lossLimitation,
+    constants,
+  } = figures;
   const track = opts.track ?? DEFAULT_TRACK;
   // The sized illustration when we know what the prospect is solving for,
   // otherwise the deal that has actually been signed. Never an invented number.
@@ -706,6 +721,360 @@ export function buildSlides(
           <p className="deck-note">
             The three execution documents are one set — the Finance Agreement is Exhibit A
             to the Purchase Agreement. They are signed together.
+          </p>
+        </Frame>
+      ),
+    },
+
+    /* ---------------------------------------------------------------------- */
+    /* The amusement-equipment programme                                       */
+    /*                                                                         */
+    /* A second asset under the SAME statute and almost nothing else in common */
+    /* with the homes. Two things are deliberate throughout these slides:      */
+    /*                                                                         */
+    /* - §280F gets its own slide, early, before any money. It is the real     */
+    /*   cost of this product and the competing material in this market buries */
+    /*   it under a calculator. A prospect who finds out about the substantia- */
+    /*   tion burden from their CPA instead of from us has been sold badly.    */
+    /* - The §461(l)-capped benefit is the figure quoted. The published        */
+    /*   arcade material takes $1.5m of income to $0 of tax and never mentions */
+    /*   the cap; repeating that would contradict our own limits slide two     */
+    /*   positions later.                                                      */
+    /* ---------------------------------------------------------------------- */
+
+    {
+      id: "equipment-title",
+      title: "Title — equipment",
+      node: (
+        <div className="text-center">
+          <p className="deck-eyebrow">{site.name}</p>
+          <h1 className="mt-[2.4cqh] font-serif text-[3em] font-medium leading-[1.08] text-paper-50">
+            The same deduction,
+            <br />
+            in a smaller asset.
+          </h1>
+          <p className="mx-auto mt-[3cqh] max-w-[46ch] text-[1.05em] text-paper-50/70">
+            Commercial amusement equipment, placed in revenue-sharing venues,
+            financed at {fmtPct(equipment.config.noteRateBps, { digits: 0 })} and expensed in
+            full in year one under §168(k).
+          </p>
+          {opts.clientName ? (
+            <p className="mt-[4cqh] text-[0.85em] text-paper-50/50">
+              Prepared for {opts.clientName}
+            </p>
+          ) : null}
+        </div>
+      ),
+    },
+
+    {
+      id: "equipment-asset",
+      title: "What you buy",
+      node: (
+        <Frame
+          eyebrow="The asset"
+          title="Commercial amusement equipment"
+          lede="Tangible personal property, in a MACRS class with a recovery period well inside what §168(k) requires. The classification is the whole argument here too — it is simply a different class."
+        >
+          <Figures
+            items={[
+              {
+                value: EQUIPMENT_ASSET_CLASS,
+                label: "Asset class",
+                sub: `"${EQUIPMENT_ASSET_CLASS_NAME}" — Rev. Proc. 87-56`,
+              },
+              {
+                value: `${EQUIPMENT_RECOVERY_YEARS}-year`,
+                label: "MACRS recovery",
+                sub: `${EQUIPMENT_CLASS_LIFE_YEARS}-year class life, GDS`,
+              },
+              {
+                value: "100%",
+                label: "Bonus depreciation",
+                sub: "Restored permanently by OBBBA",
+              },
+              {
+                value: fmtMoney(equipment.config.unitPriceCents),
+                label: "Per unit",
+                sub: `${fmtPct(equipment.single.depositBps, { digits: 0 })} down, balance financed`,
+              },
+            ]}
+          />
+          <p className="mt-[3cqh] max-w-[64ch] text-[0.85em] leading-relaxed text-paper-50/70">
+            Coin-operated amusement devices sit in Asset Class {EQUIPMENT_ASSET_CLASS}, with a{" "}
+            {EQUIPMENT_RECOVERY_YEARS}-year recovery period — comfortably under the twenty-year
+            ceiling for qualified property. The entry is smaller than a Park Model and the
+            equipment can be placed against an existing business you already run.
+          </p>
+        </Frame>
+      ),
+    },
+
+    {
+      id: "equipment-listed",
+      title: "Listed property",
+      node: (
+        <Frame
+          eyebrow="§280F — the condition"
+          title="This is listed property. That is the trade."
+          lede="Entertainment, recreation and amusement property carries an obligation the tiny homes do not. We put it here, before the numbers, because it is the part that decides whether this suits you."
+        >
+          <Points
+            items={[
+              {
+                head: "Business use must EXCEED 50%",
+                body: "Not 'about half'. At or below the threshold the asset leaves MACRS for straight-line ADS, bonus depreciation is unavailable outright, and depreciation already claimed is recaptured as ordinary income.",
+              },
+              {
+                head: "§274(d) records, contemporaneously",
+                body: "The dates and duration of use, the business purpose, and the split between business and personal use — kept as you go, not reconstructed at filing. This obligation runs every year, not just the first.",
+              },
+              {
+                head: "Placement is a business decision",
+                body: "The equipment has to sit somewhere it genuinely earns: a venue with traffic, under a revenue-share agreement. A machine in a room nobody visits is a §162 problem before it is a §280F one.",
+              },
+            ]}
+          />
+          <p className="deck-note">
+            None of this is a reason not to proceed. It is the reason this product is priced and
+            structured differently from the Park Models, and it is what your CPA will ask about
+            first — so it is on the third slide rather than the last.
+          </p>
+        </Frame>
+      ),
+    },
+
+    {
+      id: "equipment-terms",
+      title: "The terms",
+      node: (
+        <Frame
+          eyebrow="The deal"
+          title={`A ${equipment.units}-unit placement`}
+          lede="The deduction is on the full cost of the equipment while only the deposit is cash. Same leverage as the homes, on a shorter note."
+        >
+          <Figures
+            items={[
+              {
+                value: fmtMoney(equipment.fleet.totalPurchaseCents),
+                label: "Total purchase",
+                sub: `${equipment.units} × ${fmtMoney(equipment.fleet.unitPriceCents)}`,
+              },
+              {
+                value: fmtMoney(equipment.fleet.downPaymentCents),
+                label: "Cash down",
+                sub: `${fmtPct(equipment.fleet.depositBps, { digits: 0 })} of the price`,
+              },
+              {
+                value: fmtMoney(equipment.fleet.financedCents),
+                label: "Financed",
+                sub: `${fmtPct(equipment.fleet.noteRateBps, { digits: 0 })} dealer financing`,
+              },
+              {
+                value: fmtMoney(equipment.fleet.monthlyPaymentCents, { cents: true }),
+                label: "Monthly payment",
+                sub: `${equipment.fleet.noteTermMonths} payments — ${Math.round(equipment.fleet.noteTermMonths / 12)} years`,
+              },
+            ]}
+          />
+          <div className="mt-[3cqh]">
+            <LeverageBars
+              cashCents={equipment.fleet.downPaymentCents}
+              deductionCents={equipment.fleet.yearOneDeductionCents}
+              taxSavingCents={equipment.fleet.cappedTaxSavingsCents}
+            />
+          </div>
+          <p className="deck-note">
+            Tax benefit shown AFTER the §461(l) cap, at an assumed{" "}
+            {fmtPct(constants.marginalRateBps, { digits: 0 })} top federal marginal rate for a
+            joint filer, before any state tax.{" "}
+            {equipment.fleet.carryforwardCents > 0
+              ? `The deduction is ${fmtMoney(equipment.fleet.yearOneDeductionCents)}; ${fmtMoneyShort(equipment.fleet.carryforwardCents)} of the resulting loss carries forward as an NOL rather than sheltering this year.`
+              : "At this sizing the whole loss sits inside the cap."}{" "}
+            The deduction depends on being at risk for the financed balance under §465.
+          </p>
+        </Frame>
+      ),
+    },
+
+    {
+      id: "equipment-revenue",
+      title: "The monthly income",
+      node: (
+        <Frame
+          eyebrow="Illustrative month, one unit"
+          title="Where a month of collections goes"
+          lede={`At ${fmtMoney(equipment.fleet.perUnitMonthly.grossCents)} of gross collections. Players are paid first, the venue and service take their share of what remains, and the note comes off before anything reaches you.`}
+        >
+          {/* FOUR segments, not five: the chart's neutral ramp is three steps
+              plus the accent, so venue and service are shown as one mark here
+              and broken out on the internal workbench. */}
+          <RevenueSplitBar
+            caption="Gross collections, one unit, one month"
+            totalCents={equipment.fleet.perUnitMonthly.grossCents}
+            segments={[
+              {
+                label: "Player payout",
+                cents: equipment.fleet.perUnitMonthly.customerPayoutCents,
+                note: `${fmtPct(equipment.config.customerPayoutBps, { digits: 0 })} of gross`,
+              },
+              {
+                label: "Venue & service",
+                cents:
+                  equipment.fleet.perUnitMonthly.venueOperatorCents +
+                  equipment.fleet.perUnitMonthly.serviceCents,
+                note: `${fmtPct(equipment.config.venueOperatorBps + equipment.config.serviceBps, { digits: 0 })} of the remainder`,
+              },
+              {
+                label: "Note payment",
+                cents: equipment.fleet.perUnitMonthly.debtServiceCents,
+                note: "This unit's share",
+              },
+              {
+                label: "To you",
+                cents: equipment.fleet.perUnitMonthly.netCents,
+                accent: true,
+              },
+            ]}
+          />
+          <p className="deck-note">
+            On the conservative case —{" "}
+            {fmtMoney(equipment.conservative.perUnitMonthly.grossCents)} a month a unit — the same
+            unit nets {fmtMoney(equipment.conservative.perUnitMonthly.netCents, { cents: true })}.
+            Collections are hypothetical and vary with location, foot traffic and season. They are
+            not a projection or a guarantee of income for any particular unit or venue.
+          </p>
+        </Frame>
+      ),
+    },
+
+    {
+      id: "equipment-calculator",
+      title: "Your own numbers",
+      node: (
+        <Frame
+          eyebrow="Live"
+          title="Move the numbers"
+          lede="Rather than promise to send a spreadsheet — the same model that produces every other figure in this deck, and the one the proposal will use."
+        >
+          <EquipmentCalculator
+            config={equipment.config}
+            marginalRateBps={constants.marginalRateBps}
+            bonusRateBps={constants.bonusRateBps}
+            initialUnits={equipment.units}
+          />
+        </Frame>
+      ),
+    },
+
+    {
+      id: "equipment-limits",
+      title: "The limits",
+      node: (
+        <Frame
+          eyebrow="What constrains this"
+          title="What your CPA will raise — before they do"
+          lede="Four of these are shared with the tiny-home programme. The first two are this product's own, and they are the ones that decide whether it fits."
+        >
+          <div className="grid grid-cols-2 gap-x-[3cqw] gap-y-[2.2cqh]">
+            {[
+              [
+                "§280F business use, every year",
+                "Above 50% or the asset leaves MACRS, bonus is gone and prior depreciation is recaptured. This is tested annually, not once.",
+              ],
+              [
+                "Payout equipment is state-regulated",
+                "Machines that return cash or prizes are licensed at state and often municipal level, and prohibited in some jurisdictions. Siting and legality are confirmed before a unit is placed.",
+              ],
+              [
+                "§461(l) caps the loss you can use this year",
+                `Business losses offset other income up to ${fmtMoney(lossLimitation.currentSingleCents)} single and ${fmtMoney(lossLimitation.currentJointCents)} jointly for ${lossLimitation.currentYear}. Anything above carries forward as an NOL — deferred, not lost.`,
+              ],
+              [
+                "Material participation is yours here",
+                "Your own business owns and operates the equipment, so §469 participation is yours to establish and document. There is no trustee supplying it, as there is in the Park Model structure.",
+              ],
+              [
+                "Recapture is real",
+                "Selling the equipment or converting it to personal use claws the deduction back as ordinary income under §1245, up to the amount previously deducted.",
+              ],
+              [
+                "Placed in service is a date",
+                "The deduction lands in the year the equipment is delivered, installed and available for use. Ordering in December and siting in March moves it a year.",
+              ],
+            ].map(([head, body]) => (
+              <div key={head}>
+                <p className="text-[0.92em] font-semibold text-paper-50">{head}</p>
+                <p className="mt-[0.7cqh] text-[0.75em] leading-relaxed text-paper-50/60">{body}</p>
+              </div>
+            ))}
+          </div>
+        </Frame>
+      ),
+    },
+
+    {
+      id: "programmes",
+      title: "Two programmes",
+      node: (
+        <Frame
+          eyebrow="Both routes"
+          title="Two assets, one statute"
+          lede="Both are §168(k) qualified property expensed in year one against your own income. They differ in what you own, what you have to do, and what the entry costs."
+        >
+          <div className="grid grid-cols-2 gap-[3cqw]">
+            {[
+              {
+                name: "Park Models",
+                sub: "Transient lodging, in a park we own and manage",
+                rows: [
+                  ["Asset class", "00.27 — 6-year MACRS"],
+                  ["Entry", fmtMoney(tiers[0].terms.purchasePriceCents)],
+                  ["Deposit", `${pctLabel(tiers[1].depositBps)} at a single unit`],
+                  ["Note", `${fmtPct(0, { digits: 0 })} over ${constants.noteTermMonths} months`],
+                  ["Listed property", "No"],
+                  ["You must participate", "No — the trustee does"],
+                  ["Ongoing records", "Held by the Trustee"],
+                ],
+              },
+              {
+                name: "Amusement equipment",
+                sub: "Placed in revenue-sharing venues, owned by your business",
+                rows: [
+                  [
+                    "Asset class",
+                    `${EQUIPMENT_ASSET_CLASS} — ${EQUIPMENT_RECOVERY_YEARS}-year MACRS`,
+                  ],
+                  ["Entry", fmtMoney(equipment.single.totalPurchaseCents)],
+                  ["Deposit", fmtPct(equipment.single.depositBps, { digits: 0 })],
+                  [
+                    "Note",
+                    `${fmtPct(equipment.config.noteRateBps, { digits: 0 })} over ${equipment.config.noteTermMonths} months`,
+                  ],
+                  ["Listed property", "Yes — §280F"],
+                  ["You must participate", "Yes — §469 is yours"],
+                  ["Ongoing records", "Yours, under §274(d)"],
+                ],
+              },
+            ].map((col) => (
+              <div key={col.name} className="border-t-2 border-gold-500/70 pt-[1.6cqh]">
+                <p className="text-[1.02em] font-semibold text-paper-50">{col.name}</p>
+                <p className="mt-[0.6cqh] text-[0.72em] leading-snug text-paper-50/55">{col.sub}</p>
+                <dl className="mt-[1.6cqh] space-y-[0.9cqh]">
+                  {col.rows.map(([k, v]) => (
+                    <div key={k} className="flex justify-between gap-[1cqw] text-[0.74em]">
+                      <dt className="text-paper-50/55">{k}</dt>
+                      <dd className="text-right font-medium text-paper-50">{v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ))}
+          </div>
+          <p className="deck-note">
+            The smaller entry is not the easier one. The equipment carries a §280F compliance
+            burden every year and asks you to establish material participation yourself; the Park
+            Model carries neither, and costs more to enter for exactly that reason.
           </p>
         </Frame>
       ),

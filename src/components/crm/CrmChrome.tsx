@@ -60,6 +60,11 @@ const SECTIONS = [
   // The deck library. Note the href — /crm/presentATIONS is ours; /crm/present
   // is the client-facing deck and carries no chrome at all. See lib/crm/routes.
   { href: "/crm/presentations", label: "Presentations", icon: "slides" },
+  // The amusement-equipment scenario tool. It sits beside Presentations rather
+  // than with Holdings because it is a SELLING surface — you open it on a call
+  // to answer "what would twelve units look like", not to look up something we
+  // own. Nothing is stored behind it.
+  { href: "/crm/equipment", label: "Equipment", icon: "arcade" },
   { href: "/crm/proposals", label: "Proposals", icon: "doc" },
   { href: "/crm/contracts", label: "Contracts", icon: "pen" },
   // BTB's own land, distinct from Holdings, which is the client-owned homes.
@@ -82,6 +87,10 @@ const ICON_PATHS: Record<IconName, string> = {
   calendar: "M4 6h16v14H4zM4 10h16M8.5 4v3M15.5 4v3",
   users: "M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.5 2.9-5 5.5-5s5 1.5 5.5 5M15.5 10.5a3 3 0 1 0-1.4-5.8M15.8 15.3c2.3.3 4.2 1.7 4.7 4.7",
   slides: "M3 4.5h18v11.5H3zM12 16v3.5M8.5 20.5h7",
+  // An upright cabinet with a screen — distinct from `slides` (a projector
+  // screen on a stand) at rail size, which matters because the two sit next to
+  // each other and a deck and a machine are not the same thing.
+  arcade: "M6 3h12v18H6zM8.5 6h7v5h-7zM9.5 14h2M14 14h.01M9 21v-2h6v2",
   // Account administration, distinct from the Clients list above — the same
   // "users" glyph on both would put the allow-list and the book of business
   // under one symbol, which is the one confusion worth avoiding on this rail.

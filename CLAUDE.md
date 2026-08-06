@@ -345,6 +345,84 @@ write-off on their record.
   `cqw` units). A deck that reflows shows the presenter and the room different
   line breaks.
 
+## The second product — amusement equipment, and why it is its own module
+
+**BTB now sells TWO §168(k) assets.** The Park Models are §§1–5 of `SKILL.md`;
+commercial amusement equipment is §6. They share the statute and almost nothing
+else, and conflating them is the same failure mode as the 7-day/30-day mix-up:
+fluent, confident, and describing a deal we do not sell.
+
+- **Asset Class 79.0 "Recreation", 7-year GDS** (Rev. Proc. 87-56) — not 00.27
+  at six years. Both clear the 20-year §168(k) ceiling; they are different
+  tables and are not interchangeable.
+- **There is no trust.** The buyer's own existing trade or business owns the
+  equipment outright, so **§469 material participation is the BUYER's** to
+  establish. The *Aragona* / *Carter* / PLR reasoning is about a **trust's**
+  participation and does not carry across. Nor does the Finance Agreement's
+  **forbearance** clause — that term belongs to the tiny-home note, and saying
+  the lender forbears on an equipment note describes a different deal.
+- **It is LISTED PROPERTY under §280F**, which the homes are not, and that is the
+  defining constraint rather than a footnote. Business use must **exceed** 50%
+  every year — at or below it the asset leaves MACRS for 10-year ADS, bonus is
+  **unavailable outright** (not reduced), and prior depreciation is recaptured
+  under §280F(b)(2). `computeEquipmentDeal` enforces this: below the threshold it
+  reports zero bonus and recovers over ADS rather than printing a deduction the
+  taxpayer is barred from claiming. §274(d) also demands contemporaneous logs,
+  every year. The deck gives it a slide **before any money**, deliberately.
+- **`lib/crm/equipment.ts` is a SEPARATE module from `economics.ts`**, and that
+  is the point. Folding it in would mean a `unitUse` value carrying a completely
+  different caveat set — and the caveats are the product. Two products, two
+  modules, one statute quoted in both.
+- **`LOSS_LIMITATION` moved to `economics.ts`.** §461(l) applies to both
+  programmes, and it had been stated twice — as constants in `presentation.ts`
+  and as literal dollars inside an economics caveat string. `presentation.ts`
+  re-exports it so the deck's imports are unchanged.
+- **`equipment.ts` reads NO environment and touches NO Node API**, because the
+  browser-side calculator imports it. `equipmentConfig()` is the server-only
+  half; call it in a page and pass the result down. `process.env` in a client
+  bundle is silently `undefined`, so a component that resolved its own config
+  would quietly run on the built-in defaults while the deck ran on SSM's.
+- **Rate and term are INPUTS here, unlike the homes.** 0% over 720 months is
+  fixed for the Park Models because the memorandum's economic-substance
+  reasoning is built on that shape. There is no memorandum behind the equipment,
+  so a buyer financing at 7% over 84 months is a normal outcome — `amortize()`
+  is a real interest-bearing schedule when the rate is above zero.
+- **The revenue split is TWO-STAGE.** Player payout is 30% of **gross**; the
+  venue's 15% and the 30% service charge come off **what remains**. Read flat
+  against gross, the owner's net comes out about $1,350 a month light per unit.
+- **We quote the §461(l)-CAPPED benefit, not the gross one.** The competing
+  public material takes $1.5m of income to $0 of federal tax and never mentions
+  the cap; repeating that would contradict our own limits slide two positions
+  later. Both figures exist on the internal workbench, with the gross one struck
+  through. `MARKET_MATERIAL_NOTES` records where that material fails to
+  reconcile — its $140,000 financed against a $150,000 unit at 10% down, and its
+  "5,435% ROI", which is fifteen years of undiscounted cash flow over the
+  deposit and is not a return under any convention.
+- **Payout machines are state-regulated and prohibited in places.** Never opine
+  that a given machine is lawful in a given state.
+
+**Nothing is stored.** There is no equipment proposal type, contract template or
+unit row — the tooling is a calculator and a deck. Config is all SSM under
+`/btb-crm/`: `CRM_EQUIPMENT_UNIT_PRICE_CENTS`, `_DEPOSIT_BPS`, `_TERM_MONTHS`,
+`_RATE_BPS`, `_FLEET_UNITS`, `_GROSS_LOW_CENTS`, `_GROSS_HIGH_CENTS`,
+`_PAYOUT_BPS`, `_VENUE_BPS`, `_SERVICE_BPS`.
+
+**Surfaces.** A third deck track (`equipment`, ten slides) with a live estimator
+slide; a `programmes` comparison slide appended to the **end** of the full
+tiny-home deck — the end, because a prospect holding one deal in their head
+stops following both if a second asset class arrives mid-pitch. The first-call
+deck is untouched: it is eight slides and tightly paced by design. The internal
+workbench is `/crm/equipment`, which keeps the Lightning chrome because it shows
+the gross-versus-capped comparison and the competitor notes, neither of which
+belongs on a shared screen.
+
+**`EquipmentCalculator` is the ONLY interactive thing in the deck**, and the
+exception is earned: "what would it look like at my number" is the question
+these calls actually turn on. Controls are range inputs, not text fields — a
+presenter is talking while they drag, and a half-typed number renders a nonsense
+figure on a screen share. Business use is **not** a dial on the slide: turning it
+below 50% in front of a prospect is a §280F conversation, not a slider.
+
 ### `/crm/clients` and the Overview render the SAME board
 
 `ClientsBoard` is mounted twice — on the dashboard and on its own section — and

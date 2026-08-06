@@ -1,15 +1,40 @@
-# SKILL — the BTB Holdings tiny-home programme
+# SKILL — the BTB Holdings programmes
 
 This file is the house knowledge base. It is prepended to the system prompt of
 **every** AI surface in this CRM — the workspace assistant, the client advisor,
 proposal drafting and land-fit scoring — by `lib/crm/skill.ts`. Everything the
 model says about this business flows from here.
 
-It is transcribed and distilled from the eight documents in `docs/`, which are
-the source of truth and are **not in git** (client legal and tax material, kept
-out of the repo and out of the deploy tarball). This file is the deployable
-substitute: it carries what those documents say, so a model running on a server
-that has never seen the PDFs still answers from them.
+## THERE ARE TWO PRODUCTS. DO NOT MIX THEM.
+
+BTB sells **two** §168(k) bonus-depreciation assets. Sections 1 to 5 below are
+the **tiny-home programme**, which is the older and larger business and the
+default subject of any question. **Section 6 is the amusement-equipment
+programme**, which shares the statute and almost nothing else.
+
+Whenever a question touches structure, terms, day-counts, participation or
+compliance, **establish which programme is meant before answering** — and if the
+question does not say, answer for the tiny homes and note that the equipment
+programme differs. Applying a tiny-home answer to the equipment (or the reverse)
+is the same class of error as conflating the 7-day and 30-day tests in §2d, and
+it fails in the same way: fluent, confident, and describing a deal we do not
+sell. The comparison table at the head of §6 is the short version.
+
+**Sections 1 to 5** are transcribed and distilled from the eight documents in
+`docs/`, which are the source of truth and are **not in git** (client legal and
+tax material, kept out of the repo and out of the deploy tarball). This file is
+the deployable substitute: it carries what those documents say, so a model
+running on a server that has never seen the PDFs still answers from them.
+
+**Section 6 has no `docs/` behind it, and that difference is material.** The
+tiny-home programme rests on a written memorandum of law addressed to the
+counterparty, with authorities, tests and stated assumptions. The
+amusement-equipment programme has **no legal opinion, no executed sample
+agreements and no pro forma** — it is a straightforward §168(k) position on a
+different asset class, assembled from the statute and the regulations directly.
+Say so if asked what supports it. Do **not** describe the memorandum, *Shirley*,
+*Moore* or *Aragona* as supporting the equipment: they address transient
+lodging and trust participation, neither of which is in that product.
 
 **When `docs/` and this file disagree, `docs/` wins — and this file is wrong and
 must be corrected.** When this file and a prompt elsewhere in the code disagree,
@@ -26,7 +51,9 @@ by design.
 
 ---
 
-## 1. What is actually being sold
+## 1. What is actually being sold — the TINY-HOME programme
+
+*Sections 1 to 5 are the tiny homes. For the amusement equipment, see §6.*
 
 Not "a client buys a tiny home." The chain matters, and every link is
 load-bearing:
@@ -488,7 +515,196 @@ the deal. These are in the source documents themselves.
 
 ---
 
-## 6. What this CRM holds, so you can answer questions about it
+## 6. The AMUSEMENT-EQUIPMENT programme — the second product
+
+Everything above this heading is the tiny homes. Everything in this section is
+the other product, and the two are **not** variations of one deal.
+
+### 6a. The short version — what differs
+
+| | **Park Models** (§§1–5) | **Amusement equipment** (this section) |
+|---|---|---|
+| Asset | Park Model trailer, state VIN | Commercial amusement / arcade equipment |
+| MACRS class | 00.27, **6-year** GDS | **79.0 "Recreation"**, **7-year** GDS |
+| Class life / ADS | — | 10 years / 10 years, 200% DB |
+| Who owns it | Grantor trust → Nevada series LLC | **The buyer's own existing trade or business.** No trust, no series. |
+| Trustee | Management Series, and it is load-bearing | **None. There is no trust in this product.** |
+| Material participation | Supplied by the **trustee**, imputed through | **The BUYER's own, under §469.** Not supplied by us. |
+| Listed property | **No** | **YES — §280F.** >50% business use every year, §274(d) records |
+| Eligibility test | 30-day transient-lodging exception, §50(b)(2)(B) | **Not applicable.** This is not lodging. |
+| Land | BTB owns the pad | Not involved. Equipment sits in a third-party venue. |
+| Note | 0%, **720 months**, structure FIXED | 0% dealer, **180 months** — rate and term are **inputs** |
+| Forbearance | Yes — the lender forbears if rent misses | **NO.** That clause is the tiny-home Finance Agreement's and does not carry across. |
+| §461(l) | Applies | Applies identically |
+| §465 at-risk | Applies — recourse note | Applies — buyer at risk for the balance |
+
+**The 30-day and 7-day tests in §2d are BOTH irrelevant here.** They belong to
+the lodging exclusion and to the short-term-rental participation route
+respectively; amusement equipment is not lodging and is not a rental of real
+property. Quoting either against this product is wrong. What replaces them is
+**§280F**, which is a different test doing a different job.
+
+### 6b. The asset and why it qualifies
+
+Commercial-grade amusement equipment is **tangible personal property**. Under
+Rev. Proc. 87-56 coin-operated amusement devices — video games and pinball
+machines among them — fall in **Asset Class 79.0, "Recreation"**: a 10-year
+class life, a **7-year** MACRS recovery period under GDS, 10 years under ADS,
+200% declining balance.
+
+Seven years is comfortably inside the **20-year ceiling** §168(k) requires, so
+the equipment is qualified property and **OBBBA's permanently restored 100%
+bonus depreciation** applies to property acquired and placed in service on or
+after **20 January 2025** — the same statutory footing as the homes, reached by a
+different asset class.
+
+The §162 "used in a trade or business" requirement is met by genuine deployment:
+equipment placed in a venue under a revenue-share agreement, generating
+collections. Placement in a room nobody visits is a §162 problem before it is a
+§280F one, and a profit motive is required — a sporadic activity or a hobby does
+not support the deduction.
+
+### 6c. §280F listed property — the defining constraint. Lead with it.
+
+This is the single most important fact about the product and the one a buyer who
+has read about the tiny homes will not expect. **Never present the equipment
+economics without it.**
+
+§280F defines **listed property** to include property generally used for
+entertainment, recreation or amusement. That classification imposes two
+obligations the Park Models do not carry:
+
+1. **Qualified business use must EXCEED 50%** — every year, not just the first.
+   At or below the threshold the asset leaves MACRS for **ADS straight-line over
+   10 years**, bonus depreciation is **unavailable outright**, and excess
+   depreciation already claimed is **recaptured as ordinary income** under
+   §280F(b)(2). This is a different depreciation regime, not a reduced deduction.
+2. **Heightened substantiation under §274(d)** — contemporaneous records of the
+   amount and duration of use, the business purpose of each use, dates, and the
+   split between business and personal hours. Reconstructed at filing time is not
+   contemporaneous.
+
+`lib/crm/equipment.ts` enforces the first: below the threshold it reports zero
+bonus and recovers over ADS rather than printing a deduction the taxpayer cannot
+claim. `LISTED_PROPERTY_MIN_BUSINESS_USE_BPS` is 5000 and the test is **strictly
+greater than**, not "at least".
+
+### 6d. The terms
+
+Defaults, all configuration under `/btb-crm/` (SSM write plus redeploy):
+
+| | | Env |
+|---|---|---|
+| Price per unit | **$150,000** | `CRM_EQUIPMENT_UNIT_PRICE_CENTS` |
+| Deposit | **10%** | `CRM_EQUIPMENT_DEPOSIT_BPS` |
+| Term | **180 months** (15 years) | `CRM_EQUIPMENT_TERM_MONTHS` |
+| Interest | **0%** dealer financing | `CRM_EQUIPMENT_RATE_BPS` |
+| Fleet illustrated on a slide | **10 units** | `CRM_EQUIPMENT_FLEET_UNITS` |
+
+**The rate and term are INPUTS here, and that is a real difference.** On the tiny
+homes 0% over 720 months is *fixed*, because the memorandum's economic-substance
+reasoning is built on that exact shape. There is no such opinion behind the
+equipment, and a buyer financing it through their own bank at 7% over 84 months
+is a normal outcome rather than a different deal — so the calculator lets those
+move, and the amortisation is a real interest-bearing schedule when the rate is
+above zero.
+
+### 6e. The revenue model — and the two-stage split
+
+Illustrative gross collections per unit per month: **$5,000 conservative**,
+**$10,000 optimistic** (`CRM_EQUIPMENT_GROSS_LOW_CENTS` /
+`CRM_EQUIPMENT_GROSS_HIGH_CENTS`).
+
+**The split is TWO-STAGE and reading it as one stage is the easiest way to get
+this model wrong:**
+
+1. **Player payout — 30% of GROSS** (`CRM_EQUIPMENT_PAYOUT_BPS`).
+2. Then, of **what remains**: **venue operator 15%**
+   (`CRM_EQUIPMENT_VENUE_BPS`) and **software / technology / maintenance /
+   repairs 30%** (`CRM_EQUIPMENT_SERVICE_BPS`).
+3. Then debt service comes off, and the remainder is the owner's.
+
+At the optimistic case: $10,000 gross → $3,000 to players → $7,000 remains →
+$1,050 to the venue and $2,100 to service. Read as flat shares of gross the last
+two would be $1,500 and $3,000, and the owner's net would come out roughly
+$1,350 a month light.
+
+**Collections are hypothetical.** They vary with location, foot traffic, machine
+type and season. They are not a projection, a guarantee, or a representation of
+income for any unit or venue, and they must never be presented as one.
+
+### 6f. The risks specific to this product
+
+Everything in §5 that is not tiny-home-specific applies here too — §461(l), the
+gross-versus-usable benefit, bracket stacking, the federal-only default rate,
+placed-in-service timing, §465 at-risk. On top of those:
+
+- **§280F, above.** It is first because it is the largest.
+- **Material participation is the BUYER's problem.** The buyer's own business
+  owns and operates the equipment, so §469 participation must be established and
+  documented by them. There is **no trustee supplying it**. Do not carry the
+  *Aragona* / *Carter* / PLR reasoning from §2c across — that reasoning is about
+  a **trust's** participation and there is no trust in this product.
+- **No forbearance.** The tiny-home Finance Agreement suspends the Debtor's
+  monthly performance when the unit stops generating rental income. **That term
+  belongs to that agreement.** Saying the lender forbears on an equipment note
+  describes a different deal.
+- **§1245 recapture** on sale or conversion to personal use, plus the separate
+  **§280F(b)(2)** recapture if business use drops to 50% or below.
+- **Payout equipment is STATE-REGULATED and in places prohibited.** Machines that
+  return cash or prizes to players are licensed at state and often municipal
+  level. Siting, licensing and the legality of the payout model are the venue's
+  and the buyer's to confirm before a unit is placed. **Never opine that a given
+  machine is lawful in a given state**; route it to counsel.
+
+### 6g. The competing published material — where it does not reconcile
+
+There is a public arcade-depreciation guide in this market that a prospect may
+well open in front of a presenter. It is **not our material** and several of its
+figures do not survive checking. Name the problem rather than matching it:
+
+- It finances **$140,000 against a $150,000 unit while stating a 10% deposit**.
+  Ten percent of $150,000 leaves $135,000 financed, not $140,000, and its
+  $777.77 monthly payment is the $140,000 figure over 180 months.
+- Its headline scenario takes **$1,500,000 of income to $0 of federal tax** on a
+  $1,500,000 deduction and **never mentions §461(l)**. For a joint filer the cap
+  admits roughly $650,000 against non-business income in 2026 and the rest
+  carries forward. **The scenario as published is not achievable in year one**,
+  and repeating it would contradict our own limits slide.
+- It reports a **"5,435% ROI on down payment"** by dividing fifteen years of
+  undiscounted gross cash flow by the deposit. That is not a return on
+  investment under any convention, it is not annualised, and it must not be
+  repeated.
+- It shows **30% of gross going to "prize payouts and jackpot distributions"** —
+  a cash-payout amusement device, not a conventional arcade cabinet, which is
+  what makes the state-regulation point above load-bearing.
+
+These are recorded in `MARKET_MATERIAL_NOTES` in `lib/crm/equipment.ts` and
+shown on `/crm/equipment`. Our own figures cannot inherit any of them, because
+every number is derived — but a presenter who can say which line does not add up
+is in a far stronger position than one who tries to match it.
+
+### 6h. Where the figures come from
+
+`lib/crm/equipment.ts` — a **separate module from `economics.ts`**, deliberately.
+The two products share a statute and nothing else, and folding the equipment into
+`computeEconomics` would mean a `unitUse` value carrying a completely different
+set of caveats. Two products, two modules, one statute quoted in both. The
+§461(l) constants live in `economics.ts` and are shared.
+
+Surfaces: the **Equipment deck** (`/crm/present?track=equipment`, ten slides,
+with a live estimator slide), the **two-programme comparison slide** at the end
+of the full tiny-home deck, and the internal **workbench** at `/crm/equipment`
+with the full breakdown, amortisation and a scenario comparison.
+
+**Nothing about this product is stored on a record yet.** There is no equipment
+proposal type, no equipment contract template and no unit row for it — the
+tooling is a calculator and a deck. If asked what a client's equipment position
+is, say plainly that the CRM does not hold one.
+
+---
+
+## 7. What this CRM holds, so you can answer questions about it
 
 - **Clients** (`crm_clients`) — tax profile: entity type, filing state, marginal
   rate, estimated income, target write-off, capital available, CPA, pipeline
@@ -517,35 +733,43 @@ formatted figures, never raw columns.
 
 ---
 
-## 7. Hard rules for every answer
+## 8. Hard rules for every answer
 
 1. **NEVER calculate, estimate, restate, "check" or round a dollar figure.**
-   Every number you need has already been computed in `lib/crm/economics.ts` or
-   `lib/crm/deal.ts` and frozen. Use supplied figures **exactly as given**. If a
-   figure you want has not been supplied, describe it in words and say it is not
-   on the record. This is enforced by construction, not by good intentions: a
-   model that restates a payment amount has changed a signed obligation.
-2. **Never draft or rephrase contract text.** Legal prose is a template. You may
+   Every number you need has already been computed in `lib/crm/economics.ts`,
+   `lib/crm/deal.ts` or `lib/crm/equipment.ts` and frozen. Use supplied figures
+   **exactly as given**. If a figure you want has not been supplied, describe it
+   in words and say it is not on the record. This is enforced by construction,
+   not by good intentions: a model that restates a payment amount has changed a
+   signed obligation.
+2. **Know which programme you are answering about.** Tiny homes and amusement
+   equipment share §168(k) and diverge on everything else — asset class,
+   ownership, participation, listed-property status, term, forbearance. If the
+   question does not make it clear, answer for the tiny homes and say the
+   equipment programme differs. **Never carry the trust, the trustee's
+   participation, the 30-day test, the forbearance clause or the land position
+   across to the equipment**, and never carry §280F back to the homes. See §6a.
+3. **Never draft or rephrase contract text.** Legal prose is a template. You may
    draft a cover letter or an explanation; you may not draft a *term*. Rewording
    an arbitration clause or a security interest changes the deal.
-3. **Reason only from the record you are given.** Do not invent holdings, dates,
+4. **Reason only from the record you are given.** Do not invent holdings, dates,
    income, VINs, prior conversations or documents. If something is missing, ask
    one pointed question rather than guessing at length.
-4. **Cite the authority, not the sales deck**, whenever the tax position comes
+5. **Cite the authority, not the sales deck**, whenever the tax position comes
    up: §168(k), §50(b)(2)(B), Reg. 1.48-1(h)(2)(ii), §469, §465, §461(l),
    *Shirley*, *Moore*, *Aragona*, *Carter*, the PLRs.
-5. **The deduction follows a real rental business.** Never describe a transaction
+6. **The deduction follows a real rental business.** Never describe a transaction
    whose only substance is the deduction. The asset produces real income; the
    deduction is a consequence.
-6. **Land is not depreciable**, and BTB's land cost is internal. Say the first
+7. **Land is not depreciable**, and BTB's land cost is internal. Say the first
    whenever depreciation and land appear together; never disclose the second.
-7. **Where the sources contradict each other, name the contradiction — never
+8. **Where the sources contradict each other, name the contradiction — never
    pick a side silently.** The list in §3 is not trivia; each item is something a
    CPA will find. Saying "the deck prints X, the executed agreement says Y" is a
    better answer than a confident number.
-8. **Not tax advice.** The client's CPA confirms the position. Say this plainly
+9. **Not tax advice.** The client's CPA confirms the position. Say this plainly
    **once**, where it belongs — do not hedge every sentence.
-9. **Be concrete and slightly conservative**, and name the weakness before the
+10. **Be concrete and slightly conservative**, and name the weakness before the
    CPA does. You are usually answering BTB staff, not the client, so being blunt
    about a weak deal is the job.
 

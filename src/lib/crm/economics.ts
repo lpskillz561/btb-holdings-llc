@@ -16,6 +16,7 @@
 // they reach the proposal instead of being silently assumed away.
 
 import { MAX_AVERAGE_RENTAL_DAYS, NOTE_TERM_MONTHS } from "./deal";
+import { fmtMoney } from "./format";
 import type { UnitUse } from "./types";
 
 /** Read an integer env override, falling back when unset or malformed. */
@@ -25,6 +26,26 @@ function envInt(name: string, fallback: number): number {
   const n = Number(raw);
   return Number.isFinite(n) ? Math.round(n) : fallback;
 }
+
+/**
+ * §461(l) excess business loss caps. From the strategy deck's own appendix.
+ *
+ * This lives HERE, in the module every product's figures run through, because
+ * it applies to both programmes and it used to be stated twice — once as these
+ * constants in `./presentation` for the deck, and once as literal dollar
+ * amounts inside the caveat string below. Two copies of an indexed statutory
+ * figure is a drift waiting for the next inflation adjustment, and the copy a
+ * CPA reads is whichever one happened to be updated. There is one now, and the
+ * caveat is templated from it.
+ */
+export const LOSS_LIMITATION = {
+  currentYear: 2026,
+  currentSingleCents: 32_500_000,
+  currentJointCents: 65_000_000,
+  priorYear: 2025,
+  priorSingleCents: 31_300_000,
+  priorJointCents: 62_600_000,
+} as const;
 
 /**
  * Share of depreciable basis deductible in year one, in basis points.
@@ -387,7 +408,7 @@ function buildCaveats(
   // strategy deck itself, so quoting a first-year benefit without it is quoting
   // a number the deck already qualifies.
   caveats.push(
-    "Section 461(l) limits how much business loss can offset non-business income in one year — roughly $313,000 single / $626,000 married filing jointly for 2025, rising to about $325,000 / $650,000 for 2026. A deduction larger than that threshold does not vanish, but the excess is carried forward as a net operating loss rather than sheltering this year's income. Where the modelled deduction exceeds the client's cap, the first-year tax benefit shown here is the gross figure and their CPA must apply the limitation to it.",
+    `Section 461(l) limits how much business loss can offset non-business income in one year — roughly ${fmtMoney(LOSS_LIMITATION.priorSingleCents)} single / ${fmtMoney(LOSS_LIMITATION.priorJointCents)} married filing jointly for ${LOSS_LIMITATION.priorYear}, rising to about ${fmtMoney(LOSS_LIMITATION.currentSingleCents)} / ${fmtMoney(LOSS_LIMITATION.currentJointCents)} for ${LOSS_LIMITATION.currentYear}. A deduction larger than that threshold does not vanish, but the excess is carried forward as a net operating loss rather than sheltering this year's income. Where the modelled deduction exceeds the client's cap, the first-year tax benefit shown here is the gross figure and their CPA must apply the limitation to it.`,
   );
 
   // The SECOND reason the headline benefit is a ceiling, and a different
