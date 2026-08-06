@@ -416,6 +416,36 @@ workbench is `/crm/equipment`, which keeps the Lightning chrome because it shows
 the gross-versus-capped comparison and the competitor notes, neither of which
 belongs on a shared screen.
 
+**Every field on the workbench carries an `InfoTip`, and the text is in
+`lib/crm/equipment-glossary.ts` — one home, never inline.** Two facets per
+entry on purpose: *usage* (what the number is, what moving it does) and
+*legality* (the provision it answers to, and how it breaks). A field can be
+trivial to use and ruinous to get wrong — "qualified business use" is a
+percentage box and also the §280F cliff — and a single blended hint compresses
+the second half into something that reads like form microcopy.
+
+- **The glossary states the same doctrine as `SKILL.md` §6, so it is a second
+  copy that can disagree.** It is deliberately NOT loaded into the AI (it is
+  microcopy, not prompt text, and the deck must never render it). The mitigation
+  is the `cites` array: keep the statutory anchors identical in both places so a
+  search for `§280F` finds every copy. **Change a rule in both.**
+- **The panel is `position: fixed`, placed from the trigger's rect.** The
+  obvious absolutely-positioned version is clipped to nothing — the deduction
+  and month tables are `overflow-x-auto` and the schedule is `max-h …
+  overflow-auto`. The cost is that scrolling must CLOSE it, since a fixed panel
+  cannot follow the trigger; the scroll listener uses `capture` because
+  scrolling inside those tables does not bubble to window.
+- **`Num` no longer wraps its field in a `<label>`.** `InfoTip` is a `<button>`,
+  interactive content inside a label is invalid, and clicking the field *name*
+  would have activated the input instead of opening the explanation. It is
+  `htmlFor` + a `useId` now.
+- **Escape needs `suppressFocusOpen`.** Escape closes the panel and returns
+  focus to the trigger — which fires `onFocus`, which reopens it. Without the
+  one-tick guard, Escape is a no-op that looks like a hang. Dropping the
+  `.focus()` instead would strand keyboard focus on a dismissed popover.
+- The panel keeps live pointer events so citations can be selected, so the
+  outside-click handler must exclude the panel as well as the trigger.
+
 **`EquipmentCalculator` is the ONLY interactive thing in the deck**, and the
 exception is earned: "what would it look like at my number" is the question
 these calls actually turn on. Controls are range inputs, not text fields — a

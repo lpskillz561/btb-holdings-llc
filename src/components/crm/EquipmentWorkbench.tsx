@@ -18,7 +18,9 @@
  * looks note in CLAUDE.md.
  */
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useId, useMemo, useState } from "react";
+import { InfoTip } from "@/components/crm/InfoTip";
+import type { GlossaryKey } from "@/lib/crm/equipment-glossary";
 import { fmtMoney, fmtNum, fmtPct } from "@/lib/crm/format";
 import {
   amortize,
@@ -62,6 +64,7 @@ function initialScenario(config: EquipmentConfig, marginalRateBps: number): Scen
 
 function Num({
   label,
+  tip,
   value,
   onChange,
   min,
@@ -71,6 +74,7 @@ function Num({
   suffix,
 }: {
   label: string;
+  tip: GlossaryKey;
   value: number;
   onChange: (n: number) => void;
   min: number;
@@ -79,9 +83,18 @@ function Num({
   prefix?: string;
   suffix?: string;
 }) {
+  const id = useId();
   return (
-    <label className="block">
-      <span className="sf-label">{label}</span>
+    // NOT a <label> wrapping the whole field any more. `InfoTip` renders a
+    // <button>, and interactive content inside a label is both invalid and
+    // actively wrong here — a click on the field name would activate the
+    // labelled input instead of opening the explanation. `htmlFor` keeps the
+    // association without the nesting.
+    <div className="block">
+      <span className="sf-label flex items-center">
+        <label htmlFor={id}>{label}</label>
+        <InfoTip term={tip} />
+      </span>
       <div className="relative">
         {prefix ? (
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-ink-500">
@@ -89,6 +102,7 @@ function Num({
           </span>
         ) : null}
         <input
+          id={id}
           type="number"
           inputMode="decimal"
           value={value}
@@ -111,7 +125,7 @@ function Num({
           </span>
         ) : null}
       </div>
-    </label>
+    </div>
   );
 }
 
@@ -122,10 +136,12 @@ function Controls({
   scenario: Scenario;
   set: (patch: Partial<Scenario>) => void;
 }) {
+  const filingId = useId();
   return (
     <div className="grid grid-cols-2 gap-3">
       <Num
         label="Units"
+        tip="units"
         value={scenario.units}
         onChange={(units) => set({ units })}
         min={1}
@@ -133,6 +149,7 @@ function Controls({
       />
       <Num
         label="Price per unit"
+        tip="pricePerUnit"
         value={scenario.priceCents / 100}
         onChange={(v) => set({ priceCents: Math.round(v * 100) })}
         min={0}
@@ -142,6 +159,7 @@ function Controls({
       />
       <Num
         label="Deposit"
+        tip="deposit"
         value={scenario.depositBps / 100}
         onChange={(v) => set({ depositBps: Math.round(v * 100) })}
         min={0}
@@ -151,6 +169,7 @@ function Controls({
       />
       <Num
         label="Term"
+        tip="term"
         value={scenario.termMonths}
         onChange={(termMonths) => set({ termMonths })}
         min={1}
@@ -159,6 +178,7 @@ function Controls({
       />
       <Num
         label="Interest rate"
+        tip="interestRate"
         value={scenario.rateBps / 100}
         onChange={(v) => set({ rateBps: Math.round(v * 100) })}
         min={0}
@@ -168,6 +188,7 @@ function Controls({
       />
       <Num
         label="Collections / unit / mo"
+        tip="collections"
         value={scenario.grossCents / 100}
         onChange={(v) => set({ grossCents: Math.round(v * 100) })}
         min={0}
@@ -177,6 +198,7 @@ function Controls({
       />
       <Num
         label="Marginal rate"
+        tip="marginalRate"
         value={scenario.marginalRateBps / 100}
         onChange={(v) => set({ marginalRateBps: Math.round(v * 100) })}
         // 60 is the ceiling `computeEquipmentDeal` throws above — clamping here
@@ -188,6 +210,7 @@ function Controls({
       />
       <Num
         label="Qualified business use"
+        tip="businessUse"
         value={scenario.businessUseBps / 100}
         onChange={(v) => set({ businessUseBps: Math.round(v * 100) })}
         min={0}
@@ -195,9 +218,13 @@ function Controls({
         step={1}
         suffix="%"
       />
-      <label className="col-span-2 block">
-        <span className="sf-label">Filing status</span>
+      <div className="col-span-2 block">
+        <span className="sf-label flex items-center">
+          <label htmlFor={filingId}>Filing status</label>
+          <InfoTip term="filingStatus" />
+        </span>
         <select
+          id={filingId}
           value={scenario.filing}
           onChange={(e) => set({ filing: e.target.value as FilingStatus })}
           className="sf-input"
@@ -205,18 +232,20 @@ function Controls({
           <option value="joint">Married filing jointly</option>
           <option value="single">Single</option>
         </select>
-      </label>
+      </div>
     </div>
   );
 }
 
 function Tile({
   label,
+  tip,
   value,
   hint,
   tone = "navy",
 }: {
   label: string;
+  tip: GlossaryKey;
   value: string;
   hint?: string;
   tone?: "navy" | "good" | "warn";
@@ -225,7 +254,10 @@ function Tile({
     tone === "good" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : "text-ink-900";
   return (
     <div className="sf-card p-4">
-      <p className="text-xs uppercase tracking-wide text-ink-600">{label}</p>
+      <p className="flex items-start text-xs uppercase tracking-wide text-ink-600">
+        <span>{label}</span>
+        <InfoTip term={tip} />
+      </p>
       <p className={`mt-1 text-xl font-semibold tabular-nums ${colour}`}>{value}</p>
       {hint ? <p className="mt-1 text-xs leading-snug text-ink-600">{hint}</p> : null}
     </div>
@@ -293,33 +325,44 @@ export function EquipmentWorkbench({
   const elidedRows = schedule.length - scheduleRows.length;
 
   const monthly = dealA.fleetMonthly;
-  const lines: { label: string; note: string; monthly: number; annual: number }[] = [
+  const lines: {
+    label: string;
+    tip: GlossaryKey;
+    note: string;
+    monthly: number;
+    annual: number;
+  }[] = [
     {
       label: "Gross collections",
+      tip: "grossCollections",
       note: `${dealA.unitCount} units × ${fmtMoney(a.grossCents)}`,
       monthly: monthly.grossCents,
       annual: monthly.grossCents * 12,
     },
     {
       label: "Player payout",
+      tip: "playerPayout",
       note: `${fmtPct(config.customerPayoutBps, { digits: 0 })} of gross`,
       monthly: -monthly.customerPayoutCents,
       annual: -monthly.customerPayoutCents * 12,
     },
     {
       label: "Venue operator",
+      tip: "venueOperator",
       note: `${fmtPct(config.venueOperatorBps, { digits: 0 })} of what remains after payout`,
       monthly: -monthly.venueOperatorCents,
       annual: -monthly.venueOperatorCents * 12,
     },
     {
       label: "Software, service & repairs",
+      tip: "serviceCharge",
       note: `${fmtPct(config.serviceBps, { digits: 0 })} of what remains after payout`,
       monthly: -monthly.serviceCents,
       annual: -monthly.serviceCents * 12,
     },
     {
       label: "Debt service",
+      tip: "debtService",
       note: `${dealA.noteTermMonths} months at ${fmtPct(dealA.noteRateBps, { digits: 2 })}`,
       monthly: -monthly.debtServiceCents,
       annual: -monthly.debtServiceCents * 12,
@@ -328,6 +371,19 @@ export function EquipmentWorkbench({
 
   return (
     <div className="space-y-10">
+      {/* Said once, at the top, rather than repeated beside thirty controls.
+          The second sentence is the one that matters: these notes explain our
+          own compliance burden to staff and are not client-facing text. */}
+      <p className="-mb-4 max-w-3xl text-sm text-ink-600">
+        Every field carries an{" "}
+        <span className="inline-flex h-4 w-4 translate-y-[2px] items-center justify-center rounded-full border border-ink-200 bg-white text-[10px] font-semibold text-ink-600">
+          i
+        </span>{" "}
+        with what it means and the rule behind it — hover, tab to it, or click to pin it open.
+        These are working notes for BTB staff, not advice to a client: what goes to a taxpayer is
+        the proposal text at the bottom of this page.
+      </p>
+
       {/* ---- Inputs -------------------------------------------------------- */}
       <div className="grid gap-5 lg:grid-cols-[1fr_2fr]">
         <div className="sf-card p-5">
@@ -348,22 +404,26 @@ export function EquipmentWorkbench({
           <div className="grid gap-3 sm:grid-cols-4">
             <Tile
               label="Total purchase"
+              tip="totalPurchase"
               value={fmtMoney(dealA.totalPurchaseCents)}
               hint={`${dealA.unitCount} × ${fmtMoney(dealA.unitPriceCents)}`}
             />
             <Tile
               label="Cash down"
+              tip="cashDown"
               value={fmtMoney(dealA.downPaymentCents)}
               hint={`${fmtPct(dealA.depositBps, { digits: 1 })} deposit`}
             />
             <Tile
               label="Year-one benefit"
+              tip="yearOneBenefit"
               value={fmtMoney(dealA.cappedTaxSavingsCents)}
               hint={`After §461(l), at ${fmtPct(a.marginalRateBps, { digits: 1 })}`}
               tone="good"
             />
             <Tile
               label="Net year-one position"
+              tip="netYearOnePosition"
               value={fmtMoney(Math.abs(dealA.netYearOnePositionCents))}
               hint={
                 dealA.netYearOnePositionCents <= 0
@@ -377,11 +437,13 @@ export function EquipmentWorkbench({
           <div className="grid gap-3 sm:grid-cols-4">
             <Tile
               label="Financed"
+              tip="financed"
               value={fmtMoney(dealA.financedCents)}
               hint={`${fmtPct(dealA.noteRateBps, { digits: 2 })} over ${dealA.noteTermMonths} mo`}
             />
             <Tile
               label="Monthly payment"
+              tip="monthlyPayment"
               value={fmtMoney(dealA.monthlyPaymentCents, { cents: true })}
               hint={
                 dealA.totalInterestCents > 0
@@ -391,12 +453,14 @@ export function EquipmentWorkbench({
             />
             <Tile
               label="Net monthly"
+              tip="netMonthly"
               value={fmtMoney(monthly.netCents, { cents: true })}
               hint="After every operating line and the note"
               tone={monthly.netCents >= 0 ? "good" : "warn"}
             />
             <Tile
               label="Deposit recovered"
+              tip="depositRecovered"
               value={breakEvenLabel(dealA)}
               hint={
                 dealA.breakEvenMonths === null
@@ -429,67 +493,84 @@ export function EquipmentWorkbench({
         <div className="card overflow-x-auto">
           <table className="sf-table w-full">
             <tbody>
-              {[
+              {(
                 [
-                  "Depreciable basis",
-                  fmtMoney(dealA.depreciableBasisCents),
-                  `${fmtPct(dealA.businessUseBps, { digits: 0 })} of ${fmtMoney(dealA.totalPurchaseCents)} — the personal share is never depreciable`,
-                ],
-                [
-                  "Bonus depreciation",
-                  fmtMoney(dealA.bonusDeductionCents),
-                  dealA.qualifiesForBonus
-                    ? `${fmtPct(bonusRateBps, { digits: 0 })} under §168(k)`
-                    : "Unavailable — §280F business use is not above 50%",
-                ],
-                [
-                  "First-year remainder",
-                  fmtMoney(dealA.firstYearRemainderCents),
-                  "Straight-line on whatever bonus did not absorb",
-                ],
-                [
-                  "Year-one deduction",
-                  fmtMoney(dealA.yearOneDeductionCents),
-                  "The figure before any limit applies",
-                ],
-                [
-                  "Less: this activity's own income",
-                  fmtMoney(dealA.businessIncomeCents),
-                  "The deduction offsets the equipment's own profit first",
-                ],
-                [
-                  "Net business loss",
-                  fmtMoney(dealA.netBusinessLossCents),
-                  "What §461(l) is actually tested against",
-                ],
-                [
-                  "§461(l) cap",
-                  fmtMoney(dealA.lossLimitCents),
-                  `${a.filing === "joint" ? "Married filing jointly" : "Single"}, current year`,
-                ],
-                [
-                  "Allowed against other income",
-                  fmtMoney(dealA.allowedAgainstOtherIncomeCents),
-                  "The part that shelters wages, business or gains this year",
-                ],
-                [
-                  "Carried forward as NOL",
-                  fmtMoney(dealA.carryforwardCents),
-                  "Deferred, not lost",
-                ],
-              ].map(([label, value, note]) => (
-                <tr key={label}>
+                  {
+                    label: "Depreciable basis",
+                    tip: "depreciableBasis",
+                    value: fmtMoney(dealA.depreciableBasisCents),
+                    note: `${fmtPct(dealA.businessUseBps, { digits: 0 })} of ${fmtMoney(dealA.totalPurchaseCents)} — the personal share is never depreciable`,
+                  },
+                  {
+                    label: "Bonus depreciation",
+                    tip: "bonusDepreciation",
+                    value: fmtMoney(dealA.bonusDeductionCents),
+                    note: dealA.qualifiesForBonus
+                      ? `${fmtPct(bonusRateBps, { digits: 0 })} under §168(k)`
+                      : "Unavailable — §280F business use is not above 50%",
+                  },
+                  {
+                    label: "First-year remainder",
+                    tip: "firstYearRemainder",
+                    value: fmtMoney(dealA.firstYearRemainderCents),
+                    note: "Straight-line on whatever bonus did not absorb",
+                  },
+                  {
+                    label: "Year-one deduction",
+                    tip: "yearOneDeduction",
+                    value: fmtMoney(dealA.yearOneDeductionCents),
+                    note: "The figure before any limit applies",
+                  },
+                  {
+                    label: "Less: this activity's own income",
+                    tip: "activityOwnIncome",
+                    value: fmtMoney(dealA.businessIncomeCents),
+                    note: "The deduction offsets the equipment's own profit first",
+                  },
+                  {
+                    label: "Net business loss",
+                    tip: "netBusinessLoss",
+                    value: fmtMoney(dealA.netBusinessLossCents),
+                    note: "What §461(l) is actually tested against",
+                  },
+                  {
+                    label: "§461(l) cap",
+                    tip: "lossCap",
+                    value: fmtMoney(dealA.lossLimitCents),
+                    note: `${a.filing === "joint" ? "Married filing jointly" : "Single"}, current year`,
+                  },
+                  {
+                    label: "Allowed against other income",
+                    tip: "allowedOtherIncome",
+                    value: fmtMoney(dealA.allowedAgainstOtherIncomeCents),
+                    note: "The part that shelters wages, business or gains this year",
+                  },
+                  {
+                    label: "Carried forward as NOL",
+                    tip: "carryforward",
+                    value: fmtMoney(dealA.carryforwardCents),
+                    note: "Deferred, not lost",
+                  },
+                ] as { label: string; tip: GlossaryKey; value: string; note: string }[]
+              ).map((row) => (
+                <tr key={row.label}>
                   <td className="w-[22rem]">
-                    <span className="font-medium text-ink-900">{label}</span>
-                    <span className="mt-0.5 block text-xs text-ink-600">{note}</span>
+                    <span className="flex items-start font-medium text-ink-900">
+                      <span>{row.label}</span>
+                      <InfoTip term={row.tip} />
+                    </span>
+                    <span className="mt-0.5 block text-xs text-ink-600">{row.note}</span>
                   </td>
-                  <td className="text-right font-semibold tabular-nums text-ink-900">{value}</td>
+                  <td className="text-right font-semibold tabular-nums text-ink-900">
+                    {row.value}
+                  </td>
                 </tr>
               ))}
               <tr className="bg-paper-50">
                 <td>
-                  <span className="font-semibold text-ink-900">
-                    Year-one tax benefit, gross vs after the cap
+                  <span className="flex items-start font-semibold text-ink-900">
+                    <span>Year-one tax benefit, gross vs after the cap</span>
+                    <InfoTip term="grossVsCapped" />
                   </span>
                   <span className="mt-0.5 block text-xs text-ink-600">
                     Gross is the whole deduction at the marginal rate, which is what the
@@ -526,7 +607,10 @@ export function EquipmentWorkbench({
               {lines.map((line) => (
                 <tr key={line.label}>
                   <td>
-                    <span className="font-medium text-ink-900">{line.label}</span>
+                    <span className="flex items-start font-medium text-ink-900">
+                      <span>{line.label}</span>
+                      <InfoTip term={line.tip} />
+                    </span>
                     <span className="mt-0.5 block text-xs text-ink-600">{line.note}</span>
                   </td>
                   <td className="text-right tabular-nums">
@@ -536,7 +620,12 @@ export function EquipmentWorkbench({
                 </tr>
               ))}
               <tr className="bg-paper-50 font-semibold">
-                <td className="text-ink-900">Net to the owner</td>
+                <td>
+                  <span className="flex items-start text-ink-900">
+                    <span>Net to the owner</span>
+                    <InfoTip term="netToOwner" />
+                  </span>
+                </td>
                 <td className="text-right tabular-nums text-ink-900">
                   {fmtMoney(monthly.netCents, { cents: true })}
                 </td>
@@ -604,7 +693,10 @@ export function EquipmentWorkbench({
       {/* ---- Amortisation --------------------------------------------------- */}
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="sf-h">Amortisation — scenario A</h2>
+          <h2 className="sf-h flex items-center">
+            <span>Amortisation — scenario A</span>
+            <InfoTip term="amortisation" />
+          </h2>
           <button
             type="button"
             onClick={() => setShowSchedule((v) => !v)}
