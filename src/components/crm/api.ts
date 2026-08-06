@@ -5,12 +5,45 @@
 // "Failed to fetch" — a 403 from the CRM allow-list and a 503 from a missing
 // OPENAI_API_KEY both need to be readable on screen to be actionable.
 
+/**
+ * Fired on the window the first time any call comes back 401.
+ *
+ * A session expires while a tab sits open — the TTL is 8 hours — and every
+ * client-side fetch then fails at once. Handled per-call, that surfaces as a raw
+ * "Not authorized." inside whichever widget happened to ask first, which reads
+ * as that widget being broken rather than as "you have been signed out". The
+ * event lets one component in the layout say the true thing once.
+ */
+export const SESSION_EXPIRED_EVENT = "crm:session-expired";
+
+/** Thrown on 401 so a caller can tell "signed out" from "that failed". */
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("Your session has expired. Sign in again to carry on.");
+    this.name = "SessionExpiredError";
+  }
+}
+
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method,
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+
+  // 401 means the cookie is gone or stale, and it is never specific to the
+  // thing that was being fetched. Announce it globally and throw a recognisable
+  // error rather than letting "Not authorized." land in a comment box.
+  //
+  // 403 is deliberately NOT treated this way: that one IS about the caller —
+  // signed in, but not on the CRM allow-list — and its message is worth reading
+  // where it happened.
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    }
+    throw new SessionExpiredError();
+  }
 
   if (res.status === 204) return undefined as T;
 

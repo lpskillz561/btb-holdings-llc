@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { AskAi } from "@/components/crm/AskAi";
 import { CrmChrome } from "@/components/crm/CrmChrome";
 import { NavProgress } from "@/components/crm/NavProgress";
+import { SessionWatch } from "@/components/crm/SessionWatch";
 import { getCrmPageUser, isSuperUser } from "@/lib/crm/access";
 import { isAiConfigured } from "@/lib/crm/ai";
 import { RAIL_COOKIE, isRailCollapsed } from "@/lib/crm/rail";
@@ -63,6 +64,10 @@ export default async function CrmLayout({ children }: { children: ReactNode }) {
         <div className="min-w-0 flex-1">{children}</div>
       </div>
       {user ? <AskAi aiEnabled={isAiConfigured()} /> : null}
+      {/* Says "you have been signed out" once, when a fetch discovers it. Here
+          rather than in a page for the same reason as the chrome: it must
+          survive navigation, and the thing it reports is not page-specific. */}
+      {user ? <SessionWatch /> : null}
     </div>
   );
 }

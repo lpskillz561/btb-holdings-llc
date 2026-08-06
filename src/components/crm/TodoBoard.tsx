@@ -174,9 +174,16 @@ export function TodoBoard({
   const loadTags = useCallback(async () => {
     try {
       setAllTags(await apiGet<CrmTag[]>("/api/crm/tags"));
-    } catch {
+    } catch (err) {
       // The board must still work with no tag vocabulary loaded — the picker
-      // just offers creation instead of a list.
+      // just offers creation instead of a list — so this does not surface in
+      // the UI. But it is LOGGED rather than swallowed: an empty `catch {}` here
+      // is how an expired session came to look like one broken widget, because
+      // this and the subtask load were failing at the same moment as the
+      // comment thread and only the comment thread said so. `api.ts` raises the
+      // global signal for a 401; this line is what makes anything else
+      // diagnosable from the console.
+      console.error("[board] tag vocabulary failed to load", err);
     }
   }, []);
 
@@ -698,6 +705,7 @@ function CardDialog({
   const [saved, setSaved] = useState(false);
 
   const [subtasks, setSubtasks] = useState<CrmSubtask[]>([]);
+  const [subtaskError, setSubtaskError] = useState("");
   const [tags, setTags] = useState<CrmTag[]>(todo.tags ?? []);
   const [tagError, setTagError] = useState("");
 
@@ -711,8 +719,16 @@ function CardDialog({
     let live = true;
     apiGet<CrmSubtask[]>(`/api/crm/todos/${todo.id}/subtasks`)
       .then((rows) => live && setSubtasks(rows))
-      .catch(() => {
-        // A failed subtask load must not stop someone reading the card.
+      .catch((err: unknown) => {
+        // A failed subtask load must not stop someone reading the card, so this
+        // is not fatal — but it is reported. Swallowing it silently is what let
+        // a signed-out session read as "comments are broken": this list simply
+        // rendered empty, which is indistinguishable from a card that has no
+        // subtasks. See SessionWatch.tsx.
+        if (!live) return;
+        setSubtaskError(
+          err instanceof Error ? err.message : "The subtasks could not be loaded.",
+        );
       });
     return () => {
       live = false;
@@ -826,6 +842,7 @@ function CardDialog({
             </div>
           </form>
 
+          {subtaskError ? <ErrorNote>{subtaskError}</ErrorNote> : null}
           <SubtaskList
             todoId={todo.id}
             subtasks={subtasks}
