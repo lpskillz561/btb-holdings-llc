@@ -414,7 +414,7 @@ export function RecordDialog({
     <Dialog
       open={open}
       onClose={onClose}
-      wide
+      size="lg"
       title={`${editing ? "Edit" : "Add"} ${spec.title.toLowerCase()}`}
     >
       <form ref={formRef} onSubmit={onSubmit} className="space-y-5">

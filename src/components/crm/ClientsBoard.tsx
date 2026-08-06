@@ -141,7 +141,7 @@ export function ClientsBoard({
         )}
       </div>
 
-      <Dialog open={open} onClose={closeDialog} title="Add client" wide>
+      <Dialog open={open} onClose={closeDialog} title="Add client" size="lg">
         <ClientForm
           pads={pads}
           states={states}

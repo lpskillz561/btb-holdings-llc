@@ -360,7 +360,7 @@ function OverviewTab({
         )}
       </div>
 
-      <Dialog open={editing} onClose={closeEdit} title={`Edit ${client.name}`} wide>
+      <Dialog open={editing} onClose={closeEdit} title={`Edit ${client.name}`} size="lg">
         <ClientForm
           client={client}
           states={states}

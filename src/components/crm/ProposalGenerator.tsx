@@ -150,7 +150,7 @@ export function ProposalGenerator({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} wide title={`Draft a proposal for ${client.name}`}>
+    <Dialog open={open} onClose={onClose} size="lg" title={`Draft a proposal for ${client.name}`}>
       <form onSubmit={onSubmit} className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Units">

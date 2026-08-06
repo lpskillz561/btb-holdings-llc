@@ -77,7 +77,14 @@ export function TodoSummary({ todos }: { todos: CrmTodo[] }) {
                     {LABELS.todoStatus[todo.status]}
                     {todo.assignee ? ` · ${todo.assignee}` : " · unassigned"}
                     {` · ${fmtAgo(todo.created_at)}`}
-                    {(todo.comment_count ?? 0) > 0 ? ` · 💬 ${todo.comment_count}` : ""}
+                    {/* Words, not 💬. This is one line of 11px grey metadata
+                        and a colour emoji is the loudest thing on the card —
+                        rendered by the OS, so it also looks different on every
+                        machine in the office. Same rule as the board's own
+                        footer glyphs, which are drawn. */}
+                    {(todo.comment_count ?? 0) > 0
+                      ? ` · ${todo.comment_count} comment${todo.comment_count === 1 ? "" : "s"}`
+                      : ""}
                   </span>
                 </span>
               </Link>

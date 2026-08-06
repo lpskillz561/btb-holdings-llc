@@ -55,6 +55,7 @@ export function Dropdown({
   disabled,
   required,
   className = "",
+  triggerClassName,
   "aria-label": ariaLabel,
 }: {
   options: DropdownOption[];
@@ -68,6 +69,15 @@ export function Dropdown({
   disabled?: boolean;
   required?: boolean;
   className?: string;
+  /**
+   * Replaces `.sf-input` on the closed control, for the one case where this is
+   * not a form field: the status lozenge on a card, which is a coloured pill
+   * that has to carry the status tone. The popup is untouched — every dropdown
+   * in the app opens the same menu, whatever opened it. When this is set the
+   * label and the caret inherit `currentColor` instead of the field ink, so the
+   * pill's own text colour applies.
+   */
+  triggerClassName?: string;
   "aria-label"?: string;
 }) {
   const controlled = value !== undefined;
@@ -287,19 +297,23 @@ export function Dropdown({
         aria-haspopup="listbox"
         aria-controls={open ? listId : undefined}
         aria-label={ariaLabel}
-        className={`sf-input flex items-center justify-between gap-2 text-left ${
-          open ? "border-sf-400 ring-4 ring-sf-500/15" : ""
+        className={`${triggerClassName ?? "sf-input"} flex items-center justify-between gap-2 text-left ${
+          open && !triggerClassName ? "border-sf-400 ring-4 ring-sf-500/15" : ""
         } ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}
       >
-        <span className={`truncate ${selected ? "text-ink-900" : "text-ink-400"}`}>
+        <span
+          className={`truncate ${
+            triggerClassName ? "" : selected ? "text-ink-900" : "text-ink-400"
+          }`}
+        >
           {selected?.label ?? placeholder}
         </span>
         <svg
           viewBox="0 0 24 24"
           aria-hidden
-          className={`h-4 w-4 shrink-0 text-ink-500 transition-transform duration-150 ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`h-4 w-4 shrink-0 transition-transform duration-150 ${
+            triggerClassName ? "opacity-70" : "text-ink-500"
+          } ${open ? "rotate-180" : ""}`}
           fill="none"
           stroke="currentColor"
           strokeWidth="1.75"

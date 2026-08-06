@@ -520,13 +520,59 @@ so "add a tag" needs no find-or-create in the caller.
 - New tags get a colour hashed from the label, so the same word always lands on
   the same hue and re-creating a deleted tag brings its colour back.
 
-**Subtasks tick immediately; the card's title and notes still batch.** A
-checklist whose ticks are lost by pressing Close is the opposite of a checklist.
-The optimistic update has to TRANSLATE `done` (a boolean on the wire) into
-`done_at`/`done_by` (what the row and the checkbox actually hold) — spreading the
-request body onto the row sets a property nothing reads and leaves the tick
-frozen until the server answers. Both shapes typecheck; only driving the real
-board catches it.
+**PROSE BATCHES; EVERYTHING ELSE APPLIES AT ONCE.** That one line governs the
+whole card dialog. Title and description are held locally and saved on submit —
+they are the two fields people type paragraphs into, and a PATCH per keystroke
+would hammer the API and let two people editing the same card overwrite each
+other mid-sentence. Status, assignee, tags and subtask ticks all write on the
+click, because each is one action with an obvious result and holding one behind
+a Save button is how a change gets lost by pressing Close. **Assignee moved
+across that line** (August 2026) and its "Save to apply" note went with it.
+
+The subtask optimistic update has to TRANSLATE `done` (a boolean on the wire)
+into `done_at`/`done_by` (what the row and the checkbox actually hold) —
+spreading the request body onto the row sets a property nothing reads and leaves
+the tick frozen until the server answers. Both shapes typecheck; only driving
+the real board catches it.
+
+**The card is a NEUTRAL surface with a coloured spine; the dialog is an issue
+view.** August 2026, and both are deliberate reversals.
+
+- Cards were a full pastel wash per status plus a heavy left border. Legible
+  from across a room, and also three tinted fills stacked in three columns —
+  nothing like the rest of the app, which is white cards on a recessed page. A
+  card is now `bg-card` with a layered shadow and a 3px status spine down its
+  left edge (the Calendar/Reminders idiom: the object is the material, the
+  colour is a marker on it). The status is still stated four times — spine,
+  column dot, column heading, count pill. **The column is the recessed tray**
+  (`bg-ink-200/40`, a step darker than the page in light and lighter in dark)
+  and the cards are the objects on it.
+- **Two `bg-*` utilities on one element is a coin toss.** The drop-target state
+  REPLACES the column's fill rather than being appended to it: which of two
+  background utilities wins is decided by the order Tailwind emitted them, not
+  by the order they appear in the class string.
+- **The card avatar is the shared hashed one**, not a status-coloured chip. One
+  person is one colour everywhere, which is the only thing that makes an avatar
+  worth reading; the card's status is already said by its spine.
+- **Footer glyphs are drawn, not typed.** They were `≡`, `☑` and `💬`. An emoji
+  is rendered by the OS in full colour at whatever weight it likes, which on a
+  row of 11px grey metadata is the loudest thing on the board and looks
+  different on every machine in the office. The dashboard's `TodoSummary` says
+  "3 comments" in words for the same reason.
+- **The move arrows stay visible.** Reveal-on-hover would be tidier and would
+  make the board read-only on a phone: HTML5 drag does not fire on touch at all.
+  Same reason they exist at all.
+- **The dialog carries a status LOZENGE in its header, and it writes.** Until
+  now `?card=` could land you on a card you then could not move without closing
+  the dialog and finding it on the board behind. It uses `Dropdown`'s
+  `triggerClassName`, which is the one escape hatch from `.sf-input` and exists
+  for exactly this: a coloured pill that is not a form field. The popup is
+  untouched — every dropdown in the app opens the same menu.
+- **`Dialog`'s `wide` boolean became `size: "md" | "lg" | "xl"`.** Every former
+  `wide` is `size="lg"` and unchanged at `max-w-3xl`; the card dialog is `xl`.
+  `titleContent` replaces the heading text with arbitrary chrome, and `title` is
+  still required and still what `aria-label` uses — a decorated header cannot
+  leave the modal unnamed.
 
 **Comments render Markdown and resolve @mentions**, with an avatar rail whose
 colour is hashed from the address so one person is one colour everywhere.

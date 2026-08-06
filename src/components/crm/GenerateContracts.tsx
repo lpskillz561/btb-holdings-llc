@@ -83,7 +83,7 @@ export function GenerateContracts({
       {open && (
         <Dialog
           open
-          wide
+          size="lg"
           onClose={() => {
             setOpen(false);
             setResult(null);

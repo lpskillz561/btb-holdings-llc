@@ -298,19 +298,28 @@ export function PercentInput(props: React.InputHTMLAttributes<HTMLInputElement>)
 /**
  * A modal. Closes on Escape and on backdrop click, restores focus to whatever
  * opened it, and locks background scroll while open.
+ *
+ * `titleContent` replaces the plain heading with arbitrary chrome — the card
+ * dialog puts its ticket key and an interactive status lozenge up there, the
+ * way an issue tracker does. `title` is still required and is still what the
+ * dialog is named by (`aria-label`), so a decorated header cannot leave the
+ * modal unlabelled to a screen reader.
  */
 export function Dialog({
   open,
   onClose,
   title,
+  titleContent,
   children,
-  wide,
+  size = "md",
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  /** Rendered in place of the heading text. `title` still names the dialog. */
+  titleContent?: ReactNode;
   children: ReactNode;
-  wide?: boolean;
+  size?: "md" | "lg" | "xl";
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const restoreTo = useRef<HTMLElement | null>(null);
@@ -327,9 +336,18 @@ export function Dialog({
     document.addEventListener("keydown", onKey);
 
     // Move focus into the panel so keyboard users aren't left behind the backdrop.
-    panel.current?.querySelector<HTMLElement>(
-      "input, select, textarea, button",
-    )?.focus();
+    //
+    // `[tabindex="-1"]` is excluded, and that is not defensive tidying. Every
+    // `Dropdown` keeps a REAL but visually-hidden `<select>` in the DOM so that
+    // FormData still finds it, and a bare `select` in this query matches that
+    // element first — so a dialog whose first control is a dropdown would open
+    // with focus on a 0×0 transparent element and look, to a keyboard user,
+    // like it had not taken focus at all.
+    panel.current
+      ?.querySelector<HTMLElement>(
+        'input:not([tabindex="-1"]), select:not([tabindex="-1"]), textarea:not([tabindex="-1"]), button:not([tabindex="-1"])',
+      )
+      ?.focus();
 
     return () => {
       document.removeEventListener("keydown", onKey);
@@ -364,15 +382,17 @@ export function Dialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`sf-card w-full animate-pop-in rounded-2xl shadow-pop ${wide ? "max-w-3xl" : "max-w-xl"}`}
+        className={`sf-card w-full animate-pop-in rounded-2xl shadow-pop ${
+          size === "xl" ? "max-w-5xl" : size === "lg" ? "max-w-3xl" : "max-w-xl"
+        }`}
       >
-        <div className="flex items-center justify-between border-b border-ink-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-ink-900">{title}</h2>
+        <div className="flex items-center justify-between gap-4 border-b border-ink-200 px-6 py-3.5">
+          {titleContent ?? <h2 className="text-base font-semibold text-ink-900">{title}</h2>}
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-full p-1.5 text-ink-500 transition hover:bg-ink-200/70 hover:text-ink-900"
+            className="shrink-0 rounded-full p-1.5 text-ink-500 transition hover:bg-ink-200/70 hover:text-ink-900"
           >
             <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
