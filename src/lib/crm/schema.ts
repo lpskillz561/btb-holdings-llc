@@ -875,6 +875,34 @@ const TABLES: TableDef[] = [
       "CREATE INDEX IF NOT EXISTS crm_conversations_scope_idx ON crm_conversations (scope_type, scope_id, updated_at DESC)",
     ],
   },
+  // Images pasted into a card description, a comment or an AI thread.
+  //
+  // THE BYTES ARE NOT HERE — they are an S3 object, and `storage_key` is the
+  // only pointer to it. What this table buys is the id: a comment's Markdown
+  // references `/api/crm/attachments/<id>`, which is stable and auth-gated,
+  // where an S3 URL would be neither.
+  //
+  // There is deliberately NO owning foreign key. An image belongs to whatever
+  // text points at it, the same image is routinely pasted into two places, and
+  // a `todo_id` here would be a lie the first time someone did that. The cost
+  // is that nothing cascades on delete — see deleteAttachment in ./uploads.ts.
+  {
+    name: "crm_attachments",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["storage_key", "TEXT NOT NULL"],
+      ["content_type", "TEXT NOT NULL"],
+      // BIGINT, like every other number in this schema that could get large.
+      // The INT8 parser in lib/db.ts returns it as a number.
+      ["byte_size", "BIGINT NOT NULL DEFAULT 0"],
+      ["file_name", "TEXT"],
+      ["uploaded_by", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_attachments_created_idx ON crm_attachments (created_at DESC)",
+    ],
+  },
   {
     name: "crm_messages",
     columns: [

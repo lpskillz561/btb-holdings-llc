@@ -25,11 +25,12 @@
  * unsaved in a form and vanish when someone presses Close.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "@/components/Markdown";
 import { fmtAgo, fmtDate } from "@/lib/crm/format";
 import type { CrmTodoComment } from "@/lib/crm/todos";
 import { apiDelete, apiGet, apiPost } from "./api";
+import { AttachButton, useAttachImages } from "./AttachImages";
 import { ErrorNote, TextArea } from "./ui";
 import type { BoardUser } from "./TodoBoard";
 
@@ -128,6 +129,8 @@ export function CommentThread({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const box = useRef<HTMLTextAreaElement>(null);
+  const attach = useAttachImages({ value: draft, onChange: setDraft, fieldRef: box });
 
   const byEmail = useMemo(
     () => new Map(users.map((u) => [u.email.toLowerCase(), u])),
@@ -257,11 +260,17 @@ export function CommentThread({
       )}
 
       <form onSubmit={post} className="space-y-2">
+        {attach.error ? <ErrorNote>{attach.error}</ErrorNote> : null}
         <TextArea
+          ref={box}
           rows={3}
           value={draft}
           maxLength={5000}
           onChange={(e) => setDraft(e.target.value)}
+          onPaste={attach.onPaste}
+          onDrop={attach.onDrop}
+          {...attach.dragProps}
+          className={attach.dragging ? "border-sf-400 ring-4 ring-sf-500/15" : ""}
           onKeyDown={(e) => {
             // Cmd/Ctrl+Enter posts. Plain Enter is a newline here, unlike the
             // AI panel: a comment is usually more than one line, and losing a
@@ -271,14 +280,22 @@ export function CommentThread({
               void post(e as unknown as React.FormEvent);
             }
           }}
-          placeholder="Add a comment… Markdown works, and @name mentions someone."
+          placeholder="Add a comment… Markdown works, @name mentions someone, and you can paste a screenshot."
           aria-label="Add a comment"
         />
-        <div className="flex items-center gap-3">
-          <button type="submit" className="sf-btn-brand" disabled={busy || !draft.trim()}>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="submit"
+            className="sf-btn-brand"
+            // An upload in flight blocks the post. The Markdown for that image
+            // is not in the draft yet, so posting now would send a comment
+            // missing the very thing it is about.
+            disabled={busy || !draft.trim() || attach.uploading > 0}
+          >
             {busy ? "Posting…" : "Comment"}
           </button>
-          <span className="text-[0.7rem] text-ink-500">⌘↵ to post</span>
+          <AttachButton onPick={attach.pick} uploading={attach.uploading} />
+          <span className="text-[0.7rem] text-ink-500">⌘↵ to post · paste or drop an image</span>
         </div>
       </form>
     </section>

@@ -582,6 +582,106 @@ looks like a notification and is not is worse than one that plainly is not.
 ⌘↵ posts; plain Enter is a newline, unlike the AI panel, because a comment is
 usually more than one line.
 
+### Image attachments — `lib/crm/uploads.ts` is the only file that knows S3
+
+Paste, drop or pick an image into a card description, a card comment or the AI
+chat. August 2026.
+
+**The bytes are in S3; the database holds a pointer.** `crm_attachments` is
+metadata plus `storage_key`. The bucket is **`btb-crm-uploads-761540266321`**,
+deliberately NOT the deploy bucket: that one is on the deploy path and the
+instance can read everything under `source/` and `etl/`, and uploads are
+client-adjacent material with a different blast radius. Private on all four
+public-access settings, no bucket policy, AES256, versioned; an anonymous GET
+returns 403, verified. The role is scoped to the **`uploads/` prefix and has no
+`ListBucket`** — the app resolves a key from a row and never enumerates.
+
+- **`attachments.ts` is PURE and `uploads.ts` is server-only.** Same split, same
+  reason, as `equipment.ts` against `equipmentConfig()` and `ticket.ts`: the
+  browser imports the first for paste validation and the Markdown guard, and
+  `process.env` in a client bundle is silently `undefined`.
+- **The size limit is a CONSTANT, not SSM config.** It is enforced on the server
+  and pre-checked in the browser, and those two may only disagree in one
+  direction. An env-tuned limit raised without a rebuild would leave the browser
+  refusing files the server would take — which reads as a broken button.
+- **`image/svg+xml` is excluded and must stay excluded.** An SVG is a document,
+  not a picture: it can carry `<script>`, and served from our own origin it runs
+  with our cookies. The allow-list is raster formats only.
+- **Reads are PROXIED, never presigned.** `GET /api/crm/attachments/[id]` sits
+  behind `withCrm` like everything else, and that is the whole access-control
+  story. A presigned URL was rejected twice over: embedded in a comment it
+  expires and rots the history, and one handed to a browser is a bearer token
+  for that object outliving the session that earned it.
+- **Markdown renders ONLY our own images.** `![](…)` is ordinary Markdown, so
+  the moment comments render it, anyone who can write one can make every
+  reader's browser fetch an arbitrary URL — a tracking pixel saying who opened
+  the card and when. `Markdown.tsx` re-derives the `src` from a validated id and
+  renders anything else as a plain link. Not a substitute for the renderer's own
+  safety (no `rehype-raw`, so `<img onerror>` was never reachable); it closes
+  the other half of the same door.
+- **`next/image` is not used for these and must not be.** The optimizer fetches
+  the URL server-side, without the reader's cookie, and gets a 401.
+- **The card description is RENDERED now, not just edited.** It has always been
+  Markdown and was only ever shown inside a textarea — survivable for prose,
+  useless the moment an image is in it. Preview is the default when there is
+  anything to read; clicking the body opens the field.
+- **An upload in flight blocks Save, Comment and Enter.** The image's Markdown
+  is not in the field yet, so posting now sends the message without the thing it
+  is about — and paste-then-immediately-Enter is the normal rhythm, not a corner.
+- **Nothing garbage-collects.** An image lives in the body of whatever text
+  points at it, the same image is routinely pasted into two places, and there is
+  no owning foreign key for that reason. `deleteAttachment` exists and nothing
+  calls it. A sweep over unreferenced attachments is the right shape for that
+  job; orphans cost storage and nothing else meanwhile.
+
+**The AI reads them.** `gpt-5.6-terra` accepts `image_url` parts — probed
+against the live key before any of this was built, per the rule about verifying
+a model. `toModelMessages` in `advisor.ts` turns the attachment ids in a
+message's Markdown into real vision parts.
+
+- **They are sent as base64 DATA URLS, and that is forced**: our serve route is
+  auth-gated, so OpenAI fetching it would get a 401. Which means every image in
+  scope is re-uploaded inline on **every** turn — so `MAX_VISION_IMAGES` is a
+  real budget (4; at the 5 MB ceiling that is a ~27 MB request each time).
+  Newest-turn-first, the same thing `HISTORY_LIMIT` does for text.
+- **An unreadable image is dropped, not fatal.** The person asked a question;
+  answering it without one image beats refusing. It is logged, and
+  `describeAttachments` leaves an `[attached image: …]` note either way, so the
+  model is never told an image is present when it is not.
+- **The AI panel draws user images itself.** A user's message bubble shows their
+  text verbatim rather than as Markdown, so without `UserMessage` a screenshot
+  appeared there as literal `![](…)` — the model looking at a picture the
+  transcript did not show.
+
+**Two AWS traps this uncovered, both invisible to `tsc` and `next build`:**
+
+- **IMDS hop limit.** It was **1**, and the app runs in a container on the
+  default docker bridge, so a packet to `169.254.169.254` has already spent a
+  hop and the IMDSv2 token request is dropped on TTL. The SDK could not resolve
+  the instance role at all. Nothing needed it before: the container's other AWS
+  access (SSM, the DB secret) is read by `deploy.sh` **on the host** and handed
+  in through `app.env`; uploads are the first time the app itself talks to AWS.
+  Raised to **2** in place and declared in the template so a replaced instance
+  does not come back quietly broken.
+- **`btb-crm-app` CANNOT BE UPDATED WITHOUT REPLACING THE WEB SERVER — this is
+  now fixed, and the lesson stands.** `LatestAmiId` was
+  `AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>` on the AL2023 alias, which
+  re-resolves on every update. Amazon republished it, so `ImageId` became a
+  permanent diff — and `ImageId` is `RequiresRecreation: **Always**`. Any change
+  at all, however unrelated, would have destroyed and recreated the instance.
+  Caught by a change set before executing one. **Always `create-change-set` and
+  read the Replacement column on this stack before `deploy`.** Now pinned to
+  `ami-04fc404d256fd34a2`, the AMI actually running, so ordinary updates pass.
+- The uploads IAM statement is in the template AND was applied with
+  `put-role-policy`, because the stack could not be updated safely at the time.
+  That is the OPPOSITE of the `BtbSendNotifications` drift: the template already
+  carries it, so a stack rebuild reconciles rather than drops it.
+
+**Config:** `CRM_UPLOADS_BUCKET` and `AWS_REGION` in SSM under `/btb-crm/`.
+Unset means uploading throws a 503 naming the parameter — it does not fall back
+to a default bucket name, because a plausible-but-wrong bucket is how uploads
+end up somewhere nobody is looking.
+
 ### Dropdowns — `components/crm/Dropdown.tsx`
 
 **A native `<select>`'s popup is drawn by the OS and cannot be themed.** It is

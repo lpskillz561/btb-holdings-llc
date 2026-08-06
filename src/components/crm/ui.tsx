@@ -202,7 +202,16 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} id={id} className={`sf-input ${props.className ?? ""}`} />;
 }
 
-export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+/**
+ * `ComponentPropsWithRef`, so callers can hold the element.
+ *
+ * The image-attach control needs the live `selectionStart` to insert Markdown
+ * at the caret rather than at the end, and there is no way to ask React for
+ * that — it is DOM state the element owns. React 19 passes `ref` to a function
+ * component as an ordinary prop, so this needs no `forwardRef`; it only needs
+ * the prop type to admit it.
+ */
+export function TextArea(props: React.ComponentPropsWithRef<"textarea">) {
   const id = useFieldId(props.id);
   return <textarea {...props} id={id} className={`sf-input ${props.className ?? ""}`} />;
 }

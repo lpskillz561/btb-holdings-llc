@@ -7,8 +7,61 @@
 
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { attachmentIdFrom, attachmentUrl } from "@/lib/crm/attachments";
+
+/**
+ * An image, and ONLY one of ours.
+ *
+ * `![alt](url)` is ordinary Markdown, so the moment comments render Markdown,
+ * anyone who can write one can make every reader's browser fetch an arbitrary
+ * URL. That is a tracking pixel — who opened the card, when, from which
+ * address — and it is a request our users make on someone else's behalf. So the
+ * `src` is not passed through: it is re-derived from an id this module has
+ * validated, and anything that is not an attachment of ours renders as a plain
+ * link instead. A link is honest about being somewhere else, and it does not
+ * fetch until someone chooses to go there.
+ *
+ * Not a substitute for the renderer's own safety: react-markdown does not
+ * render raw HTML without rehype-raw, which is not installed, so `<img onerror>`
+ * was never reachable. This closes the Markdown-syntax half of the same door.
+ */
+function AttachmentImage({ src, alt }: { src?: string; alt?: string }) {
+  const id = attachmentIdFrom(src);
+  if (!id) {
+    return src ? (
+      <a
+        href={src}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        className="text-gold-600 underline-offset-2 hover:underline"
+      >
+        {alt?.trim() || "External image"} ↗
+      </a>
+    ) : null;
+  }
+  const href = attachmentUrl(id);
+  return (
+    // Opens full size in a tab: these are screenshots, and the thing people
+    // need from a screenshot is usually a detail that does not survive being
+    // sized to fit a comment column.
+    <a href={href} target="_blank" rel="noopener noreferrer" className="mt-2 block">
+      {/* eslint-disable-next-line @next/next/no-img-element -- next/image would
+          proxy through the optimizer, which fetches the URL server-side without
+          the reader's session and gets a 401. A plain img carries the cookie. */}
+      <img
+        src={href}
+        alt={alt?.trim() || "Attached image"}
+        loading="lazy"
+        className="max-h-80 w-auto max-w-full rounded-card border border-ink-200 bg-card-2"
+      />
+    </a>
+  );
+}
 
 const components: Components = {
+  img: ({ src, alt }) => (
+    <AttachmentImage src={typeof src === "string" ? src : undefined} alt={alt} />
+  ),
   p: ({ children }) => <p className="my-2 first:mt-0 last:mb-0">{children}</p>,
   strong: ({ children }) => <strong className="font-semibold text-navy-900">{children}</strong>,
   em: ({ children }) => <em className="italic">{children}</em>,

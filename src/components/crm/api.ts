@@ -25,10 +25,17 @@ export class SessionExpiredError extends Error {
 }
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
+  // FormData is passed through UNTOUCHED, and in particular without a
+  // Content-Type. `multipart/form-data` is only parseable with the boundary
+  // token appended to it, the browser generates that token when it serialises
+  // the body, and setting the header by hand omits it — which the server sees
+  // as a malformed body rather than as a missing header. Letting fetch write
+  // this one header is the whole trick.
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
   const res = await fetch(url, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    headers: body === undefined || isForm ? undefined : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
   });
 
   // 401 means the cookie is gone or stale, and it is never specific to the
@@ -69,6 +76,9 @@ export const apiGet = <T,>(url: string) => request<T>("GET", url);
 export const apiPost = <T,>(url: string, body?: unknown) => request<T>("POST", url, body ?? {});
 export const apiPatch = <T,>(url: string, body: unknown) => request<T>("PATCH", url, body);
 export const apiDelete = (url: string) => request<void>("DELETE", url);
+
+/** POST a file. The only call in the app that is not JSON. */
+export const apiUpload = <T,>(url: string, form: FormData) => request<T>("POST", url, form);
 
 /**
  * DELETE that answers with a body.

@@ -25,7 +25,13 @@ import { Markdown } from "@/components/Markdown";
 import { fmtAgo } from "@/lib/crm/format";
 import { isClientFacingRoute } from "@/lib/crm/routes";
 import type { CrmConversation, CrmMessage } from "@/lib/crm/types";
+import {
+  attachmentIdsIn,
+  attachmentUrl,
+  withoutAttachmentMarkdown,
+} from "@/lib/crm/attachments";
 import { apiGet, apiPost, qs } from "./api";
+import { AttachButton, useAttachImages } from "./AttachImages";
 import { ErrorNote } from "./ui";
 
 type ScopeType = "global" | "client" | "proposal" | "contract";
@@ -115,6 +121,12 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
   const [showThreads, setShowThreads] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // A pasted screenshot becomes Markdown in the box, exactly as it does in a
+  // comment. The server turns that Markdown back into a real vision part on the
+  // way to the model — see toModelMessages in lib/crm/advisor.ts — so the image
+  // is both a thing the model looks at and a thing that stays in the visible
+  // transcript. One storage path, no second concept of "an attachment".
+  const attach = useAttachImages({ value: input, onChange: setInput, fieldRef: inputRef });
 
   // Cmd/Ctrl+K anywhere in the CRM. Bound on the window rather than a field so
   // it works without the panel having focus, which is the whole point of it.
@@ -364,7 +376,7 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
                   }`}
                 >
                   {message.role === "user" ? (
-                    <p className="whitespace-pre-wrap">{message.content}</p>
+                    <UserMessage content={message.content} />
                   ) : (
                     <Markdown>{message.content}</Markdown>
                   )}
@@ -393,31 +405,94 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onPaste={attach.onPaste}
+              onDrop={attach.onDrop}
+              {...attach.dragProps}
               onKeyDown={(e) => {
                 // Enter sends; Shift+Enter is a newline, as everywhere else.
+                //
+                // An upload in flight swallows Enter rather than sending. The
+                // image's Markdown is not in the box yet, so "what is wrong
+                // here?" would reach the model with nothing to look at — and
+                // the natural rhythm is paste-then-immediately-Enter, so this
+                // is the common case rather than a corner.
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
+                  if (attach.uploading > 0) return;
                   void send(input);
                 }
               }}
               rows={2}
               disabled={!aiEnabled}
-              placeholder="Ask about clients, proposals, contracts…"
-              className="field flex-1 resize-none"
+              placeholder="Ask about clients, proposals, contracts… or paste a screenshot."
+              className={`field flex-1 resize-none ${
+                attach.dragging ? "border-sf-400 ring-4 ring-sf-500/15" : ""
+              }`}
             />
             <button
               type="submit"
               className="sf-btn-brand self-end"
-              disabled={!aiEnabled || sending || !input.trim()}
+              disabled={!aiEnabled || sending || !input.trim() || attach.uploading > 0}
             >
               Send
             </button>
           </form>
-          <p className="mt-2 text-[0.7rem] text-ink-500">
-            Internal tool. Not tax advice — the client&rsquo;s CPA confirms the position.
-          </p>
+          {attach.error ? (
+            <p className="mt-2 text-xs text-err-700">{attach.error}</p>
+          ) : null}
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <AttachButton onPick={attach.pick} uploading={attach.uploading} label="Image" />
+            <p className="text-[0.7rem] text-ink-500">
+              Internal tool. Not tax advice — the client&rsquo;s CPA confirms the position.
+            </p>
+          </div>
         </div>
       </aside>
+    </>
+  );
+}
+
+/**
+ * One of the reader's own messages.
+ *
+ * Their text is shown VERBATIM rather than as Markdown — it is what they typed,
+ * and rendering a stray asterisk as emphasis in their own bubble is both wrong
+ * and confusing. Attached images are the exception, and they are pulled out and
+ * drawn rather than left as `![](…)`: the model is looking at the picture, so
+ * the transcript has to show the picture, or the two are having different
+ * conversations.
+ */
+function UserMessage({ content }: { content: string }) {
+  const text = withoutAttachmentMarkdown(content);
+  const ids = attachmentIdsIn(content);
+  return (
+    <>
+      {text ? <p className="whitespace-pre-wrap">{text}</p> : null}
+      {ids.length > 0 && (
+        <span className={`flex flex-wrap gap-1.5 ${text ? "mt-2" : ""}`}>
+          {ids.map((id) => (
+            <a
+              key={id}
+              href={attachmentUrl(id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Open full size"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element -- the
+                  optimizer would fetch this server-side without the reader's
+                  session and get a 401. See Markdown.tsx. */}
+              <img
+                src={attachmentUrl(id)}
+                alt="Attached"
+                loading="lazy"
+                // White, because this bubble is the indigo gradient. The ink
+                // tokens would vanish into it in one appearance or the other.
+                className="h-24 w-auto max-w-full rounded-lg border border-white/30 object-cover"
+              />
+            </a>
+          ))}
+        </span>
+      )}
     </>
   );
 }

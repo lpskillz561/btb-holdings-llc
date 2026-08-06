@@ -37,9 +37,11 @@
  * status is one entry in that map.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Markdown } from "@/components/Markdown";
 import { AiSuggestCards } from "./AiSuggestCards";
+import { AttachButton, useAttachImages } from "./AttachImages";
 import { apiDelete, apiDeleteJson, apiGet, apiPatch, apiPost, qs } from "./api";
 // The avatar is the SHARED one, hashed from the address, not a status-coloured
 // chip. One person is one colour everywhere — on a card, in a thread, in the
@@ -796,6 +798,11 @@ function CardDialog({
   const [notes, setNotes] = useState(todo.notes ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Opens showing the description rather than a form full of it. A card with
+  // notes is usually opened to READ them.
+  const [preview, setPreview] = useState(Boolean(todo.notes?.trim()));
+  const notesBox = useRef<HTMLTextAreaElement>(null);
+  const attach = useAttachImages({ value: notes, onChange: setNotes, fieldRef: notesBox });
 
   const [subtasks, setSubtasks] = useState<CrmSubtask[]>([]);
   const [subtaskError, setSubtaskError] = useState("");
@@ -877,6 +884,9 @@ function CardDialog({
     setSaving(false);
     if (row) {
       setSaved(true);
+      // Back to the rendered form, which is where a saved description belongs
+      // — and the only place a pasted image is actually visible.
+      setPreview(Boolean(notes.trim()));
       window.setTimeout(() => setSaved(false), 2000);
     }
   }
@@ -960,27 +970,70 @@ function CardDialog({
               {/* A real <label>, at heading weight — the section title and the
                   field's name are the same words, and splitting them into an
                   <h4> plus an aria-label leaves one of the two wrong. */}
-              <label
-                htmlFor="card-notes"
-                className="mb-1.5 block text-sm font-semibold text-ink-900"
-              >
-                Description
-              </label>
-              <TextArea
-                id="card-notes"
-                rows={6}
-                value={notes}
-                maxLength={5000}
-                placeholder="Context, links, what done looks like…"
-                onChange={(e) => setNotes(e.target.value)}
-              />
+              <div className="mb-1.5 flex items-center justify-between gap-3">
+                <label htmlFor="card-notes" className="text-sm font-semibold text-ink-900">
+                  Description
+                </label>
+                {notes.trim() ? (
+                  <button
+                    type="button"
+                    onClick={() => setPreview((p) => !p)}
+                    className="sf-btn-ghost text-xs"
+                  >
+                    {preview ? "Edit" : "Preview"}
+                  </button>
+                ) : null}
+              </div>
+
+              {/* THE DESCRIPTION IS RENDERED, not just edited. It has always
+                  been Markdown and was only ever shown inside a textarea, which
+                  was survivable while it was prose and is not now that an image
+                  can be pasted into it — `![](…)` in a monospaced box is not a
+                  screenshot. Preview is the default whenever there is something
+                  to look at, and the field is one click away. */}
+              {preview ? (
+                <div
+                  onClick={() => setPreview(false)}
+                  className="cursor-text rounded-card border border-transparent px-2 py-1.5 text-sm text-ink-800 transition hover:border-ink-200 hover:bg-card-2"
+                  title="Click to edit"
+                >
+                  <Markdown>{notes}</Markdown>
+                </div>
+              ) : (
+                <>
+                  {attach.error ? <ErrorNote>{attach.error}</ErrorNote> : null}
+                  <TextArea
+                    ref={notesBox}
+                    id="card-notes"
+                    rows={6}
+                    value={notes}
+                    maxLength={5000}
+                    placeholder="Context, links, what done looks like… paste a screenshot straight in."
+                    onChange={(e) => setNotes(e.target.value)}
+                    onPaste={attach.onPaste}
+                    onDrop={attach.onDrop}
+                    {...attach.dragProps}
+                    className={attach.dragging ? "border-sf-400 ring-4 ring-sf-500/15" : ""}
+                  />
+                  <div className="mt-1.5">
+                    <AttachButton onPick={attach.pick} uploading={attach.uploading} />
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Only present while there is something to do with it. A Save
                 button that is disabled nine visits out of ten is furniture. */}
             {(dirty || saving || saved) && (
               <div className="flex items-center gap-2">
-                <button type="submit" className="sf-btn-brand" disabled={!dirty || saving}>
+                <button
+                  type="submit"
+                  className="sf-btn-brand"
+                  // An upload in flight blocks the save for the same reason it
+                  // blocks a comment: the image's Markdown is not in the field
+                  // yet, so saving now writes the description without it.
+                  disabled={!dirty || saving || attach.uploading > 0}
+                >
                   {saving ? "Saving…" : "Save"}
                 </button>
                 {dirty && !saving && (
@@ -990,6 +1043,7 @@ function CardDialog({
                     onClick={() => {
                       setTitle(todo.title);
                       setNotes(todo.notes ?? "");
+                      setPreview(Boolean(todo.notes?.trim()));
                     }}
                   >
                     Cancel

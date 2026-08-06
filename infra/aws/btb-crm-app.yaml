@@ -34,6 +34,22 @@ Parameters:
       backups. Created outside CloudFormation on purpose - the tarball must
       exist before the instance boots, and the backups must outlive this stack.
 
+  UploadsBucket:
+    Type: String
+    Default: btb-crm-uploads-761540266321
+    Description: >-
+      Images attached to kanban cards, comments and AI threads. Created outside
+      CloudFormation for the same reason as DeployBucket, and a stronger one:
+      it holds user data, and a bucket a stack teardown could take with it is
+      not somewhere to put it.
+
+      DELIBERATELY SEPARATE FROM DeployBucket. That bucket is on the deploy
+      path and the instance can read every object under source/ and etl/;
+      uploads are client-adjacent material with a different lifetime and a
+      different blast radius. Private on all four public-access settings, no
+      bucket policy, AES256, versioned. Nothing here is ever served from S3
+      directly - the app proxies every read behind its own session check.
+
   InstanceType:
     Type: String
     Default: t4g.medium
@@ -41,9 +57,26 @@ Parameters:
       ARM Graviton. 4 GB RAM is enough for next build only with swap, which the
       bootstrap adds - see the swapfile step in the deploy script.
 
+  # PINNED, and it has to be. This was
+  #   Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+  #   Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+  # which re-resolves on EVERY stack update. Amazon republishes that alias, so
+  # the moment it moved, ImageId became a permanent diff against the running
+  # instance - and ImageId is `RequiresRecreation: Always`. Any update to this
+  # stack, however unrelated (an IAM statement, a listener rule, a tag), would
+  # therefore DESTROY AND REPLACE the web server: new instance id, the site
+  # down through a full image rebuild, and whatever is on local disk gone.
+  #
+  # Caught by a change set before executing one. Always `create-change-set` and
+  # read the Replacement column on this stack before `deploy`.
+  #
+  # ami-04fc404d256fd34a2 is what the instance is actually running, so pinning
+  # to it makes ImageId a no-op diff and lets ordinary updates through. Moving
+  # to a newer AMI is now a deliberate act: change this value knowing it
+  # replaces the instance, and drain/redeploy on purpose.
   LatestAmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Type: AWS::EC2::Image::Id
+    Default: ami-04fc404d256fd34a2
 
 Resources:
   # ------------------------------------------------------------------- logs --
@@ -106,6 +139,15 @@ Resources:
                 Action: [s3:ListBucket]
                 Resource: !Sub "arn:aws:s3:::${DeployBucket}"
 
+              # Attachments. Scoped to the uploads/ prefix rather than the
+              # bucket, and there is no ListBucket: the app looks an object up
+              # by the key it stored in crm_attachments and never enumerates.
+              # A role that cannot list cannot walk the whole store if the
+              # instance is ever compromised.
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub "arn:aws:s3:::${UploadsBucket}/uploads/*"
+
               # The container logs straight to CloudWatch via the awslogs driver.
               - Effect: Allow
                 Action: [logs:CreateLogStream, logs:PutLogEvents, logs:DescribeLogStreams]
@@ -125,6 +167,27 @@ Resources:
       IamInstanceProfile: !Ref InstanceProfile
       SubnetId: !ImportValue btb-crm-public-a
       SecurityGroupIds: [!ImportValue btb-crm-app-sg]
+
+      # HOP LIMIT 2, AND IT IS LOAD-BEARING. The default is 1, which is correct
+      # for a process on the host and silently wrong for one in a container: the
+      # app runs under `docker run -p 3000:3000` on the default bridge, so a
+      # packet from inside it to 169.254.169.254 has already spent a hop and an
+      # IMDSv2 token request is dropped on TTL. The AWS SDK then cannot resolve
+      # the instance role at all, and every S3 call fails with a credentials
+      # error that names nothing about networking.
+      #
+      # Nothing needed this before image attachments: the container's other AWS
+      # access (SSM parameters, the database secret) is read by deploy.sh ON THE
+      # HOST and handed in through app.env. The upload path is the first time
+      # the app itself talks to AWS.
+      #
+      # Applied in place with modify-instance-metadata-options, and declared
+      # here so a replaced instance does not come back with uploads quietly
+      # broken and no code change to blame.
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+        HttpPutResponseHopLimit: 2
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
