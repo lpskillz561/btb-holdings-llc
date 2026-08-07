@@ -11,7 +11,8 @@ import { ChatRoom } from "@/components/crm/ChatRoom";
 import { RecordHeader } from "@/components/crm/RecordHeader";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { getChannel, lastReadAt, listChannels, listMessages } from "@/lib/crm/chat";
-import { getCachedPreviews, urlsIn } from "@/lib/crm/unfurl";
+import { backfillPreviews, getCachedPreviews, urlsIn } from "@/lib/crm/unfurl";
+import { publish } from "@/lib/crm/chat-bus";
 import { officeTimeZone } from "@/lib/crm/tz";
 import { listAssignableUsers } from "@/lib/crm/todos";
 
@@ -47,9 +48,16 @@ export default async function ChatPage() {
 
   // Rendered with the page rather than fetched per message on mount: fifty
   // messages would otherwise be fifty round trips before anything looked right.
-  const previews = await getCachedPreviews([
-    ...new Set(messages.flatMap((m) => urlsIn(m.body))),
-  ]).catch(() => []);
+  const urls = [...new Set(messages.flatMap((m) => urlsIn(m.body)))];
+  const previews = await getCachedPreviews(urls).catch(() => []);
+
+  // The same self-heal the API route does, because THIS is the path a first
+  // page load takes — without it, a preview whose cache row was cleared would
+  // only ever come back for someone who paged through history.
+  backfillPreviews(urls, previews, (preview) => {
+    const owner = messages.find((m) => m.body.includes(preview.url));
+    publish({ type: "preview", channelId: channel.id, messageId: owner?.id ?? "", preview });
+  });
 
   return (
     <>

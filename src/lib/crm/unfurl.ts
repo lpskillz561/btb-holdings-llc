@@ -265,36 +265,65 @@ function isInstagram(url: URL): boolean {
 }
 
 /**
- * Instagram's oEmbed, which stopped needing an app in June 2026.
+ * Instagram, WITHOUT a network call — and that is not laziness, it is the only
+ * thing that works. Measured from this instance, August 2026:
  *
- * Meta reversed the 2020 change: the endpoint takes no access token and needs
- * no App Review. Rate limits are lower than the token route, which is why the
- * result is cached like everything else. If this fails we fall through to the
- * ordinary path, which on a logged-out Instagram URL usually yields the title
- * and nothing else — still better than a bare link.
+ *   - **Fetching instagram.com returns 429 for EVERY user agent.** Browser
+ *     string, bot string, curl default — all 429. Instagram blocks datacenter
+ *     IPs outright, so no amount of User-Agent choice makes HTML scraping work
+ *     from EC2. Trying is a wasted round trip and a poisoned cache entry.
+ *   - **Tokenless oEmbed returns NO metadata.** Meta dropped the token
+ *     requirement in June 2026, but what comes back is `provider_name` and an
+ *     embed blockquote — `author_name`, `title` and `thumbnail_url` are absent
+ *     for profiles, posts AND reels alike. That was the previous implementation
+ *     here, and it is why an Instagram link rendered as a card saying, in full,
+ *     "Instagram".
+ *
+ * WhatsApp shows a rich card with the profile photo and the follower count
+ * because Meta is previewing its own property from its own infrastructure. That
+ * is not a gap we can close from here, and pretending otherwise by leaving a
+ * request in that always fails only makes it slower.
+ *
+ * So the card is built from the URL itself, which actually carries the useful
+ * part: the handle. `@boltfarmtreehouse · Instagram profile` beats a bare link,
+ * renders instantly, and tells no third party who is reading the message.
+ *
+ * The one way to get the real photo is Instagram's own client-side embed script
+ * running in the reader's browser (not a datacenter IP). That means loading
+ * Meta's JavaScript into the CRM and letting every reader's browser talk to
+ * Instagram — a deliberate privacy trade, not a default. See CLAUDE.md.
  */
-async function instagramOEmbed(url: URL): Promise<Partial<LinkPreview> | null> {
-  try {
-    const endpoint = `https://graph.facebook.com/v21.0/instagram_oembed?url=${encodeURIComponent(
-      url.toString(),
-    )}&omitscript=true`;
-    const res = await safeFetch(endpoint, "application/json");
-    if (!res.ok) return null;
-    const json = JSON.parse((await readCapped(res, 64 * 1024)).toString("utf8")) as {
-      title?: string;
-      author_name?: string;
-      thumbnail_url?: string;
-    };
-    return {
-      title: trim(json.author_name ? `@${json.author_name}` : "Instagram", 120),
-      description: trim(json.title ?? null, 300),
-      site_name: "Instagram",
-      // Carried separately; stored through the same image path as everything else.
-      ...(json.thumbnail_url ? { _image: json.thumbnail_url } : {}),
-    } as Partial<LinkPreview> & { _image?: string };
-  } catch {
-    return null;
-  }
+function instagramPreview(url: URL): Omit<LinkPreview, "url" | "fetched_at"> {
+  const parts = url.pathname.split("/").filter(Boolean);
+  // /p/<code>, /reel/<code>, /tv/<code> — and the same nested under a handle,
+  // which is the form a share sheet produces: /boltfarmtreehouse/p/<code>.
+  const typeAt = parts.findIndex((p) => ["p", "reel", "reels", "tv"].includes(p.toLowerCase()));
+  const kind =
+    typeAt === -1
+      ? "profile"
+      : parts[typeAt].toLowerCase().startsWith("reel")
+        ? "reel"
+        : parts[typeAt].toLowerCase() === "tv"
+          ? "video"
+          : "post";
+
+  // The handle is the first segment, unless the first segment IS the type.
+  const handle = parts.length && typeAt !== 0 ? parts[0] : null;
+  const reserved = ["explore", "accounts", "stories", "direct", "about"];
+  const named = handle && !reserved.includes(handle.toLowerCase()) ? handle : null;
+
+  return {
+    status: "ok",
+    title: named ? `@${named}` : "Instagram",
+    description:
+      kind === "profile"
+        ? named
+          ? "Instagram profile"
+          : "Instagram"
+        : `Instagram ${kind}${named ? ` by @${named}` : ""}`,
+    site_name: "Instagram",
+    image_attachment_id: null,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -341,17 +370,9 @@ export async function unfurl(rawUrl: string): Promise<LinkPreview> {
     const url = await assertPublicUrl(rawUrl);
     let imageUrl: string | null = null;
 
-    const ig = isInstagram(url) ? await instagramOEmbed(url) : null;
-    if (ig) {
-      const withImage = ig as Partial<LinkPreview> & { _image?: string };
-      imageUrl = withImage._image ?? null;
-      result = {
-        status: "ok",
-        title: ig.title ?? null,
-        description: ig.description ?? null,
-        site_name: ig.site_name ?? null,
-        image_attachment_id: null,
-      };
+    if (isInstagram(url)) {
+      // No request at all — see instagramPreview for the measurements.
+      result = instagramPreview(url);
     } else {
       const res = await safeFetch(url.toString(), "text/html,application/xhtml+xml");
       if (res.ok && (res.headers.get("content-type") ?? "").includes("html")) {
@@ -361,7 +382,10 @@ export async function unfurl(rawUrl: string): Promise<LinkPreview> {
           metaContent(html, ["og:description", "twitter:description", "description"]),
           300,
         );
-        const siteName = trim(metaContent(html, ["og:site_name"]), 60) ?? url.hostname;
+        // `www.` stripped: the card renders this in small caps, and
+        // "WWW.CREXI.COM" reads like a 1998 business card next to "CREXI.COM".
+        const siteName =
+          trim(metaContent(html, ["og:site_name"]), 60) ?? url.hostname.replace(/^www\./i, "");
         imageUrl = metaContent(html, ["og:image", "og:image:url", "twitter:image"]);
         if (imageUrl) imageUrl = new URL(imageUrl, url).toString();
 
@@ -432,6 +456,43 @@ async function storePreviewImage(imageUrl: string): Promise<string | null> {
     console.warn("[unfurl] preview image failed", (err as Error)?.message);
     return null;
   }
+}
+
+/**
+ * Unfurl anything in view that has no cached row yet, in the background.
+ *
+ * SELF-HEALING, and it covers three cases — the third is why it exists. A
+ * message posted while the unfurler was failing; older history reached by
+ * paging back, which was never unfurled at post time; and a cache row deleted
+ * deliberately because the RULES changed. Without this, improving how a site is
+ * previewed only ever affects messages sent afterwards, and the link someone is
+ * actually looking at keeps its old card forever.
+ *
+ * Takes the publisher as an argument rather than importing the chat bus, so
+ * this module stays about fetching URLs and knows nothing about chat. Never
+ * awaited: a preview is decoration, and no page render waits on the network.
+ *
+ * Each URL is attempted once ever — failures cache as `blocked`/`empty` — so a
+ * room full of dead links does not re-attempt them on every open.
+ */
+export function backfillPreviews(
+  urls: string[],
+  cached: LinkPreview[],
+  onDone: (preview: LinkPreview) => void,
+): void {
+  const known = new Set(cached.map((p) => p.url));
+  const missing = urls.filter((u) => !known.has(u));
+  if (!missing.length) return;
+
+  void (async () => {
+    for (const url of missing) {
+      try {
+        onDone(await unfurl(url));
+      } catch (err) {
+        console.error("[unfurl] backfill failed", url, err);
+      }
+    }
+  })();
 }
 
 /**

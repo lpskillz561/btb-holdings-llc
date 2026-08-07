@@ -3,7 +3,7 @@ import { CrmError } from "@/lib/crm/db";
 import { getChannel, lastReadAt, listMessages, markRead, postMessage } from "@/lib/crm/chat";
 import { answerInChannel, mentionsAi } from "@/lib/crm/chat-ai";
 import { publish } from "@/lib/crm/chat-bus";
-import { getCachedPreviews, unfurl, urlsIn } from "@/lib/crm/unfurl";
+import { backfillPreviews, getCachedPreviews, unfurl, urlsIn } from "@/lib/crm/unfurl";
 import { readBody, withCrmParams } from "@/lib/crm/rest";
 
 export const runtime = "nodejs";
@@ -27,6 +27,13 @@ export const GET = withCrmParams<{ id: string }>(async (req, { params, actor }) 
     getCachedPreviews(urls),
     lastReadAt(channel.id, actor),
   ]);
+
+  // Anything in view without a cached row is fetched in the background and
+  // announced on the bus when it lands. See backfillPreviews.
+  backfillPreviews(urls, previews, (preview) => {
+    const owner = messages.find((m) => m.body.includes(preview.url));
+    publish({ type: "preview", channelId: channel.id, messageId: owner?.id ?? "", preview });
+  });
 
   // `last_read_at` is sent so the browser can place the "New messages" divider
   // exactly. Deriving it from the unread COUNT instead is off by however many
