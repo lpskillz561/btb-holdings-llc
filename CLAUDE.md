@@ -1229,6 +1229,12 @@ touches the database, so the first real request still pays for the whole of
   throws the page you are reading away the moment you click, and on a slow
   dynamic render that *is* the blank screen. With no boundary the router keeps
   the current page up until the next one is ready.
+- **`Number(null)` is 0, and 0 is finite.** `listRows` read its `?limit=` that
+  way, so a collection GET with no limit clamped to `Math.max(1, 0)` and every
+  bare `/api/crm/*` list answered **200 with exactly one row** — no error, and
+  invisible to anything that did not count them. The absent case is tested
+  before the coercion now. `Number(params.get(x) ?? "")` is the same bug in a
+  nicer hat: `Number("")` is 0 too.
 - **EC2 rejects non-ASCII in security group descriptions.** An em dash in a
   CloudFormation `GroupDescription` rolled the whole stack back.
 - **`AUTH_SECRET` is frozen into the Edge middleware at build time.** It must be
@@ -1283,6 +1289,19 @@ deduction. What the land cost *us* is split across the sections a park was
 stated to carry (`planned_pad_count`) and shown on the park page and client card
 marked internal. **Divide by the STATED capacity, not the pads that exist**, or
 every client's share lurches as pads are built.
+
+**The saved listings are hand-arrangeable, and the order is on the row.** August
+2026. `crm_parks.sort_order`, written for the WHOLE list at once by `POST
+/api/crm/parks/reorder` — a position means nothing without the rows either side
+of it, which is why it is absent from the PATCH allow-list like `area_analysis`
+is, for a different reason. Two things not to tidy: the ORDER BY is `sort_order
+NULLS FIRST`, not the SQL default, so a listing nobody has placed stays at the
+top by recency — where the browser puts a freshly pasted link, and NULLS LAST
+would make the row appear to jump on reload. And the row is `draggable` only
+while the grab handle is held down: a permanently draggable row cannot have its
+text selected and swallows the drag the browser gives the listing link for free.
+The up/down arrows are not decoration — HTML5 drag does not fire on touch at
+all, the same reason the board's move arrows exist.
 
 **Two caveats are load-bearing and must not be dropped.** A deduction many times
 the cash only works because the note is **recourse** — §465 would otherwise limit
