@@ -1290,6 +1290,14 @@ stated to carry (`planned_pad_count`) and shown on the park page and client card
 marked internal. **Divide by the STATED capacity, not the pads that exist**, or
 every client's share lurches as pads are built.
 
+**`/crm/land` and `/crm/land/prospects` mount the SAME `LandProspects`**, from
+the same `listLandProspects()`, exactly as `ClientsBoard` is mounted on both the
+Overview and `/crm/clients`. The section page had a read-only summary table of
+its own, filtered out of the capacity query — a second list with a second ORDER
+BY, so an arrangement someone had dragged showed on the sub-page and not on the
+page linking to it, which reads as the drag not having saved. Do not
+re-introduce a preview of a list that already has a component.
+
 **The saved listings are hand-arrangeable, and the order is on the row.** August
 2026. `crm_parks.sort_order`, written for the WHOLE list at once by `POST
 /api/crm/parks/reorder` — a position means nothing without the rows either side

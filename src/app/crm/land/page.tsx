@@ -10,11 +10,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { RecordHeader } from "@/components/crm/RecordHeader";
+import { LandProspects } from "@/components/crm/LandProspects";
 import { Badge, EmptyState, StatTile, Table, Td } from "@/components/crm/ui";
 import { getCrmPageUser } from "@/lib/crm/access";
-import { fmtAcres, fmtDate, fmtMoney, fmtMoneyShort, fmtNum, fmtPct } from "@/lib/crm/format";
+import { fmtAcres, fmtMoney, fmtMoneyShort, fmtNum, fmtPct } from "@/lib/crm/format";
 import { DEFAULT_OCCUPANCY_BPS } from "@/lib/crm/economics";
-import { annualGrossCents, getBookSummary, listParksWithCapacity } from "@/lib/crm/portfolio";
+import {
+  annualGrossCents,
+  getBookSummary,
+  listLandProspects,
+  listParksWithCapacity,
+} from "@/lib/crm/portfolio";
 import { statusTone } from "@/lib/crm/tone";
 import { LABELS } from "@/lib/crm/types";
 
@@ -29,13 +35,21 @@ export default async function LandPage() {
   const user = await getCrmPageUser();
   if (!user) notFound();
 
-  const [allParks, book] = await Promise.all([listParksWithCapacity(), getBookSummary()]);
+  // The saved listings come from listLandProspects, NOT from filtering the
+  // capacity query — that is what makes this page and /crm/land/prospects the
+  // same list. They had drifted: two queries with two ORDER BYs meant a list
+  // someone had dragged into an order showed that order on one page and not on
+  // the other, which reads as the arrangement not having saved.
+  const [allParks, book, prospects] = await Promise.all([
+    listParksWithCapacity(),
+    getBookSummary(),
+    listLandProspects().catch(() => []),
+  ]);
 
   // A prospect is land we are considering, not land we hold. Mixing the two in
   // one table was the confusion: an Orlando listing appeared as a "park" with
   // zero pads, which reads as a park we own and have not built out.
   const parks = allParks.filter((p) => p.status !== "prospect");
-  const prospects = allParks.filter((p) => p.status === "prospect");
   const occupancyBps = DEFAULT_OCCUPANCY_BPS();
   const annual = annualGrossCents(book.occupied_nightly_cents, occupancyBps);
 
@@ -52,9 +66,11 @@ export default async function LandPage() {
         intro="The parks BTB owns, the pads on them, and how much of that capacity is earning."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Link href="/crm/land/prospects" className="sf-btn-neutral">
+            {/* Jumps down the page rather than away from it: the listings are
+                on this page now, below the parks. */}
+            <a href="#saved-listings" className="sf-btn-neutral">
               Saved listings
-            </Link>
+            </a>
             <Link href="/crm/land/search" className="sf-btn-brand">
               Find land to buy
             </Link>
@@ -150,61 +166,26 @@ export default async function LandPage() {
             )}
           </div>
 
-          {/* Saved listings, inline. Reachable without hunting for the button
-              in the header — this is where someone looking at our land expects
-              to find the land we are thinking about buying. */}
-          {prospects.length > 0 ? (
-            <div>
-              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-sm font-bold text-ink-900">
-                  Considering{" "}
-                  <span className="font-normal text-ink-600">({prospects.length})</span>
-                </h2>
-                <Link href="/crm/land/prospects" className="link-underline text-sm">
-                  Open saved listings and discussion →
-                </Link>
-              </div>
-              <p className="mb-3 text-sm text-ink-600">
-                Land BTB does not own yet. These are excluded from the figures above.
-              </p>
-              <div className="sf-card">
-                <Table head={["Listing", "Where", "Acres", "Asking", "Saved", ""]}>
-                  {prospects.map((park) => (
-                    <tr key={park.id} className="border-t border-ink-200">
-                      <Td>
-                        {park.listing_url ? (
-                          <a
-                            href={park.listing_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="font-medium text-sf-600 hover:underline"
-                          >
-                            {park.name}
-                          </a>
-                        ) : (
-                          <span className="font-medium text-ink-900">{park.name}</span>
-                        )}
-                      </Td>
-                      <Td>
-                        {[park.city, park.county, park.state].filter(Boolean).join(", ") || "—"}
-                      </Td>
-                      <Td>{park.acres === null ? "—" : fmtAcres(park.acres)}</Td>
-                      <Td>{fmtMoney(park.asking_price_cents)}</Td>
-                      <Td className="whitespace-nowrap">{fmtDate(park.created_at)}</Td>
-                      <Td>
-                        <Link
-                          href="/crm/land/prospects"
-                          className="sf-btn-neutral py-0.5 text-xs"
-                        >
-                          Discuss
-                        </Link>
-                      </Td>
-                    </tr>
-                  ))}
-                </Table>
-              </div>
-            </div>
-          ) : null}
+          {/* The real thing, not a preview of it. This was a read-only summary
+              with an "open saved listings" link beside it, so saving a listing,
+              arranging the list, correcting a price or reading the discussion
+              all meant leaving the page you were already on — and because the
+              summary was a different query, it did not even show the order.
+
+              Same component the section page mounts, exactly as ClientsBoard is
+              mounted on both the Overview and /crm/clients. One list, one order,
+              one place to add a column. */}
+          <div id="saved-listings" className="scroll-mt-24">
+            <h2 className="mb-1 text-lg font-semibold text-ink-900">
+              Saved listings{" "}
+              <span className="text-base font-normal text-ink-600">({prospects.length})</span>
+            </h2>
+            <p className="mb-4 text-sm text-ink-600">
+              Land BTB does not own yet, and the argument about each one. Excluded from the figures
+              above. Drag a row to arrange the list — everyone sees the order you leave.
+            </p>
+            <LandProspects initial={prospects} />
+          </div>
 
           <p className="text-xs leading-relaxed text-ink-500">
             Land basis is purchase price plus closing costs and is never depreciable. Pad site work
