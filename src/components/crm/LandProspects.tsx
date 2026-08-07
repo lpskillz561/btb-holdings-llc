@@ -29,7 +29,7 @@ import {
   TextArea,
   TextInput,
 } from "./ui";
-import { apiPatch, apiPost } from "./api";
+import { apiDelete, apiPatch, apiPost } from "./api";
 
 const LOT_UNITS: readonly LotUnit[] = ["acres", "sqft"];
 const LOT_UNIT_LABELS: Record<string, string> = { acres: "acres", sqft: "sq ft" };
@@ -51,7 +51,7 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
   const [filling, setFilling] = useState(false);
   const [fillNote, setFillNote] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
-  const [orderError, setOrderError] = useState("");
+  const [listError, setListError] = useState("");
   // The list as it stood when the drag began. The rows reflow live under the
   // cursor, so this is both what a failed save is rolled back to and what tells
   // us whether anything actually moved.
@@ -85,12 +85,38 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
    */
   async function saveOrder(next: ProspectRow[], before: ProspectRow[]) {
     if (next.length === before.length && next.every((r, i) => r.id === before[i]?.id)) return;
-    setOrderError("");
+    setListError("");
     try {
       await apiPost("/api/crm/parks/reorder", { ids: next.map((r) => r.id) });
     } catch (err) {
       setRows(before);
-      setOrderError(err instanceof Error ? err.message : "Could not save the new order.");
+      setListError(err instanceof Error ? err.message : "Could not save the new order.");
+    }
+  }
+
+  /**
+   * Throw a listing away.
+   *
+   * Optimistic, and put back on failure — the row is gone from under the
+   * cursor the moment it is confirmed, and the one thing worse than a delete
+   * that fails is a delete that looks like it worked. The confirmation names
+   * the discussion because the comments cascade with the row, and the
+   * discussion is usually the part with the work in it.
+   */
+  async function remove(row: ProspectRow) {
+    const n = row.comment_count;
+    const goesWith =
+      n > 0 ? ` Its ${n} comment${n === 1 ? "" : "s"} go with it.` : "";
+    if (!confirm(`Delete "${row.name}"?${goesWith} This cannot be undone.`)) return;
+
+    const before = rows;
+    setRows((rs) => rs.filter((r) => r.id !== row.id));
+    setListError("");
+    try {
+      await apiDelete(`/api/crm/parks/${row.id}`);
+    } catch (err) {
+      setRows(before);
+      setListError(err instanceof Error ? err.message : "Could not delete that listing.");
     }
   }
 
@@ -248,7 +274,7 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
               Drag a row by its handle to arrange the list, or use the arrows. The order is shared —
               everyone sees the one you leave.
             </p>
-            {orderError ? <p className="text-xs text-err-700">{orderError}</p> : null}
+            {listError ? <p className="text-xs text-err-700">{listError}</p> : null}
           </div>
           <table className="sf-table">
             <thead>
@@ -286,6 +312,7 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
                   }}
                   onDragEnd={endDrag}
                   onNudge={(delta) => reorder(row.id, index + delta, true)}
+                  onDelete={() => void remove(row)}
                   open={openId === row.id}
                   onToggle={() => setOpenId(openId === row.id ? null : row.id)}
                   onCommented={(n, at) =>
@@ -317,6 +344,7 @@ function ProspectRowView({
   onDragEnter,
   onDragEnd,
   onNudge,
+  onDelete,
   open,
   onToggle,
   onCommented,
@@ -330,6 +358,7 @@ function ProspectRowView({
   onDragEnter: () => void;
   onDragEnd: () => void;
   onNudge: (delta: -1 | 1) => void;
+  onDelete: () => void;
   open: boolean;
   onToggle: () => void;
   onCommented: (count: number, at: string) => void;
@@ -459,13 +488,21 @@ function ProspectRowView({
             ) : null}
           </button>
         </td>
-        <td>
+        <td className="whitespace-nowrap">
           <button
             type="button"
             onClick={() => setEditing(true)}
             className="sf-btn-neutral py-0.5 text-xs"
           >
             Edit
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            title={`Delete ${row.name}`}
+            className="sf-btn-danger ml-2 py-0.5 text-xs"
+          >
+            Delete
           </button>
           {/* Mounted only while open, so cancelling discards the draft rather
               than leaving it to reappear the next time this row is edited. */}
