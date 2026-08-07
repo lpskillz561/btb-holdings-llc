@@ -554,6 +554,14 @@ export interface CrmPark {
    */
   area_analysis: string | null;
   area_analysis_at: string | null;
+  /**
+   * Hand-arranged position in the saved-listings list, low first.
+   *
+   * NULL means nobody has placed this one, and those sort to the TOP by
+   * `created_at DESC` — so a listing pasted today still lands where the person
+   * who pasted it expects, above an order somebody arranged last week.
+   */
+  sort_order: number | null;
   notes: string | null;
   created_at: string;
   updated_at: string;

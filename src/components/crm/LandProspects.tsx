@@ -6,7 +6,7 @@
 // the same discussion — which is the point: deciding whether a parcel is worth
 // a million dollars is not a decision one person should make in their own inbox.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { CrmParkComment, CrmPark } from "@/lib/crm/types";
 import {
   acresFromInput,
@@ -50,6 +50,56 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [filling, setFilling] = useState(false);
   const [fillNote, setFillNote] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState("");
+  // The list as it stood when the drag began. The rows reflow live under the
+  // cursor, so this is both what a failed save is rolled back to and what tells
+  // us whether anything actually moved.
+  const beforeDrag = useRef<ProspectRow[] | null>(null);
+
+  /**
+   * Put a row at a position, and optionally tell the server.
+   *
+   * `persist` is false while a drag is in flight: the list reflows on every
+   * dragover, and a POST per pixel would be one request a frame. The order is
+   * written once, when the drag ends.
+   */
+  function reorder(id: string, toIndex: number, persist: boolean) {
+    const from = rows.findIndex((r) => r.id === id);
+    if (from < 0) return;
+    const to = Math.max(0, Math.min(rows.length - 1, toIndex));
+    if (from === to) return;
+    const next = [...rows];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setRows(next);
+    if (persist) void saveOrder(next, rows);
+  }
+
+  /**
+   * Write the whole arrangement, 1..n.
+   *
+   * The list is shared, so a failure has to put the rows back where they were
+   * rather than leave this browser showing an order the server never accepted —
+   * the next person to open the page would see something different.
+   */
+  async function saveOrder(next: ProspectRow[], before: ProspectRow[]) {
+    if (next.length === before.length && next.every((r, i) => r.id === before[i]?.id)) return;
+    setOrderError("");
+    try {
+      await apiPost("/api/crm/parks/reorder", { ids: next.map((r) => r.id) });
+    } catch (err) {
+      setRows(before);
+      setOrderError(err instanceof Error ? err.message : "Could not save the new order.");
+    }
+  }
+
+  function endDrag() {
+    setDragId(null);
+    const before = beforeDrag.current;
+    beforeDrag.current = null;
+    if (before) void saveOrder(rows, before);
+  }
 
   /** Pull acreage, assessed value, county and owner from the county records. */
   async function backfillAll() {
@@ -193,9 +243,19 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
         </EmptyState>
       ) : (
         <div className="sf-card overflow-hidden">
+          <div className="flex flex-wrap items-baseline gap-x-3 border-b border-ink-200 px-3 py-2">
+            <p className="text-xs text-ink-600">
+              Drag a row by its handle to arrange the list, or use the arrows. The order is shared —
+              everyone sees the one you leave.
+            </p>
+            {orderError ? <p className="text-xs text-err-700">{orderError}</p> : null}
+          </div>
           <table className="sf-table">
             <thead>
               <tr>
+                <th className="w-8">
+                  <span className="sr-only">Reorder</span>
+                </th>
                 <th>Listing</th>
                 <th>Where</th>
                 <th>Asking</th>
@@ -207,10 +267,25 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.map((row, index) => (
                 <ProspectRowView
                   key={row.id}
                   row={row}
+                  index={index}
+                  total={rows.length}
+                  dragging={dragId === row.id}
+                  onDragStart={() => {
+                    beforeDrag.current = rows;
+                    setDragId(row.id);
+                  }}
+                  // The list rearranges under the cursor rather than showing an
+                  // insertion line: with one row height throughout, seeing the
+                  // row land where it will end up beats a marker describing it.
+                  onDragEnter={() => {
+                    if (dragId && dragId !== row.id) reorder(dragId, index, false);
+                  }}
+                  onDragEnd={endDrag}
+                  onNudge={(delta) => reorder(row.id, index + delta, true)}
                   open={openId === row.id}
                   onToggle={() => setOpenId(openId === row.id ? null : row.id)}
                   onCommented={(n, at) =>
@@ -235,12 +310,26 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
 
 function ProspectRowView({
   row,
+  index,
+  total,
+  dragging,
+  onDragStart,
+  onDragEnter,
+  onDragEnd,
+  onNudge,
   open,
   onToggle,
   onCommented,
   onSaved,
 }: {
   row: ProspectRow;
+  index: number;
+  total: number;
+  dragging: boolean;
+  onDragStart: () => void;
+  onDragEnter: () => void;
+  onDragEnd: () => void;
+  onNudge: (delta: -1 | 1) => void;
   open: boolean;
   onToggle: () => void;
   onCommented: (count: number, at: string) => void;
@@ -250,6 +339,11 @@ function ProspectRowView({
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  // `draggable` is armed by grabbing the handle, not left on permanently. A
+  // permanently draggable row cannot have its text selected, and dragging the
+  // listing link would start a row drag instead of the link drag the browser
+  // offers for free.
+  const [armed, setArmed] = useState(false);
 
   async function toggle() {
     onToggle();
@@ -276,7 +370,65 @@ function ProspectRowView({
 
   return (
     <>
-      <tr>
+      <tr
+        draggable={armed}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          // Firefox will not start a drag at all without something on the
+          // transfer. Nothing reads it: the dragged row is held in state.
+          e.dataTransfer.setData("text/plain", row.id);
+          onDragStart();
+        }}
+        onDragEnter={onDragEnter}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(e) => e.preventDefault()}
+        onDragEnd={() => {
+          setArmed(false);
+          onDragEnd();
+        }}
+        className={dragging ? "opacity-40" : undefined}
+      >
+        <td className="pr-0">
+          <div className="flex items-center gap-1">
+            <span
+              // Arming on mousedown and disarming on mouseup is what confines
+              // the drag to the handle: by the time dragstart fires the row is
+              // draggable, and it stops being so the moment the button is up.
+              onMouseDown={() => setArmed(true)}
+              onMouseUp={() => setArmed(false)}
+              title="Drag to reorder"
+              aria-hidden
+              className="cursor-grab text-ink-400 active:cursor-grabbing"
+            >
+              <GripIcon />
+            </span>
+            <span className="flex flex-col">
+              <button
+                type="button"
+                onClick={() => onNudge(-1)}
+                disabled={index === 0}
+                aria-label={`Move ${row.name} up`}
+                title="Move up"
+                className="rounded p-0.5 text-ink-500 hover:bg-sf-100 hover:text-sf-700 disabled:invisible"
+              >
+                <Chevron dir="up" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onNudge(1)}
+                disabled={index === total - 1}
+                aria-label={`Move ${row.name} down`}
+                title="Move down"
+                className="rounded p-0.5 text-ink-500 hover:bg-sf-100 hover:text-sf-700 disabled:invisible"
+              >
+                <Chevron dir="down" />
+              </button>
+            </span>
+          </div>
+        </td>
         <td>
           {/* rel=noopener because these are third-party listing sites. */}
           <a
@@ -326,7 +478,7 @@ function ProspectRowView({
       </tr>
       {open ? (
         <tr>
-          <td colSpan={8} className="bg-ink-100">
+          <td colSpan={9} className="bg-ink-100">
             <div className="space-y-3 px-2 py-3">
               {comments === null ? (
                 <p className="text-sm text-ink-600">Loading…</p>
@@ -363,6 +515,39 @@ function ProspectRowView({
         </tr>
       ) : null}
     </>
+  );
+}
+
+/* Drawn, not typed. The same rule the board's footer glyphs follow: an emoji or
+   a box-drawing character is rendered by the OS at whatever weight it likes and
+   looks different on every machine in the office. */
+function GripIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4" fill="currentColor">
+      <circle cx="9" cy="6" r="1.6" />
+      <circle cx="15" cy="6" r="1.6" />
+      <circle cx="9" cy="12" r="1.6" />
+      <circle cx="15" cy="12" r="1.6" />
+      <circle cx="9" cy="18" r="1.6" />
+      <circle cx="15" cy="18" r="1.6" />
+    </svg>
+  );
+}
+
+function Chevron({ dir }: { dir: "up" | "down" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden
+      className="h-3 w-3"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={dir === "up" ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"} />
+    </svg>
   );
 }
 

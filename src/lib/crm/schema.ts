@@ -388,6 +388,10 @@ const TABLES: TableDef[] = [
       /** Model-written assessment of the AREA. Prose only — never figures. */
       ["area_analysis", "TEXT"],
       ["area_analysis_at", "TEXT"],
+      // Where a person dragged this listing to. Nullable, and NULL is the
+      // normal state of a row nobody has arranged — see listLandProspects for
+      // what that sorts as.
+      ["sort_order", "INTEGER"],
       ["notes", "TEXT"],
       ...TIMESTAMPS,
     ],

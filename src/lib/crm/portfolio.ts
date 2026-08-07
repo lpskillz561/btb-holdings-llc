@@ -382,6 +382,13 @@ export interface LandProspect extends CrmPark {
  *
  * A prospect and a park BTB owns are the same row at different points in its
  * life, so buying one is a status change rather than a copy between two tables.
+ *
+ * The list is hand-arrangeable, so the order is `sort_order` first — but NULLS
+ * FIRST, not the SQL default. A row nobody has dragged sorts to the top by
+ * recency, which is both the behaviour this list has always had and the only
+ * one that matches what the browser does when a listing is pasted: it appears
+ * at the top. NULLS LAST would put a listing saved thirty seconds ago below an
+ * arrangement made last week, and the row would appear to move on reload.
  */
 export async function listLandProspects(): Promise<LandProspect[]> {
   return query<LandProspect>(`
@@ -392,8 +399,36 @@ export async function listLandProspects(): Promise<LandProspect[]> {
     LEFT JOIN crm_park_comments c ON c.park_id = p.id
     WHERE p.listing_url IS NOT NULL
     GROUP BY p.id
-    ORDER BY p.created_at DESC
+    ORDER BY p.sort_order NULLS FIRST, p.created_at DESC
   `);
+}
+
+/**
+ * Write the hand-arranged order of the saved listings.
+ *
+ * The WHOLE list is rewritten, 1..n, rather than one row being given a new
+ * position. A single row's position is meaningless on its own — that is why
+ * `sort_order` is absent from the PATCH allow-list in resource.ts — and
+ * renumbering everything is what makes the NULL group empty out and stay
+ * empty, so the order stops depending on `created_at` the moment anybody
+ * arranges it.
+ *
+ * `updated_at` is deliberately NOT touched. Dragging a row changes the reading
+ * order of the list, not the listing; bumping every row on every drag would
+ * make "when did this last change" useless on the one table where several
+ * people are editing the same records.
+ */
+export async function reorderLandProspects(ids: string[]): Promise<void> {
+  const order = [...new Set((ids ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
+  if (order.length === 0) throw new CrmError("No listings to reorder.", 400);
+
+  await query(
+    `UPDATE crm_parks p
+        SET sort_order = o.pos
+       FROM unnest($1::text[], $2::int[]) AS o(id, pos)
+      WHERE p.id = o.id`,
+    [order, order.map((_, i) => i + 1)],
+  );
 }
 
 export async function listParkComments(parkId: string): Promise<CrmParkComment[]> {

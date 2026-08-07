@@ -166,6 +166,9 @@ export const PARKS: ResourceDef = {
     notes: str,
     // area_analysis is deliberately absent: it is written by the analyse
     // endpoint and stamped, never hand-patched into something it did not say.
+    // sort_order is absent for a different reason: a position is only meaningful
+    // against the rest of the list, so it is written for every row at once by
+    // POST /api/crm/parks/reorder and never one row at a time.
   },
   required: ["name"],
   defaults: { status: "prospect" },
