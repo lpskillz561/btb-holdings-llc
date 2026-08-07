@@ -396,7 +396,10 @@ export async function unfurl(rawUrl: string): Promise<LinkPreview> {
       } else {
         // A 403 from a bot shield, or a PDF, or anything else. The message still
         // renders a card; it just carries the domain rather than a photograph.
-        result = { ...result, site_name: url.hostname };
+        // `www.` stripped HERE TOO — this is the branch crexi.com actually
+        // takes, so stripping it only on the success path fixed the case that
+        // was already fine and left the visible one reading "WWW.CREXI.COM".
+        result = { ...result, site_name: url.hostname.replace(/^www\./i, "") };
       }
     }
 
