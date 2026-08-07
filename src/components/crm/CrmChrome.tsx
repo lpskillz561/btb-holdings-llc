@@ -60,6 +60,10 @@ const SECTIONS = [
   // day, so it sits with the dashboard rather than filed after the views of the
   // book. The dashboard's own list links here too.
   { href: "/crm/todos", label: "Board", icon: "board" },
+  // Beside the board, because they are the same kind of thing: the room the
+  // team talks in and the list the team works from. It replaced a WhatsApp
+  // group — see lib/crm/chat.ts for why that mattered.
+  { href: "/crm/chat", label: "Chat", icon: "chat" },
   // With the board rather than filed with the documents: what is on today and
   // what was said yesterday is work-in-hand, not a view of the book.
   { href: "/crm/meetings", label: "Meetings", icon: "calendar" },
@@ -93,6 +97,9 @@ const ICON_PATHS: Record<IconName, string> = {
   calendar: "M4 6h16v14H4zM4 10h16M8.5 4v3M15.5 4v3",
   users: "M8 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c.5-3.5 2.9-5 5.5-5s5 1.5 5.5 5M15.5 10.5a3 3 0 1 0-1.4-5.8M15.8 15.3c2.3.3 4.2 1.7 4.7 4.7",
   slides: "M3 4.5h18v11.5H3zM12 16v3.5M8.5 20.5h7",
+  // A speech bubble with a tail. Deliberately unlike `board` (a column grid) —
+  // they sit two apart in the rail and both are places the team writes things.
+  chat: "M20.5 12.5a7.5 7.5 0 0 1-7.5 7.5H8l-4.5 3v-5A7.5 7.5 0 0 1 8 5h5a7.5 7.5 0 0 1 7.5 7.5z",
   // An upright cabinet with a screen — distinct from `slides` (a projector
   // screen on a stand) at rail size, which matters because the two sit next to
   // each other and a deck and a machine are not the same thing.

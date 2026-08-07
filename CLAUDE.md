@@ -469,6 +469,104 @@ section rather than back at the dashboard, and the rail's own "Users" item is
 account administration — it was given a distinct glyph so the allow-list and the
 book of business do not sit under one symbol.
 
+### Team chat — `/crm/chat`, and why it is not WhatsApp
+
+The office's room, in the app. August 2026.
+
+**It exists because WhatsApp was ruled out, and the reason is worth keeping.**
+Meta's Business Messaging Policy has banned **general-purpose AI chatbots**
+since 15 January 2026 — LLM-powered, open-domain, "ask it anything", where the
+AI is the product rather than a supporting feature. That is a word-for-word
+description of putting `AskAi` on a business number, there is **no internal-use
+carve-out**, and the penalty is losing the number. Separately: Cloud API groups
+must be **created by the business** (your existing group cannot be adopted),
+need an **Official Business Account**, cap at **8 participants** — and Cloud API
+messages are **decrypted on Meta's servers**, with every answer landing
+permanently in each member's phone backup. That last point is the one that
+settles it on our own precedent: `CRM_STORE_TRANSCRIPTS` is off by default
+because a transcript is a named taxpayer discussing their income.
+
+- **`lib/crm/chat.ts` is the room; `chat-bus.ts` is the live fan-out;
+  `chat-ai.ts` is the assistant.** Messages are Markdown, so `@mentions`, links
+  and pasted images all work through machinery that already existed.
+- **Channels are a concept from day one, and one row is seeded.** A chat that
+  starts as a single room and later needs one per client is a migration plus a
+  rewrite of every query. `crm_chat_channels.client_id` is there, nullable, and
+  nothing writes it yet — per-client rooms are a row and one line in
+  `chat-ai.ts`.
+- **No per-channel membership and no DMs, deliberately.** Reaching `/crm` is the
+  permission, exactly as it is for the board.
+- **The AI answers only when `@ai`-ed.** A model reading every line is a bill on
+  idle chat and a participant nobody invited. It posts as an ordinary message
+  with `kind = 'ai'`, so scrolling back next month shows the answer where it was
+  given, and it carries the violet AI badge — in this app violet means AI and
+  nothing else.
+- **Who said it is prefixed into the text sent to the model.** A room is
+  many-to-one and the roles are two; without the prefix the model reads five
+  people as one person changing their mind.
+- **SSE, not WebSockets or polling.** Route handlers cannot host a WS server,
+  and polling is a query per person per second forever. Three things make the
+  stream survive this deployment: **heartbeats every 25s** (the ALB closes an
+  idle connection at 60 and a quiet room is idle by definition),
+  **`X-Accel-Buffering: no`** (a buffering proxy turns a live stream into a late
+  batch), and **unsubscribe on abort** (every deploy drops every connection, and
+  without teardown each leaks a listener on a process-lifetime emitter).
+- **`chat-bus.ts` is in-process, and that is the one thing a second instance
+  breaks.** Each instance would fan out only to its own connections and half the
+  office would silently stop seeing the other half. Worth it today for a
+  five-person team; it needs a broker the day there are two instances.
+- **Times are formatted in the OFFICE zone, threaded down as a prop.**
+  Reader-local formatting is a hydration mismatch by construction — the
+  container is UTC and nobody who works here is — and "Yesterday" has to mean
+  the same day to everyone in the room. Same rule and same file as the meetings
+  calendar (`lib/crm/tz.ts`).
+- **Enter sends here; ⌘↵ posts a card comment.** Deliberately opposite: chat is
+  one line at a time and every chat app these people use sends on Enter, while a
+  comment is usually a paragraph and losing it to a stray Return is unforgivable.
+- **The emoji picker is hand-listed, not installed** — a full set is a ~100 KB
+  dependency for glyphs nobody uses. Note this does NOT contradict the board's
+  rule that replaced `≡ ☑ 💬` with drawn SVG: that rule is about UI **chrome**,
+  which must look the same on every machine. Emoji people type at each other are
+  **content**, and the reader's own system font is exactly right for them.
+
+**Link previews — `lib/crm/unfurl.ts`, and the SSRF guard is the point.**
+
+**This module makes the server fetch a URL a user typed, and the IMDS hop limit
+was raised to 2 for image uploads.** A naive unfurler would therefore let anyone
+who can type in chat reach `169.254.169.254` and walk out with the instance
+role. Three non-obvious defences, none of which may be "simplified":
+
+1. **DNS is resolved here and the RESOLVED IP is checked** — every answer, not
+   just the first. Checking the hostname is useless; `evil.com` can have an A
+   record of `127.0.0.1`, and does. This is the whole attack.
+2. **Redirects are followed by hand, one hop at a time, re-checking each.**
+   `fetch`'s own following would land on a private address after a public first
+   hop.
+3. **The check and the connection still race** (DNS rebinding). Accepted and
+   narrowed rather than solved: no credentials are ever attached, the response
+   is capped, and nothing is returned but title/description/image. Someone who
+   wins the race gets a page title.
+
+`isPrivateAddress` is exported and was verified against a table of 21 addresses
+— IMDS, ECS task metadata, loopback, our own VPC, CGNAT, multicast, IPv6
+link-local and unique-local, IPv4-mapped IPv6 — **including two that must be
+ALLOWED** (`172.32.0.1`, `100.128.0.1`), which are what catch a filter written
+one bit too wide. Re-run that table if you touch it.
+
+- **A preview never renders a remote image.** The `og:image` is copied into our
+  own attachment bucket, so reading a message cannot tell a third party who is
+  reading it and when. This is the one path that could otherwise smuggle a
+  remote URL past `Markdown.tsx`'s rule.
+- **crexi.com answers 403 to a plain server fetch**, which is why there is a
+  browser User-Agent — not evasion, we obey the status we get, but many sites
+  serve OpenGraph only to something that looks like a browser. Sites that still
+  refuse get the fallback card showing the domain and the tidied path, which for
+  a listing URL is genuinely useful. Failures are cached as `blocked` so one 403
+  is not one per render forever.
+- **Instagram needs no app any more.** Meta reversed the token requirement on
+  15 June 2026: `instagram_oembed` is callable with no access token and no App
+  Review. Lower rate limits than the token route, which is why it is cached.
+
 ### The board — `/crm/todos`, and it works like Jira now
 
 Ticket keys, tags, subtasks and a rebuilt comment thread, August 2026.

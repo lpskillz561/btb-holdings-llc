@@ -875,6 +875,132 @@ const TABLES: TableDef[] = [
       "CREATE INDEX IF NOT EXISTS crm_conversations_scope_idx ON crm_conversations (scope_type, scope_id, updated_at DESC)",
     ],
   },
+  // ---------------------------------------------------------------------------
+  // Team chat.
+  //
+  // CHANNELS EXIST AS A CONCEPT FROM DAY ONE even though the app ships with a
+  // single one. A chat that starts as one room and later needs a room per client
+  // is a migration plus a rewrite of every query; a chat that starts with a
+  // channel table and one row in it is a new row. `client_id` is here and
+  // nullable for exactly that — nothing writes it yet.
+  // ---------------------------------------------------------------------------
+  {
+    name: "crm_chat_channels",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      // The URL-safe name. `/crm/chat/team`, not a uuid, because people paste
+      // these to each other.
+      ["slug", "TEXT NOT NULL"],
+      ["name", "TEXT NOT NULL"],
+      ["topic", "TEXT"],
+      // SET NULL, not CASCADE: deleting a client must not delete the room the
+      // team discussed them in. Same reasoning as crm_activity below.
+      ["client_id", "TEXT REFERENCES crm_clients(id) ON DELETE SET NULL"],
+      ["archived_at", "TEXT"],
+      ["created_by", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_chat_channels_slug_idx ON crm_chat_channels (lower(slug))",
+    ],
+    alters: [
+      // The one room the app ships with, seeded rather than created by whoever
+      // opens the page first. A chat whose first visitor has to name a channel
+      // before anyone can say anything is a chat nobody starts.
+      //
+      // Idempotent by the slug index, so this is a no-op on every boot after
+      // the first, and it deliberately does NOT recreate the row if someone
+      // renames or archives it — ON CONFLICT DO NOTHING means the seed loses to
+      // whatever the team has since decided.
+      `INSERT INTO crm_chat_channels (id, slug, name, topic, created_by, created_at, updated_at)
+       VALUES ('chat-team', 'team', 'Team', 'Everything that is not a card yet.', 'system',
+               to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+               to_char(now() AT TIME ZONE 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'))
+       ON CONFLICT DO NOTHING`,
+    ],
+  },
+  {
+    name: "crm_chat_messages",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["channel_id", "TEXT NOT NULL REFERENCES crm_chat_channels(id) ON DELETE CASCADE"],
+      // Stamped from the session, never the body. Same rule as a card comment:
+      // "who said this" is the entire value of a message.
+      ["author_email", "TEXT NOT NULL"],
+      // 'user' or 'ai'. The assistant posts as a real message rather than as a
+      // special overlay, so the transcript is one list and anyone scrolling back
+      // sees the answer where it was actually given.
+      ["kind", "TEXT NOT NULL DEFAULT 'user'"],
+      ["body", "TEXT NOT NULL"],
+      ["edited_at", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      // Matches the only read path: one channel, newest page first.
+      "CREATE INDEX IF NOT EXISTS crm_chat_messages_channel_idx ON crm_chat_messages (channel_id, created_at DESC)",
+    ],
+  },
+  {
+    name: "crm_chat_reactions",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["message_id", "TEXT NOT NULL REFERENCES crm_chat_messages(id) ON DELETE CASCADE"],
+      // The literal emoji character, not a shortcode. Storing ":thumbsup:"
+      // would mean owning a shortcode-to-glyph table forever and getting a
+      // different answer than the picker on anything outside it.
+      ["emoji", "TEXT NOT NULL"],
+      ["actor_email", "TEXT NOT NULL"],
+      ["created_at", TS_DEFAULT],
+    ],
+    indexes: [
+      // One person, one of each emoji, per message. The UNIQUE is what makes
+      // "toggle my reaction" safe under a double click: the second insert is a
+      // 23505 rather than a duplicate.
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_chat_reactions_one_idx ON crm_chat_reactions (message_id, emoji, lower(actor_email))",
+      "CREATE INDEX IF NOT EXISTS crm_chat_reactions_message_idx ON crm_chat_reactions (message_id)",
+    ],
+  },
+  // How far each person has read. One row per person per channel.
+  {
+    name: "crm_chat_reads",
+    columns: [
+      ["channel_id", "TEXT NOT NULL REFERENCES crm_chat_channels(id) ON DELETE CASCADE"],
+      ["user_email", "TEXT NOT NULL"],
+      // A timestamp rather than a message id: messages arrive out of order under
+      // concurrency, and "everything before this instant" survives that where
+      // "after message X" does not.
+      ["last_read_at", "TEXT NOT NULL DEFAULT ''"],
+      ["updated_at", TS_DEFAULT],
+    ],
+    indexes: [
+      "CREATE UNIQUE INDEX IF NOT EXISTS crm_chat_reads_one_idx ON crm_chat_reads (channel_id, lower(user_email))",
+    ],
+  },
+  // Unfurled links, cached by URL.
+  //
+  // A CACHE, not a record: every column may be null because most of the web
+  // gives you nothing. `status` distinguishes "we have not looked yet" from "we
+  // looked and there was nothing", which is what stops a page that 403s being
+  // re-fetched on every render forever.
+  {
+    name: "crm_link_previews",
+    columns: [
+      ["url", "TEXT PRIMARY KEY"],
+      ["status", "TEXT NOT NULL DEFAULT 'pending'"],
+      ["title", "TEXT"],
+      ["description", "TEXT"],
+      ["site_name", "TEXT"],
+      // OUR attachment id, not the remote image URL. The og:image is copied
+      // into our own store so a chat message never causes a reader's browser to
+      // hit a third-party server — the same rule Markdown.tsx enforces for
+      // pasted images, applied to the one place that would otherwise smuggle a
+      // remote URL past it.
+      ["image_attachment_id", "TEXT"],
+      ["fetched_at", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+  },
+
   // Images pasted into a card description, a comment or an AI thread.
   //
   // THE BYTES ARE NOT HERE — they are an S3 object, and `storage_key` is the
