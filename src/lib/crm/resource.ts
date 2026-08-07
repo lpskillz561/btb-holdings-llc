@@ -383,7 +383,14 @@ export async function listRows<T extends Row>(
     where.push(`${column} = $${binds.length}`);
   }
 
-  const requested = Number(params.get("limit"));
+  // The absent case has to be tested BEFORE the number is coerced. `params.get`
+  // answers null when no limit was passed, `Number(null)` is 0, and 0 is finite
+  // — so this clamped to `Math.max(1, 0)` and every collection fetched without
+  // an explicit ?limit= came back holding ONE row. Silent, 200, and invisible to
+  // anything but counting the rows: the prospects list re-read after a backfill
+  // was one row, and so was every other bare GET on /api/crm/*.
+  const raw = params.get("limit");
+  const requested = raw === null || raw.trim() === "" ? Number.NaN : Number(raw);
   const limit = Number.isFinite(requested)
     ? Math.min(MAX_LIMIT, Math.max(1, Math.round(requested)))
     : DEFAULT_LIMIT;
