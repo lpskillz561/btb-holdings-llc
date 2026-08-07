@@ -58,7 +58,7 @@ export function uploadsBucket(): string {
   const bucket = process.env.CRM_UPLOADS_BUCKET;
   if (!bucket) {
     throw new CrmError(
-      "Image uploads are not configured. Set /btb-crm/CRM_UPLOADS_BUCKET and redeploy.",
+      "Uploads are not configured. Set /btb-crm/CRM_UPLOADS_BUCKET and redeploy.",
       503,
     );
   }
@@ -191,4 +191,76 @@ export async function deleteAttachment(id: string): Promise<void> {
     new DeleteObjectCommand({ Bucket: uploadsBucket(), Key: row.storage_key }),
   );
   await query("DELETE FROM crm_attachments WHERE id = $1", [id]);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Documents                                                                   */
+/*                                                                             */
+/* The learn-from-a-document feature stores its files here too, because this is */
+/* still the only file that knows S3 exists and there is no reason for a second */
+/* bucket — the blast radius is identical and the role is already scoped to the */
+/* `uploads/` prefix. Everything ABOVE this line is images and everything below */
+/* is documents; the row types and the tables stay apart. See ./knowledge.ts.   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where a document's bytes go.
+ *
+ * Under `uploads/documents/`, which is inside the prefix the instance role is
+ * scoped to — a key outside `uploads/` is a 403 at write time. The extra
+ * segment is not access control, it is so that someone looking in the bucket by
+ * hand can tell a pasted screenshot from a client's memorandum.
+ */
+function documentStorageKey(id: string, extension: string): string {
+  const at = new Date();
+  const month = `${at.getUTCFullYear()}/${String(at.getUTCMonth() + 1).padStart(2, "0")}`;
+  return `uploads/documents/${month}/${id}.${extension}`;
+}
+
+/** Store a document's bytes. The row is the caller's job — see ./knowledge.ts. */
+export async function putDocumentObject(args: {
+  id: string;
+  bytes: Buffer;
+  contentType: string;
+  extension: string;
+}): Promise<string> {
+  const key = documentStorageKey(args.id, args.extension);
+  await client().send(
+    new PutObjectCommand({
+      Bucket: uploadsBucket(),
+      Key: key,
+      Body: args.bytes,
+      ContentType: args.contentType,
+      ServerSideEncryption: "AES256",
+    }),
+  );
+  return key;
+}
+
+/**
+ * A document's bytes, for the download route.
+ *
+ * Buffered rather than streamed, for the reason `readAttachmentBytes` gives: a
+ * mid-transfer failure on a streamed body has no way to become a status code.
+ * These are capped at 20 MB, which is four times an image and still one read.
+ */
+export async function readDocumentBytes(storageKey: string): Promise<Buffer> {
+  const out = await client().send(
+    new GetObjectCommand({ Bucket: uploadsBucket(), Key: storageKey }),
+  );
+  if (!out.Body) throw new CrmError("That document is missing from storage.", 404);
+  return Buffer.from(await out.Body.transformToByteArray());
+}
+
+/**
+ * Remove a document's bytes.
+ *
+ * Unlike `deleteAttachment` this one IS called: a document has a single owning
+ * row and a Delete button in the library, so there is no ambiguity about who
+ * else is pointing at it. The object goes first and the row second — the
+ * opposite order to the write, so neither order can leave a row promising bytes
+ * that are not there.
+ */
+export async function deleteDocumentObject(storageKey: string): Promise<void> {
+  await client().send(new DeleteObjectCommand({ Bucket: uploadsBucket(), Key: storageKey }));
 }

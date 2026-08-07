@@ -221,16 +221,21 @@ and `BASE_PROMPT` in `ai.ts` spells the two tests out — it used to teach the
 ### The house knowledge base — `src/lib/crm/knowledge/SKILL.md`
 
 **Everything above is in the prompt now, and it is in exactly one file.** Every
-AI surface — proposal drafting, land fit, the client advisor and the Ask AI panel
-on every `/crm` page — is assembled by `buildScopedPrompt` in `ai.ts` as
-`BASE_PROMPT` + `SKILL.md` + record context. `BASE_PROMPT` is now only role and
-register; the doctrine moved out of it.
+AI surface — proposal drafting, land fit, the client advisor, the chat room and
+the Ask AI panel on every `/crm` page — is assembled by `buildScopedPrompt` in
+`ai.ts` as `BASE_PROMPT` + `SKILL.md` + **learned documents** + record context.
+`BASE_PROMPT` is now only role and register; the doctrine moved out of it.
 
 That split is the point. The tax case used to be stated twice — once in
 `BASE_PROMPT` and once in `docs/` — and the copy in the code taught the **7-day**
 §469 test, so every generated proposal described a deal we do not sell. Two
 copies that can disagree is the bug. **Add to `SKILL.md`, never to a prompt
 string.** Any `.md` in that directory is loaded, in filename order.
+
+The learned-documents layer is **not** an exception to that rule — a learned note
+says what some *other* document says, it is explicitly outranked by `SKILL.md` in
+the prompt, and the model is told not to restate the doctrine in one. See
+"Documents the assistant learns" below.
 
 - **`docs/` is not deployed, and `SKILL.md` is the substitute.** The PDFs and
   DOCX are excluded from git and from the tarball, so the server has never seen
@@ -255,6 +260,106 @@ string.** Any `.md` in that directory is loaded, in filename order.
 - There is **no `/crm/contracts/[id]` page**, only `/print`, so the contract
   scope is wired but unreachable from a URL today. Contracts are still fully
   answerable: they are in both the client and the workspace context.
+
+### Documents the assistant learns — `/crm/knowledge`, August 2026
+
+**There is now a FOURTH prompt layer, and it is the only one not in git.** Staff
+upload a PDF or a `.docx`; the model reads it and writes a note in `SKILL.md`'s
+register; **a person adopts that note** and only then does it reach a prompt.
+`lib/crm/knowledge-docs.ts` owns the rows and the reading; `learnedKnowledge()`
+in `ai.ts` owns what reaches the prompt.
+
+- **The adoption step is the whole design and must not be removed for
+  convenience.** `SKILL.md` is in git, reviewed, and `loadSkill()` throws rather
+  than let the model answer without it. A feature where anyone can drop a PDF
+  into a chat window and have it silently join that file would undo the entire
+  arrangement — the next generated proposal would be grounded in whatever a
+  counterparty last emailed us, and nobody would know. `active_at` is the gate,
+  it is one click, and the button says "Teach the assistant this" because that is
+  what it does.
+- **`active_at` is a timestamp, not a status value**, on the same principle as
+  `archived_at` on a proposal: a document read and understood and then
+  deliberately left out is a different fact from one nobody has got to, and one
+  column would erase the first. `status` is the LEARNING lifecycle only.
+- **SKILL.md is DOCTRINE; a learned note is REFERENCE, and the prompt says so.**
+  The precedence paragraph in `learnedKnowledge()` is load-bearing, not padding —
+  without it a prospect's marketing PDF sits in the same prompt as the memorandum
+  and reads with the same authority. Notes are attributed by title for the same
+  reason.
+- **The model is told NOT to restate the house doctrine in a note.** That is
+  precisely the "two copies that can disagree" bug that put the 7-day §469 test
+  into a prompt. It is told to NAME contradictions instead — with the house view
+  and with the document itself — and those go in their own "Where this document
+  disagrees" section. Same instinct as "Points to check" on a meeting summary,
+  and it is what earns the feature.
+- **`skill_md` / `skill_model` / `learned_at` are not writable**, so the PATCH
+  route takes only `title` and `active` and each has its own function. Same rule
+  as `crm_meetings.summary_md` and `crm_parks.area_analysis`: a hand-edited AI
+  artifact stops being a record of what the model said and the stamp beside it
+  becomes a lie.
+- **Adopted knowledge is capped at 40,000 characters TOTAL** and dropped
+  oldest-adopted-first. The risk is not cost — it is an unbounded appendix
+  pushing the house doctrine far enough down the prompt to stop governing. The
+  drop is logged AND the model is told the count, because a silent cap produces
+  an assistant that confidently does not know something it was told.
+- **`learnedKnowledge()` is NOT cached, unlike `loadSkill()`.** `SKILL.md`
+  changes on deploy; this changes when someone presses a button, and a
+  process-lifetime cache would mean a document adopted at 10am reaching the model
+  after the next restart. It also never throws — a database hiccup reading the
+  appendix must not take down every AI surface, which is the opposite of the
+  missing-`SKILL.md` rule and deliberately so.
+- **Two different acts, and conflating them breaks the obvious path.**
+  `learnedKnowledge()` is standing knowledge on every surface.
+  `documentReadingContext()` is a transient full-text read of a document someone
+  has just dropped into the room, gated on nothing — because the normal use of
+  this feature is "paste a PDF and ask what it says", and requiring adoption
+  first would make that path the broken one.
+
+**`crm_documents` is a SEPARATE table from `crm_attachments`, on purpose.** An
+attachment is an image and `Markdown.tsx` renders `![](…)` for any attachment id
+it validates, so a PDF in that table renders as a broken picture. A document is a
+LINK, and `withoutDocumentMarkdown` strips it from the prose because a card is
+rendered below. Keeping them apart is what keeps the images-only invariant true,
+which is what makes the Markdown image rule safe. Same bucket, same
+`uploads/` prefix the role is scoped to, under `uploads/documents/`.
+
+**`unpdf` and `fflate`, both zero-dependency pure JavaScript, and that is a
+constraint rather than a preference.** The app is built ON the EC2 instance from
+a tarball, on ARM, with a swapfile doing the work — a package needing node-gyp,
+poppler or libreoffice fails at `npm ci` on the box and nowhere else. `mammoth`
+is the better-known DOCX choice and was rejected: it converts to HTML, which is
+thrown away here, and pulls ten transitive dependencies including bluebird, to do
+a job that is an unzip and a tag strip. Both were verified against the real
+`docs/` folder — all five PDFs and all three executed `.docx` agreements.
+
+- In `extract.ts`'s DOCX path, `</w:p>` → newline is not optional: without it the
+  Management Agreement extracts as one unbroken line and its numbered clauses run
+  together. `&amp;` is decoded LAST or `&amp;lt;` reintroduces markup.
+- **The PDF bytes are COPIED into a fresh `Uint8Array`.** pdf.js takes ownership
+  of the array it is handed and transfers it away, and a Node `Buffer` is a view
+  onto a pooled ArrayBuffer that Node reuses for other allocations.
+- **There is no OCR and adding one is not a quiet change** — it changes the cost
+  and the failure modes of every upload. A scan extracts to almost nothing and is
+  refused at `MIN_USEFUL_CHARS` (200) with the thing to do about it. That floor is
+  calibrated against the real pro forma, which is a genuine one-page document at
+  **265 characters**.
+- **Reading happens in the background and NOTHING waits for it — including the
+  "read it again" button.** The upload not waiting is obvious (twenty seconds is
+  a broken button). The re-learn route not waiting is the one that would have
+  bitten in production and nowhere else: **the ALB closes a connection idle for
+  60 seconds**, a long memorandum takes longer than that, and the caller would
+  get a 502 for a read that in fact succeeded — then press the button again and
+  pay for a second one. Both answer immediately and both deliver the finished row
+  on the chat bus. Note `maxDuration` is a serverless-platform export and does
+  nothing here; the ALB is the real limit. Same trap the SSE heartbeat exists for.
+- A deploy mid-read leaves a row stuck at `learning` and nothing sweeps those up
+  — the "Stuck? Start it again" button on the library row is the sweep.
+
+**The `document` event on `chat-bus.ts` carries NO channel**, unlike everything
+else on that bus. The same file can be linked from several rooms and from the
+library, and every card carrying that id should stop saying "being read" at the
+same moment. `/crm/knowledge` subscribes to the chat stream for exactly that one
+event.
 
 ### The client presentation — `/crm/present`
 
@@ -529,6 +634,38 @@ because a transcript is a named taxpayer discussing their income.
   which must look the same on every machine. Emoji people type at each other are
   **content**, and the reader's own system font is exactly right for them.
 
+**Typing `@` opens a menu, and the summons is stated twice — `MentionMenu.tsx`.**
+
+The assistant was reachable only by knowing to type `@ai`, which is a thing you
+have to be told. The menu is the Slack gesture, and the assistant is always its
+first row, in violet with the ✦, above the people.
+
+- **The menu gets FIRST REFUSAL on the keydown**, and that ordering is the whole
+  reason it can exist here. Enter *sends* in this composer, so a menu that did
+  not claim the key would post `@sar` the moment someone pressed Enter to choose
+  Sarah. `handleKeyDown` returns a boolean and the composer only sends on false.
+- Rows are `onMouseDown` + `preventDefault`, never `onClick`. A click blurs the
+  textarea first, blur is what closes the menu, and the click would then land on
+  an element that had already gone.
+- **`mentionQueryAt` tracks the CARET, not the value**, so it is re-synced on
+  click and on the arrow keys too — and the `@` must start the line or follow
+  whitespace, or an email address typed into the box opens a menu at its domain.
+- The panel is `position: fixed` and scrolling closes it, for the reason
+  `InfoTip` and `Dropdown` give: it would otherwise be clipped by the chat
+  card's own borders. It opens *upward* — the composer is at the bottom of the
+  window.
+- **The footer says mentioning a colleague does not notify them.** Still true —
+  nothing in this app sends mail — and a menu that lists people without saying so
+  is exactly the false promise the board's comment rule already warns about.
+- **`summonsAi()` in `ChatRoom.tsx` is a DUPLICATE of `mentionsAi()` in
+  `chat-ai.ts` and the two must stay identical.** One decides whether the
+  composer promises an answer; the other decides whether one arrives. It is
+  duplicated rather than imported because `chat-ai.ts` is server-only — it pulls
+  in the OpenAI and S3 clients and the whole prompt layer.
+- When `@ai` is in the draft the composer says so three ways: a violet banner
+  above the box with a **Don't ask** button that strips the mention, a violet
+  ring on the box, and the Send button becoming **Ask the assistant**.
+
 **Link previews — `lib/crm/unfurl.ts`, and the SSRF guard is the point.**
 
 **This module makes the server fetch a URL a user typed, and the IMDS hop limit
@@ -684,6 +821,17 @@ usually more than one line.
 
 Paste, drop or pick an image into a card description, a card comment or the AI
 chat. August 2026.
+
+**`uploads.ts` also stores the learned documents** — same bucket, same
+`uploads/` prefix, under `uploads/documents/` — because that rule is "one file
+knows S3", not "one file knows images". The row types and the tables stay apart;
+see "Documents the assistant learns" above for why. The shared browser-side
+control is `components/crm/AttachFiles.tsx` (formerly `AttachImages.tsx`): one
+paste/drop/pick path that routes each file by kind, so dragging a screenshot and
+a PDF together does the right thing with each without anyone choosing a category.
+**Documents are opt-in per call site** (`documents: true`) and only the chat room
+asks for them — a card description silently uploading a counterparty's PDF into
+the assistant's reading queue is a thing that surface never advertised.
 
 **The bytes are in S3; the database holds a pointer.** `crm_attachments` is
 metadata plus `storage_key`. The bucket is **`btb-crm-uploads-761540266321`**,

@@ -16,8 +16,9 @@
  * scrolling back next month shows the answer where it was actually given.
  */
 
-import { MODEL, buildScopedPrompt, getOpenAI, isAiConfigured } from "./ai";
+import { MODEL, buildScopedPrompt, documentReadingContext, getOpenAI, isAiConfigured } from "./ai";
 import { attachmentIdsIn, describeAttachments } from "./attachments";
+import { documentIdsIn } from "./documents";
 import { attachmentDataUrl, getAttachment } from "./uploads";
 import { listMessages, postMessage, type CrmChatMessage } from "./chat";
 import { site } from "@/lib/site";
@@ -33,6 +34,18 @@ const CONTEXT_MESSAGES = 24;
 /** Same budget, and the same reason, as the advisor panel: images are re-sent
  *  inline as base64 on every call, because our own image route is auth-gated. */
 const MAX_VISION_IMAGES = 3;
+
+/**
+ * How many documents in view are read in full, and how much of them.
+ *
+ * Text, not base64, so this is far cheaper than the image budget — but it is
+ * still a budget, because a room where three people have each dropped a
+ * memorandum would otherwise send 90,000 characters of legal prose on every
+ * "@ai what time is the call". Newest-first, the same shape as the images and
+ * the same shape `HISTORY_LIMIT` gives text.
+ */
+const MAX_READ_DOCUMENTS = 3;
+const MAX_DOCUMENT_CHARS = 60_000;
 
 /** Does this message summon the assistant? */
 export function mentionsAi(body: string): boolean {
@@ -67,10 +80,28 @@ export async function answerInChannel(args: {
   // already knowing whose room it is in.
   const system = await buildScopedPrompt({ type: "global" });
 
+  // Documents someone has dropped into the room, read IN FULL for this answer.
+  //
+  // A different thing from the adopted knowledge already inside `system`: that
+  // is standing knowledge on every surface, this is "read the thing I just put
+  // in front of you". Deliberately NOT gated on the document having been
+  // adopted — the normal use of this feature is to paste a PDF and ask what it
+  // says, and requiring someone to go and adopt it first would make the obvious
+  // path the broken one. Newest message first, so the document being asked
+  // about wins the budget over one from last week.
+  const wantedDocs: string[] = [];
+  for (let i = history.length - 1; i >= 0 && wantedDocs.length < MAX_READ_DOCUMENTS; i--) {
+    for (const id of documentIdsIn(history[i].body)) {
+      if (wantedDocs.length >= MAX_READ_DOCUMENTS) break;
+      if (!wantedDocs.includes(id)) wantedDocs.push(id);
+    }
+  }
+  const documents = await documentReadingContext(wantedDocs, MAX_DOCUMENT_CHARS);
+
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     {
       role: "system",
-      content: `${system}
+      content: `${system}${documents}
 
 ---
 
@@ -80,7 +111,11 @@ Write like a colleague in a chat window: short, direct, no headings unless you g
 
 The messages above yours are the room's recent conversation, each prefixed with who said it. Use them for context, but answer the person who summoned you.
 
-Do not calculate dollar figures. Work from figures in the record and describe anything else in words. If you need something you have not been given, ask one pointed question rather than guessing at length. Screenshots may be attached; read them and work from what they show.`,
+Do not calculate dollar figures. Work from figures in the record and describe anything else in words. If you need something you have not been given, ask one pointed question rather than guessing at length. Screenshots may be attached; read them and work from what they show.
+
+Documents may be attached too. Where one appears under "DOCUMENTS IN THIS CONVERSATION" you have its full text and should work from it directly, quoting exactly where that helps. Where a message links a document that is NOT there, say you have not been given it rather than inferring anything from its name.
+
+If someone asks you to remember, learn or keep a document, tell them it is the Knowledge page at /crm/knowledge that does that: you have written a note on every uploaded document, and someone has to adopt that note before it becomes part of what you know everywhere. You cannot adopt one yourself.`,
     },
   ];
 

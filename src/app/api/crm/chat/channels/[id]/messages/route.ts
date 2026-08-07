@@ -3,6 +3,8 @@ import { CrmError } from "@/lib/crm/db";
 import { getChannel, lastReadAt, listMessages, markRead, postMessage } from "@/lib/crm/chat";
 import { answerInChannel, mentionsAi } from "@/lib/crm/chat-ai";
 import { publish } from "@/lib/crm/chat-bus";
+import { documentIdsIn } from "@/lib/crm/documents";
+import { listDocumentsByIds } from "@/lib/crm/knowledge-docs";
 import { backfillPreviews, getCachedPreviews, unfurl, urlsIn } from "@/lib/crm/unfurl";
 import { readBody, withCrmParams } from "@/lib/crm/rest";
 
@@ -23,8 +25,13 @@ export const GET = withCrmParams<{ id: string }>(async (req, { params, actor }) 
   const messages = await listMessages(channel.id, { before });
 
   const urls = [...new Set(messages.flatMap((m) => urlsIn(m.body)))];
-  const [previews, readAt] = await Promise.all([
+  // Documents ride along with the page for the same reason previews do: fifty
+  // messages would otherwise be a round trip per attached file on open, and the
+  // lookup is one query keyed on the ids actually present.
+  const documentIds = [...new Set(messages.flatMap((m) => documentIdsIn(m.body)))];
+  const [previews, documents, readAt] = await Promise.all([
     getCachedPreviews(urls),
+    listDocumentsByIds(documentIds),
     lastReadAt(channel.id, actor),
   ]);
 
@@ -39,7 +46,14 @@ export const GET = withCrmParams<{ id: string }>(async (req, { params, actor }) 
   // exactly. Deriving it from the unread COUNT instead is off by however many
   // of your own messages are interleaved, because your own never count as
   // unread — and a divider in the wrong place is worse than none.
-  return NextResponse.json({ channel, messages, previews, viewer: actor, last_read_at: readAt });
+  return NextResponse.json({
+    channel,
+    messages,
+    previews,
+    documents,
+    viewer: actor,
+    last_read_at: readAt,
+  });
 });
 
 /**

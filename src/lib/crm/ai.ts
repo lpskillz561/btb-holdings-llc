@@ -2,19 +2,26 @@
 // (`OPENAI_API_KEY` / `OPENAI_MODEL`, structured outputs via json_schema),
 // pointed at client records instead of parcels.
 //
-// Every prompt is assembled from three layers, in this order:
+// Every prompt is assembled from four layers, in this order:
 //
 //   1. BASE_PROMPT below — who the model is and how it writes. Short.
 //   2. ./knowledge/SKILL.md — the doctrine: the structure, the authorities, the
 //      deal terms, the risks, the hard rules. Transcribed from `docs/`, which is
 //      the source of truth and is not in git. See ./skill.ts.
-//   3. Record context — the client, proposal, contract or workspace the person
+//   3. LEARNED DOCUMENTS — notes the model wrote on files staff uploaded, and
+//      that a person then ADOPTED. Reference, explicitly outranked by layer 2.
+//      Stored in `crm_documents`; see ./knowledge-docs.ts and `learnedKnowledge`
+//      below. This is the only layer that is not in git, which is exactly why
+//      the prompt says out loud that it does not govern.
+//   4. Record context — the client, proposal, contract or workspace the person
 //      is actually looking at, rendered as formatted facts.
 //
 // The doctrine lives in ONE place on purpose. It used to be inlined here, which
 // meant two copies of the tax case that could disagree — and one of them taught
 // the 7-day §469 test, so every generated proposal described a deal BTB does not
-// sell. Add to SKILL.md, not to a prompt string.
+// sell. Add to SKILL.md, not to a prompt string. Layer 3 is not an exception to
+// that rule: a learned note says what some other document says, and the model is
+// told not to restate the doctrine in one.
 //
 // Route new AI surfaces through `buildSystemPrompt` / `buildScopedPrompt` rather
 // than writing a bare prompt, or they lose all three layers.
@@ -70,15 +77,184 @@ Everything you say about this business — the structure, the authorities, the d
 
 You are normally answering a member of ${site.shortName}'s staff, not the client. That means you may be blunt about a weak deal, an unpersuasive record or a figure that will not survive the client's CPA. Say the uncomfortable thing early rather than at the end.`;
 
-/** The three layers, assembled. See the module comment. */
-function withKnowledge(context: string): string {
+/** The layers, assembled. See the module comment. */
+async function withKnowledge(context: string): Promise<string> {
   return `${BASE_PROMPT}
 
 ---
 
 # HOUSE KNOWLEDGE BASE
 
-${loadSkill()}${context}`;
+${loadSkill()}${await learnedKnowledge()}${context}`;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Learned documents                                                           */
+/*                                                                             */
+/* The fourth layer, and the only one that is not in git. Staff upload a PDF or */
+/* a Word file, the model writes a note on it, and someone ADOPTS that note —   */
+/* see ./knowledge-docs.ts for the storage and the learning, and for why the    */
+/* adoption step exists. Everything below is only about what reaches a prompt.  */
+/* -------------------------------------------------------------------------- */
+
+/** How much of one note reaches a prompt. A note longer than this is a summary
+ *  that failed to summarise, and it is cut with the fact said out loud. */
+const MAX_NOTE_CHARS = 8_000;
+
+/**
+ * How much learned knowledge reaches a prompt IN TOTAL, across every document.
+ *
+ * This is the cap that matters. `BASE_PROMPT` + `SKILL.md` + record context is
+ * already a substantial system prompt, and the failure this prevents is not cost
+ * — it is that an unbounded appendix pushes the house doctrine far enough down
+ * the prompt to stop governing the answer. Documents over the line are dropped
+ * OLDEST-ADOPTED FIRST, the model is told the count, and the fact is logged: a
+ * silent cap produces an assistant that confidently does not know something it
+ * was told, which is worse than one that says it cannot see everything.
+ */
+const MAX_KNOWLEDGE_CHARS = 40_000;
+
+/**
+ * The adopted notes, as prompt text.
+ *
+ * Returns "" when nothing is adopted, which is the normal state and has to stay
+ * silent: an empty "LEARNED DOCUMENTS" heading tells the model a section exists
+ * and invites it to reason about why it is blank.
+ *
+ * This is a query on every AI call. It is a partial-index lookup returning a
+ * handful of short rows, and it deliberately is NOT cached the way `loadSkill()`
+ * is: `SKILL.md` changes on deploy, this changes when someone presses a button,
+ * and a process-lifetime cache would mean a document adopted at 10am reaching
+ * the model only after the next restart.
+ */
+export async function learnedKnowledge(): Promise<string> {
+  let rows: { id: string; title: string; skill_md: string }[];
+  try {
+    rows = await query(
+      `SELECT id, title, skill_md FROM crm_documents
+        WHERE active_at IS NOT NULL AND skill_md IS NOT NULL
+        ORDER BY active_at ASC`,
+    );
+  } catch (err) {
+    // Never fatal, unlike a missing SKILL.md. The house knowledge base is what
+    // keeps an answer correct about the deal and it is on disk; a database hiccup
+    // reading the appendix must not take down every AI surface in the app.
+    console.error("[crm/ai] could not load learned documents", err);
+    return "";
+  }
+  if (!rows.length) return "";
+
+  const sections: string[] = [];
+  const dropped: string[] = [];
+  let budget = MAX_KNOWLEDGE_CHARS;
+
+  for (const row of rows) {
+    let note = row.skill_md.trim();
+    if (note.length > MAX_NOTE_CHARS) {
+      note = `${note.slice(0, MAX_NOTE_CHARS)}\n\n[This note is longer than the space available and is cut off here. Say so if a question turns on a part you cannot see.]`;
+    }
+    const section = `### ${row.title}\n\n${note}`;
+    if (section.length > budget) {
+      dropped.push(row.title);
+      continue;
+    }
+    budget -= section.length;
+    sections.push(section);
+  }
+
+  if (dropped.length) {
+    console.warn(
+      `[crm/ai] ${dropped.length} adopted document(s) did not fit the prompt budget: ${dropped.join("; ")}`,
+    );
+  }
+
+  // The precedence paragraph is the load-bearing part of this string. SKILL.md
+  // is DOCTRINE — transcribed from this business's own legal opinion and
+  // executed agreements — and a learned note is REFERENCE, which is to say what
+  // some document that arrived from somewhere else happens to say. Without that
+  // stated, a prospect's marketing PDF sits in the same prompt as the memorandum
+  // and reads with the same authority, and the model quotes one for the other to
+  // a taxpayer's CPA.
+  return `
+
+---
+
+# LEARNED DOCUMENTS
+
+The staff have uploaded the documents below and adopted your notes on them. Treat them as REFERENCE, not as doctrine.
+
+The HOUSE KNOWLEDGE BASE above outranks everything here. It is transcribed from this business's own legal opinion, executed agreements and pro forma; these are documents that came from somewhere else. Where a note below disagrees with the house knowledge base, the house knowledge base is what BTB does — and the disagreement is itself worth saying out loud rather than smoothing over.
+
+Attribute what you take from these. "The Aragona opinion says…", not "the rule is…". A reader must always be able to tell which document an answer came from.${
+    dropped.length
+      ? `\n\n${dropped.length} further adopted document(s) did not fit here and you have not been shown them. If a question seems to be about a document you cannot see, say so rather than answering from the others.`
+      : ""
+  }
+
+${sections.join("\n\n")}`;
+}
+
+/**
+ * The full text of specific documents, for a question plainly about one.
+ *
+ * A DIFFERENT thing from `learnedKnowledge()`, and the distinction is the point.
+ * That one is standing knowledge, adopted deliberately, in every prompt on every
+ * surface. This is a transient read of a document someone has just put in front
+ * of the assistant in a chat message: scoped to that conversation, gone when the
+ * message scrolls out of context, and available whether or not the document has
+ * been adopted.
+ *
+ * Adopting is "learn this permanently, for everyone". Pasting one into the room
+ * and asking about it is "read this now". Requiring the first before the second
+ * would make the feature useless for the thing people actually do, which is drop
+ * a PDF in the chat and ask what it says.
+ */
+export async function documentReadingContext(ids: string[], budget = 60_000): Promise<string> {
+  if (!ids.length) return "";
+  let rows: { id: string; title: string; text_body: string | null; status: string }[];
+  try {
+    rows = await query(`SELECT id, title, text_body, status FROM crm_documents WHERE id = ANY($1)`, [
+      ids,
+    ]);
+  } catch (err) {
+    console.error("[crm/ai] could not load documents for reading", err);
+    return "";
+  }
+
+  const sections: string[] = [];
+  let left = budget;
+  for (const row of rows) {
+    const text = row.text_body?.trim();
+    if (!text) {
+      // Named anyway. The model is about to be asked about a document that is
+      // attached to the message it is answering, and "I have not been given
+      // that" is a far better answer than one improvised from a file name.
+      sections.push(
+        `### ${row.title}\nThis document is attached to the conversation but its text is not available to you (${
+          row.status === "failed" ? "it could not be read" : "it has not been read yet"
+        }). Do not guess at what it says.`,
+      );
+      continue;
+    }
+    if (left <= 0) break;
+    const slice =
+      text.length > left
+        ? `${text.slice(0, left)}\n\n[cut off here — the document is longer than the space available]`
+        : text;
+    sections.push(`### ${row.title}\n\n${slice}`);
+    left -= slice.length;
+  }
+  if (!sections.length) return "";
+
+  return `
+
+---
+
+# DOCUMENTS IN THIS CONVERSATION
+
+Someone has attached these to the messages you are answering. This is their actual text, not a summary of it. Work from it, quote it exactly where that helps, and attribute what you take from it by title.
+
+${sections.join("\n\n")}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -525,7 +701,7 @@ export async function buildScopedPrompt(scope: PromptScope): Promise<string> {
     console.error(`[crm/ai] ${scope.type} context failed to load`, err);
     context = `\n\n---\n\nThe record context for this ${scope.type} could not be loaded. Say so if the question depends on it rather than answering from memory.`;
   }
-  return withKnowledge(context);
+  return await withKnowledge(context);
 }
 
 /**
@@ -534,7 +710,7 @@ export async function buildScopedPrompt(scope: PromptScope): Promise<string> {
  * context, which is what land scoring wants when it is not scoped to anyone.
  */
 export async function buildSystemPrompt(clientId?: string | null): Promise<string> {
-  if (!clientId) return withKnowledge("");
+  if (!clientId) return await withKnowledge("");
   return buildScopedPrompt({ type: "client", id: clientId });
 }
 

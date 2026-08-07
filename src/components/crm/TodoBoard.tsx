@@ -41,7 +41,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Markdown } from "@/components/Markdown";
 import { AiSuggestCards } from "./AiSuggestCards";
-import { AttachButton, useAttachImages } from "./AttachImages";
+import { AttachButton, useAttachFiles } from "./AttachFiles";
 import { apiDelete, apiDeleteJson, apiGet, apiPatch, apiPost, qs } from "./api";
 // The avatar is the SHARED one, hashed from the address, not a status-coloured
 // chip. One person is one colour everywhere — on a card, in a thread, in the
@@ -802,7 +802,7 @@ function CardDialog({
   // notes is usually opened to READ them.
   const [preview, setPreview] = useState(Boolean(todo.notes?.trim()));
   const notesBox = useRef<HTMLTextAreaElement>(null);
-  const attach = useAttachImages({ value: notes, onChange: setNotes, fieldRef: notesBox });
+  const attach = useAttachFiles({ value: notes, onChange: setNotes, fieldRef: notesBox });
 
   const [subtasks, setSubtasks] = useState<CrmSubtask[]>([]);
   const [subtaskError, setSubtaskError] = useState("");

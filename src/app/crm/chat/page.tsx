@@ -11,6 +11,8 @@ import { ChatRoom } from "@/components/crm/ChatRoom";
 import { RecordHeader } from "@/components/crm/RecordHeader";
 import { getCrmPageUser } from "@/lib/crm/access";
 import { getChannel, lastReadAt, listChannels, listMessages } from "@/lib/crm/chat";
+import { documentIdsIn } from "@/lib/crm/documents";
+import { listDocumentsByIds } from "@/lib/crm/knowledge-docs";
 import { backfillPreviews, getCachedPreviews, urlsIn } from "@/lib/crm/unfurl";
 import { publish } from "@/lib/crm/chat-bus";
 import { officeTimeZone } from "@/lib/crm/tz";
@@ -49,7 +51,11 @@ export default async function ChatPage() {
   // Rendered with the page rather than fetched per message on mount: fifty
   // messages would otherwise be fifty round trips before anything looked right.
   const urls = [...new Set(messages.flatMap((m) => urlsIn(m.body)))];
-  const previews = await getCachedPreviews(urls).catch(() => []);
+  const documentIds = [...new Set(messages.flatMap((m) => documentIdsIn(m.body)))];
+  const [previews, documents] = await Promise.all([
+    getCachedPreviews(urls).catch(() => []),
+    listDocumentsByIds(documentIds).catch(() => []),
+  ]);
 
   // The same self-heal the API route does, because THIS is the path a first
   // page load takes — without it, a preview whose cache row was cleared would
@@ -64,7 +70,7 @@ export default async function ChatPage() {
       <RecordHeader
         eyebrow="Team"
         title="Chat"
-        intro="The whole office, in one room. Paste screenshots, drop links, and type @ai to ask the assistant — it has read the memorandum and knows our deal."
+        intro="The whole office, in one room. Paste screenshots, drop links, and type @ to reach the assistant — it has read the memorandum and knows our deal. Drop a PDF or a Word file in and it will read that too; teach it one for good on the Knowledge page."
       />
       <section className="section">
         <div className="container-x">
@@ -73,6 +79,7 @@ export default async function ChatPage() {
               channel: summary,
               messages,
               previews,
+              documents,
               viewer: user.sub,
               last_read_at: readAt,
             }}

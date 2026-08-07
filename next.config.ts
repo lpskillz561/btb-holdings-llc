@@ -16,6 +16,14 @@ const nextConfig: NextConfig = {
   // inside the container, so the loader's join() finds them unchanged.
   outputFileTracingIncludes: {
     "/api/crm/**": ["./src/lib/crm/knowledge/**/*.md"],
+    // The Knowledge page reads the same directory — `skillStatus()` is what
+    // draws the "house knowledge base: N files, loaded" line, and the loud red
+    // panel when it is not. Listed separately rather than relied upon: the
+    // traced files land in the standalone output at one shared path, so in
+    // practice either entry alone puts them there, and a page that silently
+    // depends on another route's trace is one refactor from reporting that the
+    // knowledge base is missing on a build where it is present.
+    "/crm/knowledge/**": ["./src/lib/crm/knowledge/**/*.md"],
   },
 };
 

@@ -67,6 +67,11 @@ const SECTIONS = [
   // With the board rather than filed with the documents: what is on today and
   // what was said yesterday is work-in-hand, not a view of the book.
   { href: "/crm/meetings", label: "Meetings", icon: "calendar" },
+  // Directly under Chat, because that is where most people will meet it: you
+  // drop a PDF into the room, the assistant reads it, and the card under the
+  // message offers to teach it. This is the same set of documents with room to
+  // read the note first. See lib/crm/knowledge-docs.ts.
+  { href: "/crm/knowledge", label: "Knowledge", icon: "book" },
   // The deck library. Note the href — /crm/presentATIONS is ours; /crm/present
   // is the client-facing deck and carries no chrome at all. See lib/crm/routes.
   { href: "/crm/presentations", label: "Presentations", icon: "slides" },
@@ -100,6 +105,10 @@ const ICON_PATHS: Record<IconName, string> = {
   // A speech bubble with a tail. Deliberately unlike `board` (a column grid) —
   // they sit two apart in the rail and both are places the team writes things.
   chat: "M20.5 12.5a7.5 7.5 0 0 1-7.5 7.5H8l-4.5 3v-5A7.5 7.5 0 0 1 8 5h5a7.5 7.5 0 0 1 7.5 7.5z",
+  // An open book. Distinct from `doc` (a single sheet with a folded corner),
+  // which sits four below it and means Proposals: one document is a thing you
+  // send, and a book is a thing the assistant has read.
+  book: "M12 6.5C10.5 5 8.5 4.5 4 4.5v13c4.5 0 6.5.5 8 2 1.5-1.5 3.5-2 8-2v-13c-4.5 0-6.5.5-8 2zM12 6.5v13",
   // An upright cabinet with a screen — distinct from `slides` (a projector
   // screen on a stand) at rail size, which matters because the two sit next to
   // each other and a deck and a machine are not the same thing.

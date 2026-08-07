@@ -262,6 +262,21 @@ export const MEETING_SOURCES = ["manual", "notetaker", "calendar"] as const;
 export type MeetingSource = (typeof MEETING_SOURCES)[number];
 
 /**
+ * How far an uploaded document has got through being learned.
+ *
+ * This is the LEARNING lifecycle and nothing else. Whether the resulting note
+ * is actually in the AI's prompt is a separate fact — `active_at` on the row —
+ * for the same reason `archived_at` is not a proposal status: folding the two
+ * together would erase that a document was read and understood but deliberately
+ * left out of the knowledge base.
+ *
+ * `failed` is worth its own value rather than an empty `ready`: an unreadable
+ * scan and a document nobody has got to yet need different things doing.
+ */
+export const DOCUMENT_STATUSES = ["pending", "learning", "ready", "failed"] as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+
+/**
  * Columns on the shared kanban board, in board order.
  *
  * Three, not five. A board the whole office shares is only useful if a card's
@@ -929,4 +944,10 @@ export const LABELS = {
     notetaker: "AI notetaker",
     calendar: "Calendar sync",
   } satisfies Record<MeetingSource, string>,
+  documentStatus: {
+    pending: "Waiting to be read",
+    learning: "Being read",
+    ready: "Read",
+    failed: "Could not be read",
+  } satisfies Record<DocumentStatus, string>,
 } as const;

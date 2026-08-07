@@ -25,6 +25,7 @@ import {
   CONTACT_ROLES,
   CONTRACT_STATUSES,
   CONTRACT_TYPES,
+  DOCUMENT_STATUSES,
   ENTITY_TYPES,
   HEALTHS,
   BUILD_METHODS,
@@ -1027,6 +1028,61 @@ const TABLES: TableDef[] = [
     ],
     indexes: [
       "CREATE INDEX IF NOT EXISTS crm_attachments_created_idx ON crm_attachments (created_at DESC)",
+    ],
+  },
+  // Documents the assistant learns from. A SEPARATE table from crm_attachments,
+  // and that is the point rather than an accident: an attachment is an image and
+  // `Markdown.tsx` renders `![](…)` for any attachment id it validates, so a PDF
+  // in that table would render as a broken picture the first time someone pasted
+  // one. Keeping them apart is what keeps the images-only invariant true, which
+  // is what makes the Markdown image rule safe.
+  //
+  // The row holds three separable things and they have different lifetimes:
+  // the FILE (storage_key, in S3), the TEXT pulled out of it (text_body), and
+  // the NOTE the model wrote from that text (skill_md). Only the last reaches a
+  // prompt, and only when `active_at` is set.
+  {
+    name: "crm_documents",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["storage_key", "TEXT NOT NULL"],
+      ["content_type", "TEXT NOT NULL"],
+      ["byte_size", "BIGINT NOT NULL DEFAULT 0"],
+      ["file_name", "TEXT"],
+      // What it is called in the library. Seeded from the file name and then
+      // hand-editable, because "Aragona-142TC165-FINAL(2).pdf" is not a title.
+      ["title", "TEXT NOT NULL DEFAULT ''"],
+      // The learning lifecycle only — see DOCUMENT_STATUSES in ./types.
+      ["status", "TEXT NOT NULL DEFAULT 'pending'"],
+      ["error", "TEXT"],
+      // The extracted text. Stored because re-extracting means re-downloading
+      // the object and re-running a PDF parser to answer a question the row
+      // already knows, and because it is what a re-learn runs against.
+      ["text_body", "TEXT"],
+      ["extracted_chars", "BIGINT NOT NULL DEFAULT 0"],
+      // The note the model wrote. NOT hand-editable through the generic PATCH
+      // path, on the same principle as crm_meetings.summary_md and
+      // crm_parks.area_analysis: an editable AI artifact stops being a record of
+      // what the model said, and the model stamp beside it becomes a lie.
+      ["skill_md", "TEXT"],
+      ["skill_model", "TEXT"],
+      ["learned_at", "TEXT"],
+      // Whether the note is IN the assistant's prompt. A timestamp rather than a
+      // status value, for the reason `archived_at` is not a proposal status: a
+      // document that was read and understood and then deliberately left out is
+      // a different fact from one nobody has got to, and folding them into one
+      // column erases the first.
+      ["active_at", "TEXT"],
+      ["activated_by", "TEXT"],
+      ["uploaded_by", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    checks: [{ column: "status", values: DOCUMENT_STATUSES }],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_documents_created_idx ON crm_documents (created_at DESC)",
+      // The read path the prompt takes on every AI call: the active notes, in a
+      // stable order. Partial, because the active set is the small one.
+      "CREATE INDEX IF NOT EXISTS crm_documents_active_idx ON crm_documents (active_at) WHERE active_at IS NOT NULL",
     ],
   },
   {

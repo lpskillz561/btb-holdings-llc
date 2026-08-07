@@ -31,7 +31,7 @@ import {
   withoutAttachmentMarkdown,
 } from "@/lib/crm/attachments";
 import { apiGet, apiPost, qs } from "./api";
-import { AttachButton, useAttachImages } from "./AttachImages";
+import { AttachButton, useAttachFiles } from "./AttachFiles";
 import { ErrorNote } from "./ui";
 
 type ScopeType = "global" | "client" | "proposal" | "contract";
@@ -126,7 +126,7 @@ export function AskAi({ aiEnabled }: { aiEnabled: boolean }) {
   // way to the model — see toModelMessages in lib/crm/advisor.ts — so the image
   // is both a thing the model looks at and a thing that stays in the visible
   // transcript. One storage path, no second concept of "an attachment".
-  const attach = useAttachImages({ value: input, onChange: setInput, fieldRef: inputRef });
+  const attach = useAttachFiles({ value: input, onChange: setInput, fieldRef: inputRef });
 
   // Cmd/Ctrl+K anywhere in the CRM. Bound on the window rather than a field so
   // it works without the panel having focus, which is the whole point of it.

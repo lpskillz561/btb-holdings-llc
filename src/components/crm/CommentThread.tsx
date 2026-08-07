@@ -30,7 +30,7 @@ import { Markdown } from "@/components/Markdown";
 import { fmtAgo, fmtDate } from "@/lib/crm/format";
 import type { CrmTodoComment } from "@/lib/crm/todos";
 import { apiDelete, apiGet, apiPost } from "./api";
-import { AttachButton, useAttachImages } from "./AttachImages";
+import { AttachButton, useAttachFiles } from "./AttachFiles";
 import { ErrorNote, TextArea } from "./ui";
 import type { BoardUser } from "./TodoBoard";
 
@@ -130,7 +130,7 @@ export function CommentThread({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const box = useRef<HTMLTextAreaElement>(null);
-  const attach = useAttachImages({ value: draft, onChange: setDraft, fieldRef: box });
+  const attach = useAttachFiles({ value: draft, onChange: setDraft, fieldRef: box });
 
   const byEmail = useMemo(
     () => new Map(users.map((u) => [u.email.toLowerCase(), u])),

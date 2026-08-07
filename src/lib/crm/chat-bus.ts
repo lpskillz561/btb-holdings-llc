@@ -20,6 +20,7 @@
 
 import { EventEmitter } from "node:events";
 import type { CrmChatMessage } from "./chat";
+import type { CrmDocumentSummary } from "./documents";
 import type { LinkPreview } from "./unfurl";
 
 export type ChatEvent =
@@ -27,6 +28,13 @@ export type ChatEvent =
   | { type: "update"; channelId: string; message: CrmChatMessage }
   | { type: "delete"; channelId: string; messageId: string }
   | { type: "preview"; channelId: string; messageId: string; preview: LinkPreview }
+  // A document finished being read, or was adopted or withdrawn. NOT scoped to a
+  // channel, unlike everything else here: the same document can be linked from
+  // several messages in several rooms and from the library page, and the browser
+  // updates every card carrying that id. Scoping it would mean the card that
+  // prompted the upload updating and its copy two rooms over sitting at "being
+  // read" forever.
+  | { type: "document"; document: CrmDocumentSummary }
   | { type: "typing"; channelId: string; actor: string };
 
 const KEY = Symbol.for("btb.chat.bus");

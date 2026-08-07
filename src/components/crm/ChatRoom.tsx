@@ -27,22 +27,46 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Markdown } from "@/components/Markdown";
 import { fmtAgo } from "@/lib/crm/format";
 import { withoutAttachmentMarkdown } from "@/lib/crm/attachments";
+import {
+  documentIdsIn,
+  withoutDocumentMarkdown,
+  type CrmDocumentSummary,
+} from "@/lib/crm/documents";
 import { dayKeyInTz } from "@/lib/crm/tz";
 import type { CrmChatMessage, ChannelSummary } from "@/lib/crm/chat";
 import { apiDelete, apiGet, apiPost } from "./api";
-import { AttachButton, useAttachImages } from "./AttachImages";
+import { AttachButton, useAttachFiles } from "./AttachFiles";
 import { Avatar } from "./CommentThread";
+import { DocumentCard } from "./DocumentCard";
 import { EmojiPicker, QUICK_REACTIONS } from "./EmojiPicker";
 import { LinkCard, type PreviewData } from "./LinkCard";
+import { MentionMenu, useMentionMenu } from "./MentionMenu";
 import { ErrorNote } from "./ui";
 import type { BoardUser } from "./TodoBoard";
 
 const AI_AUTHOR = "ai@btbholdingsllc.com";
 
+/**
+ * Does this draft summon the assistant?
+ *
+ * The SAME expression as `mentionsAi` in lib/crm/chat-ai.ts, and the two must
+ * stay identical: this one decides whether the composer says "the assistant will
+ * answer", and that one decides whether it actually does. A composer that
+ * promises an answer nobody gets is worse than no indicator at all.
+ *
+ * It is duplicated rather than imported because chat-ai.ts is server-only — it
+ * pulls in the OpenAI client, the S3 client and the whole prompt layer, none of
+ * which belongs in a chat bundle.
+ */
+function summonsAi(body: string): boolean {
+  return /(^|[\s(>*_`])@ai\b/i.test(body);
+}
+
 interface Payload {
   channel: ChannelSummary;
   messages: CrmChatMessage[];
   previews: PreviewData[];
+  documents: CrmDocumentSummary[];
   viewer: string;
   last_read_at: string | null;
 }
@@ -118,6 +142,9 @@ export function ChatRoom({
   const [previews, setPreviews] = useState<Map<string, PreviewData>>(
     () => new Map(initial.previews.map((p) => [p.url, p])),
   );
+  const [documents, setDocuments] = useState<Map<string, CrmDocumentSummary>>(
+    () => new Map(initial.documents.map((d) => [d.id, d])),
+  );
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -128,7 +155,42 @@ export function ChatRoom({
   const box = useRef<HTMLTextAreaElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const bottom = useRef<HTMLDivElement>(null);
-  const attach = useAttachImages({ value: draft, onChange: setDraft, fieldRef: box });
+
+  const rememberDocument = useCallback((row: CrmDocumentSummary) => {
+    setDocuments((m) => new Map(m).set(row.id, row));
+  }, []);
+
+  const attach = useAttachFiles({
+    value: draft,
+    onChange: setDraft,
+    fieldRef: box,
+    // The chat room is the one surface that takes documents. A card description
+    // or a comment silently uploading a counterparty's PDF into the assistant's
+    // reading queue would be a feature nobody asked that surface for.
+    documents: true,
+    // Held the moment the upload returns, so the card under the message is there
+    // saying "being read" rather than appearing several seconds later out of the
+    // stream. The row it is given is the pending one; the `document` event
+    // replaces it when the read finishes.
+    onDocument: (row) =>
+      rememberDocument({
+        ...row,
+        skill_md: null,
+        skill_model: null,
+        learned_at: null,
+        error: null,
+        extracted_chars: 0,
+        activated_by: null,
+        uploaded_by: viewer,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
+  });
+
+  // The `@` menu. It watches the caret rather than the value, so it opens on a
+  // click into an existing `@word` as well as on typing one.
+  const mentions = useMentionMenu({ value: draft, onChange: setDraft, fieldRef: box, users });
+  const summoning = summonsAi(draft);
 
   const channelId = initial.channel.id;
   const byEmail = useMemo(
@@ -229,6 +291,14 @@ export function ChatRoom({
       const { preview } = JSON.parse(e.data) as { preview: PreviewData };
       setPreviews((m) => new Map(m).set(preview.url, preview));
     });
+    // NOT filtered by channel, unlike everything above: a document event has no
+    // channel. The same file can be linked from several rooms and from the
+    // library, and every card carrying that id should stop saying "being read"
+    // at the same moment. See the note on ChatEvent in lib/crm/chat-bus.ts.
+    source.addEventListener("document", (e) => {
+      const { document: row } = JSON.parse(e.data) as { document: CrmDocumentSummary };
+      setDocuments((m) => new Map(m).set(row.id, row));
+    });
     source.addEventListener("ready", () => setLive(true));
     source.onerror = () => {
       // EventSource reconnects on its own; this only drives the banner. A deploy
@@ -247,7 +317,7 @@ export function ChatRoom({
     if (!body || sending || attach.uploading > 0) return;
     setSending(true);
     setError("");
-    const summoned = /(^|[\s(>*_`])@ai\b/i.test(body);
+    const summoned = summonsAi(body);
     try {
       const row = await apiPost<CrmChatMessage>(
         `/api/crm/chat/channels/${channelId}/messages`,
@@ -367,10 +437,11 @@ export function ChatRoom({
               <p className="mt-3 text-sm font-medium text-ink-900">
                 Nobody has said anything yet.
               </p>
-              <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-ink-600">
+              <p className="mx-auto mt-1 max-w-md text-sm leading-relaxed text-ink-600">
                 This is the whole team&rsquo;s room. Paste a screenshot, drop a Crexi link, or type{" "}
-                <span className="rounded bg-sf-100 px-1 font-medium text-sf-700">@ai</span> to ask
-                the assistant a question — it has read the memorandum and knows our deal.
+                <span className="rounded bg-sf-100 px-1 font-medium text-sf-700">@</span> to reach
+                the assistant — it has read the memorandum and knows our deal. Drop a PDF or a Word
+                file in and it will read that too.
               </p>
             </div>
           </div>
@@ -418,6 +489,8 @@ export function ChatRoom({
                   person={byEmail.get(message.author_email.toLowerCase())}
                   users={users}
                   previews={previews}
+                  documents={documents}
+                  onDocumentChange={rememberDocument}
                   onReact={react}
                   onDelete={remove}
                   onOpenPicker={(rect) => setPicker({ messageId: message.id, rect })}
@@ -452,19 +525,71 @@ export function ChatRoom({
         {error && <ErrorNote>{error}</ErrorNote>}
         {attach.error && <ErrorNote>{attach.error}</ErrorNote>}
 
+        {/* The summoned banner.
+            The one thing this had to fix: `@ai` in the middle of a sentence is
+            three grey characters, and whether the assistant is about to answer
+            is the single most consequential fact about the message being
+            written. It sits ABOVE the box rather than inside it so it cannot be
+            mistaken for placeholder text, and it is the violet gradient, which
+            in this app means AI and nothing else. */}
+        {summoning && (
+          <div className="mb-1.5 flex items-center gap-2 rounded-t-xl bg-grad-ai px-3 py-1.5 text-xs font-medium text-white shadow-glow">
+            <span aria-hidden className="text-sm leading-none">
+              ✦
+            </span>
+            <span>The assistant will answer this message.</span>
+            <button
+              type="button"
+              // Removes the summons rather than the message. Someone who typed
+              // `@ai` by reflex and then thought better of it should not have to
+              // hunt for three characters in the middle of a paragraph.
+              onClick={() => {
+                setDraft((d) => d.replace(/(^|[\s(>*_`])@ai\b/gi, "$1").replace(/ {2,}/g, " ").trimStart());
+                box.current?.focus();
+              }}
+              className="ml-auto rounded-pill px-2 py-0.5 text-[0.7rem] font-semibold text-white/90 transition hover:bg-white/20 hover:text-white"
+            >
+              Don&rsquo;t ask
+            </button>
+          </div>
+        )}
+
         <div
           className={`rounded-2xl border bg-card transition ${
-            attach.dragging ? "border-sf-400 ring-4 ring-sf-500/15" : "border-ink-300"
+            attach.dragging
+              ? "border-sf-400 ring-4 ring-sf-500/15"
+              : summoning
+                ? "border-[rgb(var(--ai-to)/0.55)] ring-4 ring-[rgb(var(--ai-to)/0.12)]"
+                : "border-ink-300"
           }`}
         >
           <textarea
             ref={box}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              mentions.sync();
+            }}
+            // The caret moves for reasons other than typing — a click into an
+            // existing `@word`, an arrow key, a selection. The menu tracks the
+            // CARET, not the value, so it has to be re-synced on all of them.
+            onClick={() => mentions.sync()}
+            onKeyUp={(e) => {
+              if (e.key.startsWith("Arrow") || e.key === "Home" || e.key === "End") mentions.sync();
+            }}
+            // Closes on blur, so clicking away does not leave a fixed panel
+            // floating over the room. The menu's own rows use `onMouseDown` with
+            // preventDefault precisely so that picking one does not blur first.
+            onBlur={() => mentions.close()}
             onPaste={attach.onPaste}
             onDrop={attach.onDrop}
             {...attach.dragProps}
             onKeyDown={(e) => {
+              // The mention menu gets first refusal, and this ordering is the
+              // whole reason it can exist: Enter sends in this composer, so a
+              // menu that did not claim the key would post "@sar" as a message
+              // the moment someone pressed Enter to choose Sarah.
+              if (mentions.handleKeyDown(e)) return;
               // Enter sends, Shift+Enter is a newline. The opposite of a card
               // comment, and deliberately: chat is one line at a time, and the
               // people using this expect Enter to send because every other chat
@@ -476,13 +601,48 @@ export function ChatRoom({
             }}
             rows={2}
             maxLength={8000}
-            placeholder="Write a message…  @ai asks the assistant · paste a screenshot straight in"
+            placeholder="Write a message…  type @ to reach the assistant or a colleague · paste a screenshot or drop a PDF straight in"
             aria-label="Write a message"
             className="w-full resize-none bg-transparent px-3.5 py-2.5 text-sm text-ink-900 outline-none placeholder:text-ink-400"
           />
           <div className="flex items-center gap-1 border-t border-ink-200 px-2 py-1.5">
             <EmojiButton onPick={(emoji) => setDraft((d) => `${d}${emoji}`)} />
-            <AttachButton onPick={attach.pick} uploading={attach.uploading} label="Image" />
+            <AttachButton
+              onPick={attach.pick}
+              uploading={attach.uploading}
+              label="Attach"
+              documents
+            />
+            {/* The discoverable half of the pair. The menu opens on `@`, and a
+                button that types the character is how someone who has never seen
+                it finds out. Violet, because what it summons is the AI. */}
+            <button
+              type="button"
+              onClick={() => {
+                const el = box.current;
+                const at = el?.selectionStart ?? draft.length;
+                const before = draft.slice(0, at);
+                // A space first when there is a word before the caret: the
+                // server's `@ai` test is word-boundaried, so "done@ai" would be
+                // typed happily and then never answered.
+                const lead = before && !/\s$/.test(before) ? " " : "";
+                const next = `${before}${lead}@${draft.slice(at)}`;
+                setDraft(next);
+                const caret = at + lead.length + 1;
+                queueMicrotask(() => {
+                  el?.focus();
+                  el?.setSelectionRange(caret, caret);
+                  mentions.sync();
+                });
+              }}
+              className="sf-btn-ghost text-xs"
+              title="Mention the assistant or a colleague"
+            >
+              <span aria-hidden className="text-sm font-semibold leading-none">
+                @
+              </span>
+              Mention
+            </button>
             <span className="ml-auto hidden text-[0.7rem] text-ink-500 sm:block">
               Enter sends · Shift+Enter for a new line
             </span>
@@ -490,13 +650,23 @@ export function ChatRoom({
               type="button"
               onClick={() => void send()}
               disabled={!draft.trim() || sending || attach.uploading > 0}
-              className="sf-btn-brand ml-2"
+              className={`ml-2 ${summoning ? "sf-btn-ai" : "sf-btn-brand"}`}
             >
-              {sending ? "Sending…" : "Send"}
+              {sending ? "Sending…" : summoning ? "Ask the assistant" : "Send"}
             </button>
           </div>
         </div>
       </div>
+
+      {mentions.open && mentions.anchor && (
+        <MentionMenu
+          targets={mentions.targets}
+          active={mentions.active}
+          anchor={mentions.anchor}
+          onPick={mentions.pick}
+          onHover={mentions.setActive}
+        />
+      )}
 
       {picker && (
         <EmojiPicker
@@ -562,6 +732,8 @@ function Message({
   person,
   users,
   previews,
+  documents,
+  onDocumentChange,
   onReact,
   onDelete,
   onOpenPicker,
@@ -575,6 +747,8 @@ function Message({
   person: BoardUser | undefined;
   users: BoardUser[];
   previews: Map<string, PreviewData>;
+  documents: Map<string, CrmDocumentSummary>;
+  onDocumentChange: (next: CrmDocumentSummary) => void;
   onReact: (messageId: string, emoji: string) => void;
   onDelete: (messageId: string) => void;
   onOpenPicker: (rect: DOMRect) => void;
@@ -584,8 +758,13 @@ function Message({
     ? "Assistant"
     : person?.name?.trim() || message.author_email.split("@")[0];
 
+  const documentIds = useMemo(() => documentIdsIn(message.body), [message.body]);
+
   // Mentions are bolded rather than wrapped in HTML — the Markdown renderer is
   // configured for prose and injecting HTML would mean trusting message text.
+  //
+  // The document links come OUT first: each one gets a card below, and leaving
+  // the link in as well prints the file name twice, three pixels apart.
   const rendered = useMemo(() => {
     const byHandle = new Map<string, string>();
     for (const u of users) {
@@ -593,7 +772,7 @@ function Message({
       const local = u.email.split("@")[0]?.toLowerCase();
       if (local) byHandle.set(local, u.name?.trim() || u.email);
     }
-    return message.body.replace(
+    return withoutDocumentMarkdown(message.body).replace(
       /@([A-Za-z0-9._%+-]+(?:@[A-Za-z0-9.-]+\.[A-Za-z]{2,})?)/g,
       (whole, handle: string) => {
         if (handle.toLowerCase() === "ai") return "**@ai**";
@@ -650,9 +829,23 @@ function Message({
           </div>
         )}
 
-        <div className="mt-0.5 text-sm leading-relaxed text-ink-800">
-          <Markdown>{rendered}</Markdown>
-        </div>
+        {/* A message that was ONLY a dropped document has nothing left after the
+            link is stripped, and an empty paragraph above the card is a stray
+            gap rather than a message. */}
+        {rendered.trim() && (
+          <div className="mt-0.5 text-sm leading-relaxed text-ink-800">
+            <Markdown>{rendered}</Markdown>
+          </div>
+        )}
+
+        {documentIds.map((id) => (
+          <DocumentCard
+            key={id}
+            document={documents.get(id)}
+            onChange={onDocumentChange}
+            compact
+          />
+        ))}
 
         {urls.map((url) => {
           const preview = previews.get(url);

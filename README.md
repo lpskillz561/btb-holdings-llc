@@ -23,6 +23,7 @@ importer that feeds it is in `etl/`, deployed separately. See
 | **Overview** | `/crm` | Pipeline by stage, open vs. contracted value, units in service, the client list |
 | **Client card** | `/crm/clients/[id]` | Everything about one account, across eight tabs |
 | **Meetings** | `/crm/meetings` | Calls on a month calendar, and the ones that arrived without a client on them |
+| **Knowledge** | `/crm/knowledge` | Documents the assistant has read, and which of them it has been taught |
 | **Proposals** | `/crm/proposals` | Every proposal, its frozen figures, and where it stands |
 | **Contracts** | `/crm/contracts` | What is committed, and what is still waiting on a signature |
 | **Our land** | `/crm/land` | The parks **BTB** owns, the pads on them, and how much capacity is earning |
@@ -185,16 +186,19 @@ there.
 
 ### AI
 
-Four surfaces — proposal drafting, land-fit assessment, the client advisor, and
-an **Ask AI** panel that rides on every `/crm` page — all routed through
-`buildScopedPrompt` in `src/lib/crm/ai.ts`. Every prompt is three layers:
+Five surfaces — proposal drafting, land-fit assessment, the client advisor, the
+team chat room, and an **Ask AI** panel that rides on every `/crm` page — all
+routed through `buildScopedPrompt` in `src/lib/crm/ai.ts`. Every prompt is four
+layers:
 
 1. `BASE_PROMPT` — who the model is and how it writes. Short.
 2. **`src/lib/crm/knowledge/SKILL.md`** — the house knowledge base: the trust /
    series-LLC structure, the authorities behind the tax position, the deal
    terms, the risks, and the hard rules. Transcribed from `docs/`, which is the
    source of truth and is deliberately not in git.
-3. Record context — the client, proposal, contract or whole workspace the person
+3. **Learned documents** — notes the model has written on files staff uploaded
+   and then *adopted*. See **Knowledge** below.
+4. Record context — the client, proposal, contract or whole workspace the person
    is actually looking at, rendered as already-formatted facts.
 
 The doctrine lives in exactly one place. Add to `SKILL.md`, never to a prompt
@@ -203,6 +207,24 @@ concatenated in filename order. **A missing knowledge base is a hard failure by
 design** (`src/lib/crm/skill.ts`): the risk it guards against is not downtime, it
 is the model answering fluently from its own priors about "tiny home tax
 strategies" and describing a deal BTB does not sell.
+
+### Knowledge — `/crm/knowledge`
+
+Upload a PDF, a Word `.docx` or plain text and the assistant reads it and writes
+a note on it in the register of `SKILL.md`. **A person then adopts that note**,
+and only then does it join the prompt on every AI surface. Layer 2 outranks
+layer 3 explicitly, and every note is attributed to its document, so a
+prospect's marketing PDF can never be quoted back to a taxpayer's CPA as if it
+were our own legal opinion. The note's most valuable section is the one naming
+where the document disagrees with the house view, or with itself.
+
+Documents can also be dropped straight into the chat room: the card under the
+message shows the read progress and carries the same one-click adopt. A document
+attached to a message is read *in full* for that answer whether or not it has
+been adopted — reading something put in front of you is a different act from
+knowing it permanently. Text extraction is `unpdf` and `fflate`, both pure
+JavaScript; **there is no OCR**, so a scan extracts to nothing and the row says
+so rather than pretending.
 
 The Ask AI panel is mounted from `app/crm/layout.tsx`, so it survives navigation,
 and it scopes itself from the URL — a client card asks about that client, a
