@@ -449,7 +449,9 @@ function ProspectRowView({
           </Badge>
         </td>
         <td className="whitespace-nowrap">{fmtDate(row.created_at)}</td>
-        <td>
+        {/* nowrap: the reorder column costs the table 40px, and without this the
+            comment count is the first thing to break onto two lines. */}
+        <td className="whitespace-nowrap">
           <button type="button" onClick={toggle} className="sf-btn-neutral py-0.5 text-xs">
             {row.comment_count > 0 ? `${row.comment_count} comment${row.comment_count === 1 ? "" : "s"}` : "Discuss"}
             {row.last_comment_at ? (
