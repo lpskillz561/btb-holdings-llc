@@ -1311,6 +1311,16 @@ text selected and swallows the drag the browser gives the listing link for free.
 The up/down arrows are not decoration — HTML5 drag does not fire on touch at
 all, the same reason the board's move arrows exist.
 
+**A listing is DELETED, not archived, and the parks DELETE guards on pads.**
+Archive-never-delete is a rule about proposals and contracts, where folding
+"archived" into a status would erase that a withdrawn document had been
+accepted; a pasted link the room dismissed has no such history, and `deleteRow`
+records the deletion in the activity feed either way. The guard is the part to
+keep: `crm_pads` cascades from `crm_parks` and `crm_units.pad_id` is ON DELETE
+SET NULL, so deleting a built-out park would take its pads and leave the homes
+standing on them attached to nothing. `/api/crm/parks/[id]` refuses with 409
+while any pad exists. Comments DO cascade, which is what the confirmation says.
+
 **Two caveats are load-bearing and must not be dropped.** A deduction many times
 the cash only works because the note is **recourse** — §465 would otherwise limit
 it to the deposit and the leverage collapses. And **§461(l)** caps business loss
