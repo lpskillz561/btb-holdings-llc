@@ -378,13 +378,21 @@ write-off on their record.
   that put every figure in `presentation.ts` to begin with. A track naming a
   slide that does not exist **throws** in `buildSlides` rather than silently
   rendering 7 of 8.
-  - `full` — all 17 slides. The follow-up call, and the call the CPA joins.
-  - `first-call` — 8 slides, and it **reorders**: the leverage slide moves ahead
+  - `full` — all 18 slides. The follow-up call, and the call the CPA joins.
+  - `first-call` — 9 slides, and it **reorders**: the leverage slide moves ahead
     of the structure and the authorities. On the full deck the room sits through
     six slides of doctrine before a single number, which is the pacing complaint
     that produced the track. The limits slide is **trimmed, not cut** — three of
     its six items (§461(l), recapture, placed-in-service) survive. A short deck
     that drops its own caveats is a worse deck, not a shorter one.
+  - **`qualifying` is second on the first call, and it is QUESTIONS, not the
+    `who` slide's criteria.** `who` tells a room what the buyer profile is; this
+    asks the room whether they are it, out loud, in the first three minutes —
+    which is both the qualification and the agenda, since each question carries
+    the reason it is being asked and every one of them is answered later in the
+    deck. Do not add a question the deck does not go on to answer, or it reads
+    as an interrogation. It is **not** in the full deck: by the follow-up these
+    are answered, and re-asking them in front of the CPA reads as a script.
   - The `"terms|sizes"` position resolves to the terms slide when the deck is
     sized to a client and the tier table otherwise, so the short deck always has
     one money slide and never shows the executed sample as if it were theirs.
@@ -516,7 +524,7 @@ unit row — the tooling is a calculator and a deck. Config is all SSM under
 slide; a `programmes` comparison slide appended to the **end** of the full
 tiny-home deck — the end, because a prospect holding one deal in their head
 stops following both if a second asset class arrives mid-pitch. The first-call
-deck is untouched: it is eight slides and tightly paced by design. The internal
+deck is untouched: it is tightly paced by design. The internal
 workbench is `/crm/equipment`, which keeps the Lightning chrome because it shows
 the gross-versus-capped comparison and the competitor notes, neither of which
 belongs on a shared screen.

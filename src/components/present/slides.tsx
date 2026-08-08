@@ -171,6 +171,46 @@ export function buildSlides(
   ];
   const limits = track === "full" ? LIMITS : LIMITS.filter((item) => item.firstCall);
 
+  // The qualifying questions, second slide on the first call.
+  //
+  // They are QUESTIONS rather than criteria, and that is the difference between
+  // this slide and "Who this is for". The `who` slide tells a room what the
+  // buyer profile is; this one asks the room whether they are it, out loud, in
+  // the first three minutes — which is also the only honest way to open a pitch
+  // whose answer for most people is "not this year". Each carries the reason it
+  // is being asked, so the prospect can see the shape of the next twenty minutes
+  // rather than sitting through six slides wondering where this goes.
+  //
+  // Every one of them is answered later in the deck. That is the ordering
+  // constraint on this list: do not add a question the deck does not then go on
+  // to answer, or it reads as an interrogation.
+  const QUALIFYING: { head: string; body: string }[] = [
+    {
+      head: "What are you trying to shelter this year, and how much of it?",
+      body: "Withholding, K-1 or Schedule C income, a gain, a Roth conversion. We size the deal from that number — the unit is priced at the write-off you need, not the other way round.",
+    },
+    {
+      head: "Is it this year's liability, or next year's?",
+      body: "The deduction lands in the year the unit is placed in service, not the year it is ordered. December order, March delivery, and it has moved a year. The date is what we work backwards from.",
+    },
+    {
+      head: "Filing single, or jointly?",
+      body: `§461(l) caps the business loss you can use against other income at ${fmtMoney(lossLimitation.currentSingleCents)} single and ${fmtMoney(lossLimitation.currentJointCents)} jointly for ${lossLimitation.currentYear}. The excess carries forward rather than disappearing — but it changes what year one is worth.`,
+    },
+    {
+      head: "How much cash are you prepared to put in?",
+      body: `The deposit is the only cash in this. The balance is a 0% note over ${years} years and the deduction is on the full price — that ratio is the product, and it is the second number we need from you.`,
+    },
+    {
+      head: "Do you want to be a landlord?",
+      body: "The useful answer is no. You own the home and nothing else — no land, no site to permit, no tenants, no calls. If you were hoping for a property to run, this is the wrong instrument.",
+    },
+    {
+      head: "Who is your CPA, and when can they join us?",
+      body: "They will test this, and we would rather that happened now than after you have signed. Everything we assert today comes with the authority it rests on attached.",
+    },
+  ];
+
   const slides: Slide[] = [
     {
       id: "title",
@@ -193,6 +233,42 @@ export function buildSlides(
             </p>
           ) : null}
         </div>
+      ),
+    },
+
+    {
+      id: "qualifying",
+      title: "What we'll ask you",
+      node: (
+        <Frame
+          eyebrow="Before we start"
+          title="The questions this turns on"
+          lede="This does useful work for a particular person in a particular year, and these are what decide it. Between them they are also the whole of the next twenty minutes."
+        >
+          <div className="grid grid-cols-2 gap-x-[3cqw] gap-y-[2.2cqh]">
+            {QUALIFYING.map(({ head, body }, i) => (
+              <div key={head} className="flex gap-[1.4cqw]">
+                {/* A fixed width, not `tabular-nums`: the serif face has
+                    oldstyle figures and no `tnum` feature, so "03" sets wider
+                    than "01" and the six questions would start at six slightly
+                    different x. */}
+                <p className="w-[2.4cqw] shrink-0 font-serif text-[1.15em] leading-none text-gold-500/70">
+                  {String(i + 1).padStart(2, "0")}
+                </p>
+                <div>
+                  <p className="text-[0.92em] font-semibold leading-snug text-paper-50">{head}</p>
+                  <p className="mt-[0.7cqh] text-[0.75em] leading-relaxed text-paper-50/60">
+                    {body}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="deck-note">
+            If the answers are not there, we will say so and stop. Nothing in this programme
+            works for someone without a large current-year liability.
+          </p>
+        </Frame>
       ),
     },
 

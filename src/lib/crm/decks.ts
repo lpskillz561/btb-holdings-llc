@@ -54,16 +54,34 @@ export const DECKS: Record<DeckTrack, DeckDefinition> = {
   "first-call": {
     track: "first-call",
     label: "First call",
-    blurb: "Eight slides. The hook, the asset, the money, the limits, the close.",
+    blurb: "Nine slides. The questions, the asset, the money, the limits, the close.",
     when:
-      "A first conversation with a qualified prospect. Leads with the numbers rather than the structure — the doctrine is answered when it is asked, not pre-empted.",
+      "A first conversation with a qualified prospect. Opens by asking whether they are one, then leads with the numbers rather than the structure — the doctrine is answered when it is asked, not pre-empted.",
     // The order is the argument. Problem before asset, and the LEVERAGE slide
     // before any doctrine: on the full deck the room sits through six slides of
     // structure and authority before it sees a single figure, which is the
     // pacing complaint that produced this track. The limits slide is never cut
     // — it is what earns the room, and a short deck that drops its own caveats
     // is a worse deck, not a shorter one.
-    slides: ["title", "problem", "asset", "leverage", "proforma", "terms|sizes", "limits", "close"],
+    //
+    // `qualifying` is second, and it is questions rather than the `who` slide's
+    // criteria. On a first call the room does not yet know what it is being
+    // shown; six questions with the reason each is asked is both the
+    // qualification and the agenda, and it is cheaper to find out in slide two
+    // than in slide eight. The full deck does not carry it — by the follow-up
+    // these are answered, and re-asking them in front of the CPA reads as a
+    // script.
+    slides: [
+      "title",
+      "qualifying",
+      "problem",
+      "asset",
+      "leverage",
+      "proforma",
+      "terms|sizes",
+      "limits",
+      "close",
+    ],
   },
   full: {
     track: "full",
