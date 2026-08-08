@@ -6,7 +6,7 @@
 // the same discussion — which is the point: deciding whether a parcel is worth
 // a million dollars is not a decision one person should make in their own inbox.
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { CrmParkComment, CrmPark } from "@/lib/crm/types";
 import {
   acresFromInput,
@@ -39,6 +39,100 @@ export interface ProspectRow extends CrmPark {
   last_comment_at: string | null;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Sorting                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Sorting is a VIEW, and the arranged order is the RECORD.
+ *
+ * Clicking a header sorts this browser's copy of the list and writes nothing:
+ * `sort_order` is shared with the whole office, and quietly rewriting everyone's
+ * arrangement because one person wanted to see the cheapest first is not
+ * something a column header should do. It is also why dragging is switched OFF
+ * while a column sort is on — a row dropped into a price-sorted view would
+ * persist a position that means nothing once the sort is cleared.
+ */
+type SortKey = "name" | "where" | "asking" | "acres" | "status" | "saved" | "discussion";
+type SortDir = "asc" | "desc";
+
+interface Column {
+  key: SortKey;
+  label: string;
+  /** What to compare. NULL is "not recorded" and sorts last in both directions. */
+  value: (r: ProspectRow) => string | number | null;
+  /** Which way the first click goes. Money, size and dates read biggest first. */
+  first: SortDir;
+  /** How the direction reads in the sentence above the table. */
+  hint: Record<SortDir, string>;
+}
+
+const COLUMNS: Column[] = [
+  {
+    key: "name",
+    label: "Listing",
+    value: (r) => r.name?.toLowerCase() || null,
+    first: "asc",
+    hint: { asc: "A to Z", desc: "Z to A" },
+  },
+  {
+    key: "where",
+    label: "Where",
+    value: (r) => [r.city, r.county, r.state].filter(Boolean).join(", ").toLowerCase() || null,
+    first: "asc",
+    hint: { asc: "A to Z", desc: "Z to A" },
+  },
+  {
+    key: "asking",
+    label: "Asking",
+    value: (r) => r.asking_price_cents,
+    first: "desc",
+    hint: { asc: "cheapest first", desc: "dearest first" },
+  },
+  {
+    key: "acres",
+    label: "Acres",
+    value: (r) => r.acres,
+    first: "desc",
+    hint: { asc: "smallest first", desc: "largest first" },
+  },
+  {
+    key: "status",
+    label: "Status",
+    value: (r) => r.status,
+    first: "asc",
+    hint: { asc: "A to Z", desc: "Z to A" },
+  },
+  {
+    key: "saved",
+    label: "Saved",
+    // An ISO string, so comparing it as text is comparing it as a date.
+    value: (r) => r.created_at || null,
+    first: "desc",
+    hint: { asc: "oldest first", desc: "newest first" },
+  },
+  {
+    key: "discussion",
+    label: "Discussion",
+    value: (r) => r.comment_count,
+    first: "desc",
+    hint: { asc: "quietest first", desc: "most discussed first" },
+  },
+];
+
+function compareBy(a: ProspectRow, b: ProspectRow, col: Column, dir: SortDir): number {
+  const av = col.value(a);
+  const bv = col.value(b);
+  // A listing with no asking price is not the cheapest one. Blanks go to the
+  // bottom whichever way the column is pointing.
+  if (av === null && bv === null) return 0;
+  if (av === null) return 1;
+  if (bv === null) return -1;
+  const cmp =
+    typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+  return dir === "asc" ? cmp : -cmp;
+}
+
 export function LandProspects({ initial }: { initial: ProspectRow[] }) {
   const [rows, setRows] = useState(initial);
   const [url, setUrl] = useState("");
@@ -52,10 +146,22 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
   const [fillNote, setFillNote] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
   const [listError, setListError] = useState("");
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
   // The list as it stood when the drag began. The rows reflow live under the
   // cursor, so this is both what a failed save is rolled back to and what tells
   // us whether anything actually moved.
   const beforeDrag = useRef<ProspectRow[] | null>(null);
+
+  // The column being sorted by, if any, and the list as it is being shown. With
+  // no sort the view IS the arranged list — same array, so an index into one is
+  // an index into the other and the drag handlers can use it directly.
+  const sorted = sort ? { col: COLUMNS.find((c) => c.key === sort.key)!, dir: sort.dir } : null;
+  const view = useMemo(
+    () => (sorted ? [...rows].sort((a, b) => compareBy(a, b, sorted.col, sorted.dir)) : rows),
+    // `sorted` is rebuilt every render; its two primitive parts are what matter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, sort?.key, sort?.dir],
+  );
 
   /**
    * Put a row at a position, and optionally tell the server.
@@ -65,6 +171,10 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
    * written once, when the drag ends.
    */
   function reorder(id: string, toIndex: number, persist: boolean) {
+    // Positions are indices into the arranged list. Under a column sort they
+    // would be indices into something else entirely, so the controls are hidden
+    // and this refuses as well — the two must not be able to disagree.
+    if (sort) return;
     const from = rows.findIndex((r) => r.id === id);
     if (from < 0) return;
     const to = Math.max(0, Math.min(rows.length - 1, toIndex));
@@ -270,10 +380,25 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
       ) : (
         <div className="sf-card overflow-hidden">
           <div className="flex flex-wrap items-baseline gap-x-3 border-b border-ink-200 px-3 py-2">
-            <p className="text-xs text-ink-600">
-              Drag a row by its handle to arrange the list, or use the arrows. The order is shared —
-              everyone sees the one you leave.
-            </p>
+            {sorted ? (
+              <p className="text-xs text-ink-600">
+                Sorted by <span className="font-semibold text-ink-800">{sorted.col.label}</span>,{" "}
+                {sorted.col.hint[sorted.dir]}. This is your view only — the shared order is
+                untouched, and dragging is off until you go back to it.{" "}
+                <button
+                  type="button"
+                  onClick={() => setSort(null)}
+                  className="link-underline font-semibold text-sf-600"
+                >
+                  Back to the arranged order
+                </button>
+              </p>
+            ) : (
+              <p className="text-xs text-ink-600">
+                Drag a row by its handle to arrange the list, or use the arrows. The order is shared
+                — everyone sees the one you leave. Click a column heading to sort your own view.
+              </p>
+            )}
             {listError ? <p className="text-xs text-err-700">{listError}</p> : null}
           </div>
           <table className="sf-table">
@@ -282,23 +407,53 @@ export function LandProspects({ initial }: { initial: ProspectRow[] }) {
                 <th className="w-8">
                   <span className="sr-only">Reorder</span>
                 </th>
-                <th>Listing</th>
-                <th>Where</th>
-                <th>Asking</th>
-                <th>Acres</th>
-                <th>Status</th>
-                <th>Saved</th>
-                <th>Discussion</th>
+                {COLUMNS.map((col) => {
+                  const active = sort?.key === col.key;
+                  return (
+                    <th
+                      key={col.key}
+                      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+                    >
+                      <button
+                        type="button"
+                        // Three states, not two: the third click gives the
+                        // arranged order back, which is the one people will
+                        // want and would otherwise have to reload for.
+                        onClick={() =>
+                          setSort((s) =>
+                            s?.key !== col.key
+                              ? { key: col.key, dir: col.first }
+                              : s.dir === col.first
+                                ? { key: col.key, dir: col.first === "asc" ? "desc" : "asc" }
+                                : null,
+                          )
+                        }
+                        title={
+                          active
+                            ? `Sorted ${col.hint[sort.dir]} — click to ${sort.dir === col.first ? "reverse" : "clear"}`
+                            : `Sort ${col.hint[col.first]}`
+                        }
+                        className={`inline-flex items-center gap-1 uppercase tracking-wide transition-colors hover:text-sf-700 ${
+                          active ? "text-sf-700" : "text-ink-600"
+                        }`}
+                      >
+                        {col.label}
+                        {active ? <Chevron dir={sort.dir === "asc" ? "up" : "down"} /> : null}
+                      </button>
+                    </th>
+                  );
+                })}
                 <th />
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, index) => (
+              {view.map((row, index) => (
                 <ProspectRowView
                   key={row.id}
                   row={row}
                   index={index}
-                  total={rows.length}
+                  total={view.length}
+                  arrangeable={sorted === null}
                   dragging={dragId === row.id}
                   onDragStart={() => {
                     beforeDrag.current = rows;
@@ -339,6 +494,7 @@ function ProspectRowView({
   row,
   index,
   total,
+  arrangeable,
   dragging,
   onDragStart,
   onDragEnter,
@@ -353,6 +509,8 @@ function ProspectRowView({
   row: ProspectRow;
   index: number;
   total: number;
+  /** False under a column sort: a position in that view is not a position. */
+  arrangeable: boolean;
   dragging: boolean;
   onDragStart: () => void;
   onDragEnter: () => void;
@@ -400,7 +558,7 @@ function ProspectRowView({
   return (
     <>
       <tr
-        draggable={armed}
+        draggable={armed && arrangeable}
         onDragStart={(e) => {
           e.dataTransfer.effectAllowed = "move";
           // Firefox will not start a drag at all without something on the
@@ -420,8 +578,11 @@ function ProspectRowView({
         }}
         className={dragging ? "opacity-40" : undefined}
       >
+        {/* The cell stays under a column sort so the table does not jump a
+            column's width when someone clicks a heading; only the controls go,
+            because a handle that cannot be dragged is a broken affordance. */}
         <td className="pr-0">
-          <div className="flex items-center gap-1">
+          <div className={`flex items-center gap-1 ${arrangeable ? "" : "invisible"}`}>
             <span
               // Arming on mousedown and disarming on mouseup is what confines
               // the drag to the handle: by the time dragstart fires the row is
