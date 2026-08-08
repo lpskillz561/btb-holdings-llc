@@ -1311,6 +1311,16 @@ text selected and swallows the drag the browser gives the listing link for free.
 The up/down arrows are not decoration — HTML5 drag does not fire on touch at
 all, the same reason the board's move arrows exist.
 
+**Column sorting is a VIEW; `sort_order` is the RECORD.** Clicking a heading
+sorts this browser's copy and writes nothing — the arrangement is shared with
+the whole office, and rewriting it because one person wanted to see the cheapest
+first is not something a column heading should do. Dragging is switched off
+while a sort is on (and `reorder()` refuses, not just the controls being
+hidden): a row dropped into a price-sorted list would persist a position that
+means nothing once the sort is cleared. Three clicks per column — sort, reverse,
+back to the arrangement — and a NULL sorts last in both directions, because a
+listing with no asking price is not the cheapest one.
+
 **A listing is DELETED, not archived, and the parks DELETE guards on pads.**
 Archive-never-delete is a rule about proposals and contracts, where folding
 "archived" into a status would erase that a withdrawn document had been
