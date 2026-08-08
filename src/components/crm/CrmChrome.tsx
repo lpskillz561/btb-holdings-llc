@@ -67,6 +67,10 @@ const SECTIONS = [
   // With the board rather than filed with the documents: what is on today and
   // what was said yesterday is work-in-hand, not a view of the book.
   { href: "/crm/meetings", label: "Meetings", icon: "calendar" },
+  // Closing the block about our own people — the board they work from, the room
+  // they talk in, the calls they take, and who reports to whom. It is BTB's own
+  // leadership, not a client's ownership chain: that one is a slide in the deck.
+  { href: "/crm/org", label: "Team", icon: "org" },
   // Directly under Chat, because that is where most people will meet it: you
   // drop a PDF into the room, the assistant reads it, and the card under the
   // message offers to teach it. This is the same set of documents with room to
@@ -113,6 +117,10 @@ const ICON_PATHS: Record<IconName, string> = {
   // screen on a stand) at rail size, which matters because the two sit next to
   // each other and a deck and a machine are not the same thing.
   arcade: "M6 3h12v18H6zM8.5 6h7v5h-7zM9.5 14h2M14 14h.01M9 21v-2h6v2",
+  // A box with two boxes reporting to it. Distinct from `board` (three bare
+  // columns) and from `users` (two people): this one is about the LINES between
+  // people, which is the only thing the page is for.
+  org: "M9.5 3h5v4h-5zM3 14h5v4H3zM16 14h5v4h-5zM12 7v3.5M5.5 14v-3.5h13v3.5",
   // Account administration, distinct from the Clients list above — the same
   // "users" glyph on both would put the allow-list and the book of business
   // under one symbol, which is the one confusion worth avoiding on this rail.

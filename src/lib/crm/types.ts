@@ -759,6 +759,34 @@ export interface CrmActivity {
   created_at: string;
 }
 
+/**
+ * One person on BTB's leadership chart.
+ *
+ * No enum and therefore no CHECK: a job title is prose, and a fixed list of
+ * roles is the kind of thing that is wrong the first time someone is hired into
+ * a job nobody anticipated. `manager_id` is the whole structure — see
+ * `lib/crm/org-layout.ts` for how it becomes a chart and why a loop in it is
+ * refused rather than drawn.
+ */
+export interface CrmOrgPerson {
+  id: string;
+  name: string;
+  title: string | null;
+  email: string | null;
+  /** Who they report to. NULL is the top of the chart, and there may be several. */
+  manager_id: string | null;
+  /** A photograph in crm_attachments, served through the auth-gated route. */
+  photo_attachment_id: string | null;
+  /** Hand-placed position. NULL on both means the automatic layout decides. */
+  pos_x: number | null;
+  pos_y: number | null;
+  /** Left-to-right order among people with the same manager. */
+  sort_order: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface CrmConversation {
   id: string;
   scope_type: AiScope;

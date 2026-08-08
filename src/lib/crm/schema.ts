@@ -1089,6 +1089,51 @@ const TABLES: TableDef[] = [
       "CREATE INDEX IF NOT EXISTS crm_documents_active_idx ON crm_documents (active_at) WHERE active_at IS NOT NULL",
     ],
   },
+  // BTB's own leadership chart. One chart for the company — not per client, and
+  // not the client's own trust/Series structure, which is drawn in the deck and
+  // is a different thing entirely.
+  //
+  // It sits AFTER crm_attachments in this list on purpose: `photo_attachment_id`
+  // has a foreign key into it, and TABLES is applied in order inside one
+  // transaction, so on a fresh install a table declared earlier would reference
+  // one that does not exist yet. Same trap as the `setval` on
+  // crm_todo_subtasks needing crm_todos.
+  {
+    name: "crm_org_people",
+    columns: [
+      ["id", "TEXT PRIMARY KEY"],
+      ["name", "TEXT NOT NULL"],
+      ["title", "TEXT"],
+      // Optional, and NOT a link to portal_users. Someone on the chart may have
+      // no login at all, and a chart that could only show people with accounts
+      // would be a chart of who has an account.
+      ["email", "TEXT"],
+      // ON DELETE SET NULL, deliberately, and NOT CASCADE: deleting a manager
+      // must not delete the people who reported to them. Their reports become
+      // roots, which is visible on the chart and trivially repaired, whereas a
+      // cascade would silently take a whole branch of the company with it. The
+      // confirmation on the delete button says which happens.
+      ["manager_id", "TEXT REFERENCES crm_org_people(id) ON DELETE SET NULL"],
+      // The photograph. crm_attachments, so it goes through the same private
+      // bucket and the same auth-gated serve route as every other image; the
+      // chart renders it with a plain <img>, never next/image — see the rule in
+      // CLAUDE.md about the optimizer fetching without the reader's cookie.
+      ["photo_attachment_id", "TEXT REFERENCES crm_attachments(id) ON DELETE SET NULL"],
+      // Where a person DRAGGED this card to. NULL — the normal state — means the
+      // card is placed by the automatic layout, so adding a new hire nobody has
+      // touched costs no arranging. Both are set together or neither is; see
+      // layoutOrgChart, which treats a half-set pair as unplaced.
+      ["pos_x", "INTEGER"],
+      ["pos_y", "INTEGER"],
+      // Left-to-right order among people with the same manager.
+      ["sort_order", "INTEGER"],
+      ["notes", "TEXT"],
+      ...TIMESTAMPS,
+    ],
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS crm_org_people_manager_idx ON crm_org_people (manager_id)",
+    ],
+  },
   {
     name: "crm_messages",
     columns: [

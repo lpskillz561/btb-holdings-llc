@@ -712,6 +712,61 @@ one bit too wide. Re-run that table if you touch it.
   15 June 2026: `instagram_oembed` is callable with no access token and no App
   Review. Lower rate limits than the token route, which is why it is cached.
 
+### The leadership chart — `/crm/org`, August 2026
+
+Who reports to whom at BTB, with a name, a title and a photograph on each card.
+`crm_org_people`, a self-referencing `manager_id`, and one page.
+
+- **It is BTB's OWN structure, not a client's.** The deck draws the *ownership*
+  chain — Buyer → Trust → Series → Park Model, with the Management Series as
+  trustee — and that is a different diagram answering a different question. This
+  one is internal and is not a slide: it carries `bg-card` and the `ink` ramp,
+  which are variable-backed tokens and must never reach a client-facing surface.
+- **`lib/crm/org-layout.ts` is PURE and both sides import it.** The browser draws
+  from `layoutOrgChart`; the server refuses an illegal reporting line with
+  `wouldCycle` out of the same file. Two implementations of "what is a loop"
+  would be a chart that saves something it cannot draw. Same rule as `ticket.ts`
+  and `equipment.ts` — no `process.env`, because it is silently `undefined` in a
+  client bundle.
+- **A cycle must be REFUSED, and the renderer must survive one anyway.**
+  `resolveParents` drops a link whose chain leads back to the person and makes
+  them a root, so a hand-written `UPDATE` produces an odd chart rather than a tab
+  that never paints. The picker also never *offers* a descendant, so nobody
+  normally meets the server's error at all — that is the point of having both.
+- **Auto-layout, with a hand override.** `pos_x`/`pos_y` NULL — the normal state
+  — means the tidy-tree layout places the card, so a new hire costs no arranging.
+  A dragged card is drawn where it was dropped and its children keep their
+  automatic places. "Reset layout" clears the lot at once; a per-card undo would
+  leave a chart half arranged and half computed, which is the state that reads as
+  the drag not having saved.
+- **Position is written PER CARD, unlike `crm_parks.sort_order`.** A coordinate
+  on a canvas means something on its own; a position in a list means nothing
+  without the rows either side of it. That is why one is an ordinary PATCH field
+  and the other is a whole-list endpoint. A pure move is also **not** logged to
+  the activity feed — tidying the chart is dozens of writes that change nothing
+  about the company.
+- **Dragging is POINTER events, not HTML5 drag.** This is the one draggable
+  surface in the app that works on touch, which is why it needs no move arrows —
+  the board's cards have them precisely because `dragstart` never fires on a
+  touchscreen. `touch-action: none` on the card is what stops a touch drag from
+  scrolling the page instead, and a **4px threshold** is what keeps a press from
+  being both a move and a click: under it the card opens the editor, over it the
+  card moves and no dialog appears.
+- **`ON DELETE SET NULL` on `manager_id`, never CASCADE.** Deleting a manager
+  promotes their reports to the top of the chart; a cascade would silently take a
+  whole branch of the company with it. The confirmation says which happens and
+  the response returns the count so the page can say it afterwards.
+- **The dialog is keyed on `${id}:${openSeq}`, and the counter is load-bearing.**
+  Keyed on the id alone, adding two people in a row is `null` twice, the
+  component does not remount, and the second form opens holding the first
+  person's name and title — a duplicate waiting to be saved by anyone not
+  reading. It typechecked, it rendered, and only driving the real form caught it.
+- Photographs are ordinary `crm_attachments`, so they go through the same private
+  bucket and the same auth-gated serve route as every other image — and are drawn
+  with a plain `<img>`, never `next/image`, for the documented reason. The
+  fallback is the SHARED hashed avatar (`avatarTone`/`initialsFor`), so one
+  person is one colour here and in every comment thread.
+
 ### The board — `/crm/todos`, and it works like Jira now
 
 Ticket keys, tags, subtasks and a rebuilt comment thread, August 2026.
